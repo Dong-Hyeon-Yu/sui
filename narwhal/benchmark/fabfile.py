@@ -20,12 +20,12 @@ def local(ctx, debug=True):
         'faults': 0,
         'nodes': 4,
         'workers': 1,
-        'rate': 50_000,
+        'rate': 200, #50_000,
         'tx_size': 512,
         'duration': 60,
     }
     node_params = {
-        'header_num_of_batches_threshold': 32,
+        'header_num_of_batches_threshold': 1,
         'max_header_num_of_batches': 1000,
         'max_header_delay': '2000ms',  # ms
         'gc_depth': 50,  # rounds

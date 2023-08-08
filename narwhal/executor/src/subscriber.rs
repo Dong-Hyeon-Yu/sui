@@ -245,11 +245,11 @@ impl Subscriber {
                             .authority(&inner.authority_id)
                             .unwrap()
                             .protocol_key(),
-                        worker_id,
+                        worker_id as &u32,
                     )
                     .unwrap_or_else(|_| panic!("worker_id {worker_id} is not in the worker cache"))
                     .name;
-                let workers = Self::workers_for_certificate(&inner, cert, worker_id);
+                let workers = Self::workers_for_certificate(&inner, cert, worker_id as &u32);
                 let (batch_set, worker_set) = batch_digests_and_workers
                     .entry(own_worker_name)
                     .or_default();

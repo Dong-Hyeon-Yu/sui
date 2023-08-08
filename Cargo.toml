@@ -65,6 +65,8 @@ exclude = [
 ]
 
 members = [
+    "crates/sslab-core",
+    
     "crates/anemo-benchmark",
     "crates/mysten-common",
     "crates/mysten-metrics",
@@ -386,7 +388,7 @@ move-binary-format = { path = "external-crates/move/move-binary-format" }
 move-bytecode-utils = { path = "external-crates/move/tools/move-bytecode-utils" }
 move-cli = { path = "external-crates/move/tools/move-cli" }
 move-compiler = { path = "external-crates/move/move-compiler" }
-move-core-types = { path = "external-crates/move/move-core/types", features = ["address32"] }
+move-core-types = { path = "external-crates/move/move-core/types", features = ["address32"] }  # feature 'address32' has changed to `address20` to support ethereum tx.
 move-disassembler = { path = "external-crates/move/tools/move-disassembler" }
 move-package = { path = "external-crates/move/tools/move-package" }
 move-unit-test = { path = "external-crates/move/tools/move-unit-test" }
@@ -413,6 +415,8 @@ anemo-cli = { git = "https://github.com/mystenlabs/anemo.git", rev = "0f0ae8d8f2
 anemo-tower = { git = "https://github.com/mystenlabs/anemo.git", rev = "0f0ae8d8f222820a20b586088ea7a2941478a159"}
 
 ### Workspace Members ###
+sslab-core = { path = "crates/sslab-core" }
+
 anemo-benchmark = { path = "crates/anemo-benchmark" }
 mysten-common = { path = "crates/mysten-common" }
 mysten-metrics = { path = "crates/mysten-metrics" }

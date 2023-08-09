@@ -91,7 +91,7 @@ pub trait PrimaryToWorkerClient {
 }
 
 #[async_trait]
-pub trait WorkerToPrimaryClient {
+pub trait ReportBatchToPrimary {
     // TODO: Remove once we have upgraded to protocol version 12.
     async fn report_our_batch(
         &self,

@@ -10,7 +10,7 @@ use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use mysten_metrics::metered_channel::{Receiver, Sender};
 use mysten_metrics::{monitored_scope, spawn_logged_monitored_task};
-use network::{client::NetworkClient, WorkerToPrimaryClient};
+use network::{client::NetworkClient, ReportBatchToPrimary};
 use std::sync::Arc;
 use store::{rocks::DBMap, Map};
 use sui_protocol_config::ProtocolConfig;

@@ -18,11 +18,13 @@ use anemo_tower::{
     trace::{DefaultMakeSpan, DefaultOnFailure, TraceLayer},
 };
 use anemo_tower::{rate_limit, set_header::SetResponseHeaderLayer};
+use async_trait::async_trait;
 use config::{Authority, AuthorityIdentifier, Committee, Parameters, WorkerCache, WorkerId};
 use crypto::{traits::KeyPair as _, NetworkKeyPair, NetworkPublicKey};
 use mysten_metrics::metered_channel::channel_with_total;
 use mysten_metrics::spawn_logged_monitored_task;
 use mysten_network::{multiaddr::Protocol, Multiaddr};
+use network::anemo_ext::NetworkExt;
 use network::client::NetworkClient;
 use network::epoch_filter::{AllowedEpoch, EPOCH_HEADER_KEY};
 use network::failpoints::FailpointsMakeCallbackHandler;
@@ -38,7 +40,7 @@ use tower::ServiceBuilder;
 use tracing::{error, info};
 use types::{
     Batch, BatchDigest, ConditionalBroadcastReceiver, PreSubscribedBroadcastSender,
-    PrimaryToWorkerServer, WorkerToWorkerServer,
+    PrimaryToWorkerServer, WorkerToWorkerServer, WorkerToPrimaryClient
 };
 
 #[cfg(test)]
@@ -287,29 +289,8 @@ impl Worker {
 
         info!("Worker {} listening to worker messages on {}", id, address);
 
-        let batch_fetcher = BatchFetcher::new(
-            worker_name,
-            network.clone(),
-            worker.store.clone(),
-            node_metrics.clone(),
-            protocol_config.clone(),
-        );
-        client.set_primary_to_worker_local_handler(
-            worker_peer_id,
-            Arc::new(PrimaryReceiverHandler {
-                authority_id: worker.authority.id(),
-                id: worker.id,
-                committee: worker.committee.clone(),
-                protocol_config,
-                worker_cache: worker.worker_cache.clone(),
-                store: worker.store.clone(),
-                request_batch_timeout: worker.parameters.sync_retry_delay,
-                request_batch_retry_nodes: worker.parameters.sync_retry_nodes,
-                network: Some(network.clone()),
-                batch_fetcher: Some(batch_fetcher),
-                validator: validator.clone(),
-            }),
-        );
+        let peer = network.waiting_peer(our_primary_peer_id);
+        client.set_worker_to_primary_local_handler(WorkerToPrimaryClient::new(peer));
 
         let mut peer_types = HashMap::new();
 

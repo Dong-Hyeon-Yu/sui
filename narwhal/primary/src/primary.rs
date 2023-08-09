@@ -230,7 +230,32 @@ impl Primary {
             payload_store,
         };
 
-        client.set_worker_to_primary_local_handler(Arc::new(worker_receiver_handler.clone()));
+        // client.set_worker_to_primary_local_handler(Arc::new(worker_receiver_handler.clone()));
+        
+        // let batch_fetcher = BatchFetcher::new(
+        //     worker_name,
+        //     network.clone(),
+        //     worker.store.clone(),
+        //     node_metrics.clone(),
+        //     protocol_config.clone(),
+        // );
+        // client.set_primary_to_worker_local_handler(
+        //     worker_peer_id,
+        //     Arc::new(PrimaryReceiverHandler {
+        //         authority_id: worker.authority.id(),
+        //         id: worker.id,
+        //         committee: worker.committee.clone(),
+        //         protocol_config,
+        //         worker_cache: worker.worker_cache.clone(),
+        //         store: worker.store.clone(),
+        //         request_batches_timeout: worker.parameters.sync_retry_delay,
+        //         request_batches_retry_nodes: worker.parameters.sync_retry_nodes,
+        //         network: Some(network.clone()),
+        //         batch_fetcher: Some(batch_fetcher),
+        //         validator: validator.clone(),
+        //     }),
+        // );
+
 
         let worker_service = WorkerToPrimaryServer::new(worker_receiver_handler);
 

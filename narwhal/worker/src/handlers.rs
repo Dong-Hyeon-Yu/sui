@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use config::{AuthorityIdentifier, Committee, WorkerCache, WorkerId};
 use fastcrypto::hash::Hash;
 use itertools::Itertools;
-use network::{client::NetworkClient, WorkerToPrimaryClient};
+use network::{client::NetworkClient, ReportBatchToPrimary};
 use std::{collections::HashSet, time::Duration};
 use store::{rocks::DBMap, Map};
 use sui_protocol_config::ProtocolConfig;

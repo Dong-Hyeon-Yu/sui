@@ -11,11 +11,11 @@ use parking_lot::RwLock;
 use tokio::{select, time::sleep};
 use types::{
     error::LocalClientError, FetchBatchesRequest, FetchBatchesResponse, PrimaryToWorker,
-    WorkerOthersBatchMessage, WorkerOwnBatchMessage, WorkerSynchronizeMessage,
+    WorkerOthersBatchMessage, WorkerOwnBatchMessage, WorkerSynchronizeMessage, 
     WorkerToPrimaryClient as WorkerToPrimaryGrpcClient,
 };
 
-use crate::{traits::{PrimaryToWorkerClient, ReportBatchToPrimary}, anemo_ext::WaitingPeer};
+use crate::{traits::PrimaryToWorkerClient, anemo_ext::WaitingPeer, ReportBatchToPrimary};
 
 /// NetworkClient provides the interface to send requests to other nodes, and call other components
 /// directly if they live in the same process. It is used by both primary and worker(s).
@@ -230,58 +230,99 @@ fn empty_peer_id() -> PeerId {
 }
 
 
-// /// A client to send messages from worker to the primary. Currently, only used in BatchMaker.
-// #[derive(Clone)]
-// pub struct PrimaryNetworkClient {
-//     primary_id: PeerId,
+/// A client to send messages from worker to the primary. Currently, used in BatchMaker and WorkerReceiverHandler.
+#[derive(Clone)]
+pub struct PrimaryNetworkClient {
+    inner: Arc<RwLock<Inner>>,
+    shutdown_notify: Arc<NotifyOnce>,
+}
 
-//     handler: WorkerToPrimaryGrpcClient<WaitingPeer>,
+impl PrimaryNetworkClient {
+    const GET_CLIENT_RETRIES: usize = 50;
+    const GET_CLIENT_INTERVAL: Duration = Duration::from_millis(100);
 
-//     shutdown_notify: Arc<NotifyOnce>,
-// }
+    fn new(primary_peer_id: PeerId) -> Self {
+        Self {
+            inner: Arc::new(RwLock::new(Inner {
+                primary_peer_id,
+                worker_to_primary_handler: None,
+                primary_to_worker_handler: BTreeMap::new(),
+                shutdown: false,
+            })),
+            shutdown_notify: Arc::new(NotifyOnce::new()),
+        }
+    }
 
-// impl PrimaryNetworkClient {
-//     pub fn new(primary_id: PeerId, primary: WaitingPeer) -> Self {
-//         Self {
-//             primary_id,
-//             handler: WorkerToPrimaryGrpcClient::new(primary),
-//             shutdown_notify: Arc::new(NotifyOnce::new()),
-//         }
-//     }
-    
-// }
+    pub fn new_from_keypair(primary_network_keypair: &NetworkKeyPair) -> Self {
+        Self::new(PeerId(primary_network_keypair.public().0.into()))
+    }
 
-// #[async_trait]
-// impl ReportBatchToPrimary for PrimaryNetworkClient {
-//     async fn report_own_batch(
-//         &self,
-//         request: WorkerOwnBatchMessage,
-//     ) -> Result<(), LocalClientError> {
-//         let mut handler = self.handler.clone();
-//         select! {
-//             resp = handler.report_own_batch(Request::new(request)) => {
-//                 resp.map_err(|e| LocalClientError::Internal(format!("{e:?}")))?;
-//                 Ok(())
-//             },
-//             () = self.shutdown_notify.wait() => {
-//                 Err(LocalClientError::ShuttingDown)
-//             },
-//         }
-//     }
+    pub fn set_local_handler(&self, handler: WorkerToPrimaryGrpcClient<WaitingPeer>) {
+        let mut inner = self.inner.write();
+        inner.worker_to_primary_handler = Some(handler);
+    }
 
-//     async fn report_others_batch(
-//         &self,
-//         request: WorkerOthersBatchMessage,
-//     ) -> Result<(), LocalClientError> {
-//         let mut handler = self.handler.clone();
-//         select! {
-//             resp = handler.report_others_batch(Request::new(request)) => {
-//                 resp.map_err(|e| LocalClientError::Internal(format!("{e:?}")))?;
-//                 Ok(())
-//             },
-//             () = self.shutdown_notify.wait() => {
-//                 Err(LocalClientError::ShuttingDown)
-//             },
-//         }
-//     }
-// }
+    async fn get_handler(&self) -> Result<WorkerToPrimaryGrpcClient<WaitingPeer>, LocalClientError> {
+        for _ in 0..Self::GET_CLIENT_RETRIES {
+            {
+                let inner = self.inner.read();
+                if inner.shutdown {
+                    return Err(LocalClientError::ShuttingDown);
+                }
+                if let Some(handler) = &inner.worker_to_primary_handler {
+                    return Ok(handler.clone());
+                }
+            }
+            sleep(Self::GET_CLIENT_INTERVAL).await;
+        }
+        Err(LocalClientError::PrimaryNotStarted(
+            self.inner.read().primary_peer_id,
+        ))
+    }
+
+    pub fn shutdown(&self) {
+        let mut inner = self.inner.write();
+        if inner.shutdown {
+            return;
+        }
+        inner.worker_to_primary_handler = None;
+        inner.primary_to_worker_handler = BTreeMap::new();
+        inner.shutdown = true;
+        let _ = self.shutdown_notify.notify();
+    }
+}
+
+#[async_trait]
+impl ReportBatchToPrimary for PrimaryNetworkClient {
+    async fn report_own_batch(
+        &self,
+        request: WorkerOwnBatchMessage,
+    ) -> Result<(), LocalClientError> {
+        let mut handler = self.get_handler().await?;
+        select! {
+            resp = handler.report_own_batch(Request::new(request)) => {
+                resp.map_err(|e| LocalClientError::Internal(format!("{e:?}")))?;
+                Ok(())
+            },
+            () = self.shutdown_notify.wait() => {
+                Err(LocalClientError::ShuttingDown)
+            },
+        }
+    }
+
+    async fn report_others_batch(
+        &self,
+        request: WorkerOthersBatchMessage,
+    ) -> Result<(), LocalClientError> {
+        let mut handler = self.get_handler().await?;
+        select! {
+            resp = handler.report_others_batch(Request::new(request)) => {
+                resp.map_err(|e| LocalClientError::Internal(format!("{e:?}")))?;
+                Ok(())
+            },
+            () = self.shutdown_notify.wait() => {
+                Err(LocalClientError::ShuttingDown)
+            },
+        }
+    }
+}

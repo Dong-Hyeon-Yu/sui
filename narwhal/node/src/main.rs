@@ -17,7 +17,7 @@ use mysten_metrics::RegistryService;
 use narwhal_node as node;
 use narwhal_node::primary_node::PrimaryNode;
 use narwhal_node::worker_node::WorkerNode;
-use network::client::NetworkClient;
+use network::client::{NetworkClient, PrimaryNetworkClient};
 use node::{
     execution_state::SimpleExecutionState,
     metrics::{primary_metrics_registry, start_prometheus_server, worker_metrics_registry},
@@ -269,8 +269,6 @@ async fn run(
 
     let store = NodeStorage::reopen(store_path, Some(certificate_store_cache_metrics));
 
-    let client = NetworkClient::new_from_keypair(&primary_network_keypair);
-
     // The channel returning the result for each transaction's execution.
     let (_tx_transaction_confirmation, _rx_transaction_confirmation) = channel(100);
 
@@ -279,6 +277,8 @@ async fn run(
         // Spawn the primary and consensus core.
         ("primary", _) => {
             let primary = PrimaryNode::new(parameters.clone(), registry_service);
+
+            let client = NetworkClient::new_from_keypair(&primary_network_keypair);
 
             primary
                 .start(
@@ -310,6 +310,9 @@ async fn run(
                 parameters.clone(),
                 registry_service,
             );
+
+
+            let client = PrimaryNetworkClient::new_from_keypair(&primary_network_keypair);
 
             worker
                 .start(

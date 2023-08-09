@@ -17,7 +17,7 @@ use fastcrypto::{
     traits::KeyPair,
 };
 use itertools::Itertools;
-use network::client::NetworkClient;
+use network::client::{NetworkClient, PrimaryNetworkClient};
 use prometheus::Registry;
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
@@ -60,6 +60,7 @@ async fn get_network_peers_from_admin_server() {
     // Make the data store.
     let store = NodeStorage::reopen(temp_dir(), None);
     let client_1 = NetworkClient::new_from_keypair(&authority_1.network_keypair());
+    let primary_client_1 = PrimaryNetworkClient::new_from_keypair(&authority_1.network_keypair());
 
     let (tx_new_certificates, _rx_new_certificates) = mysten_metrics::metered_channel::channel(
         CHANNEL_CAPACITY,
@@ -129,7 +130,7 @@ async fn get_network_peers_from_admin_server() {
         test_utils::latest_protocol_version(),
         worker_1_parameters.clone(),
         TrivialTransactionValidator::default(),
-        client_1,
+        primary_client_1,
         store.batch_store,
         metrics_1,
         &mut tx_shutdown_worker,
@@ -374,7 +375,7 @@ async fn test_request_vote_has_missing_parents() {
     // into the storage as parents of round 2 certificates. But to test phase 2 they are left out.
     for cert in round_2_parents {
         for (digest, (worker_id, _)) in cert.header().payload() {
-            payload_store.write(digest, worker_id).unwrap();
+            payload_store.write(digest, worker_id as &u32).unwrap();
         }
         certificate_store.write(cert.clone()).unwrap();
     }
@@ -546,19 +547,19 @@ async fn test_request_vote_accept_missing_parents() {
     // should be able to get accepted.
     for cert in round_1_certs {
         for (digest, (worker_id, _)) in cert.header().payload() {
-            payload_store.write(digest, worker_id).unwrap();
+            payload_store.write(digest, worker_id as &u32).unwrap();
         }
         certificate_store.write(cert.clone()).unwrap();
     }
     for cert in round_2_parents {
         for (digest, (worker_id, _)) in cert.header().payload() {
-            payload_store.write(digest, worker_id).unwrap();
+            payload_store.write(digest, worker_id as &u32).unwrap();
         }
         certificate_store.write(cert.clone()).unwrap();
     }
     // Populate new header payload so they don't have to be retrieved.
     for (digest, (worker_id, _)) in test_header.payload() {
-        payload_store.write(digest, worker_id).unwrap();
+        payload_store.write(digest, worker_id as &u32).unwrap();
     }
 
     // TEST PHASE 1: Handler should report missing parent certificates to caller.
@@ -682,7 +683,7 @@ async fn test_request_vote_missing_batches() {
         certificates.insert(digest, certificate.clone());
         certificate_store.write(certificate.clone()).unwrap();
         for (digest, (worker_id, _)) in certificate.header().payload() {
-            payload_store.write(digest, worker_id).unwrap();
+            payload_store.write(digest, worker_id as &u32).unwrap();
         }
     }
     let test_header = Header::V1(
@@ -832,7 +833,7 @@ async fn test_request_vote_already_voted() {
         certificates.insert(digest, certificate.clone());
         certificate_store.write(certificate.clone()).unwrap();
         for (digest, (worker_id, _)) in certificate.header().payload() {
-            payload_store.write(digest, worker_id).unwrap();
+            payload_store.write(digest, worker_id as &u32).unwrap();
         }
     }
 
@@ -1198,7 +1199,7 @@ async fn test_request_vote_created_at_in_future() {
         certificates.insert(digest, certificate.clone());
         certificate_store.write(certificate.clone()).unwrap();
         for (digest, (worker_id, _)) in certificate.header().payload() {
-            payload_store.write(digest, worker_id).unwrap();
+            payload_store.write(digest, worker_id as &u32).unwrap();
         }
     }
 

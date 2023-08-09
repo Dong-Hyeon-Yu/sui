@@ -9,7 +9,7 @@ use config::{Committee, Parameters, WorkerCache, WorkerId};
 use crypto::{NetworkKeyPair, PublicKey};
 use fastcrypto::traits::KeyPair;
 use mysten_metrics::{RegistryID, RegistryService};
-use network::client::NetworkClient;
+use network::client::PrimaryNetworkClient;
 use prometheus::Registry;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -56,7 +56,7 @@ impl WorkerNodeInner {
         // The worker information cache.
         worker_cache: WorkerCache,
         // Client for communications.
-        client: NetworkClient,
+        client: PrimaryNetworkClient,
         // The node's store
         // TODO: replace this by a path so the method can open and independent storage
         store: &NodeStorage,
@@ -216,7 +216,7 @@ impl WorkerNode {
         // The worker information cache.
         worker_cache: WorkerCache,
         // Client for communications.
-        client: NetworkClient,
+        client: PrimaryNetworkClient,
         // The node's store
         // TODO: replace this by a path so the method can open and independent storage
         store: &NodeStorage,
@@ -261,7 +261,7 @@ pub struct WorkerNodes {
     registry_service: RegistryService,
     registry_id: ArcSwapOption<RegistryID>,
     parameters: Parameters,
-    client: ArcSwapOption<NetworkClient>,
+    client: ArcSwapOption<PrimaryNetworkClient>,
 }
 
 impl WorkerNodes {
@@ -288,7 +288,7 @@ impl WorkerNodes {
         // The worker information cache.
         worker_cache: WorkerCache,
         // Client for communications.
-        client: NetworkClient,
+        client: PrimaryNetworkClient,
         // The node's store
         // TODO: replace this by a path so the method can open and independent storage
         store: &NodeStorage,

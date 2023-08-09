@@ -2,7 +2,6 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 use crate::{
-    batch_fetcher::BatchFetcher,
     batch_maker::BatchMaker,
     handlers::{PrimaryReceiverHandler, WorkerReceiverHandler},
     metrics::WorkerChannelMetrics,
@@ -18,14 +17,13 @@ use anemo_tower::{
     trace::{DefaultMakeSpan, DefaultOnFailure, TraceLayer},
 };
 use anemo_tower::{rate_limit, set_header::SetResponseHeaderLayer};
-use async_trait::async_trait;
 use config::{Authority, AuthorityIdentifier, Committee, Parameters, WorkerCache, WorkerId};
 use crypto::{traits::KeyPair as _, NetworkKeyPair, NetworkPublicKey};
 use mysten_metrics::metered_channel::channel_with_total;
 use mysten_metrics::spawn_logged_monitored_task;
 use mysten_network::{multiaddr::Protocol, Multiaddr};
 use network::anemo_ext::NetworkExt;
-use network::client::NetworkClient;
+use network::client::PrimaryNetworkClient;
 use network::epoch_filter::{AllowedEpoch, EPOCH_HEADER_KEY};
 use network::failpoints::FailpointsMakeCallbackHandler;
 use network::metrics::MetricsMakeCallbackHandler;
@@ -82,7 +80,7 @@ impl Worker {
         protocol_config: ProtocolConfig,
         parameters: Parameters,
         validator: impl TransactionValidator,
-        client: NetworkClient,
+        client: PrimaryNetworkClient,
         store: DBMap<BatchDigest, Batch>,
         metrics: Metrics,
         tx_shutdown: &mut PreSubscribedBroadcastSender,
@@ -289,9 +287,6 @@ impl Worker {
 
         info!("Worker {} listening to worker messages on {}", id, address);
 
-        let peer = network.waiting_peer(our_primary_peer_id);
-        client.set_worker_to_primary_local_handler(WorkerToPrimaryClient::new(peer));
-
         let mut peer_types = HashMap::new();
 
         let other_workers = worker
@@ -356,6 +351,7 @@ impl Worker {
             shutdown_receivers.pop().unwrap(),
         );
 
+        client.set_local_handler(WorkerToPrimaryClient::new(network.waiting_peer(our_primary_peer_id)));
         let client_flow_handles = worker.handle_clients_transactions(
             vec![
                 shutdown_receivers.pop().unwrap(),
@@ -437,7 +433,7 @@ impl Worker {
         channel_metrics: Arc<WorkerChannelMetrics>,
         endpoint_metrics: WorkerEndpointMetrics,
         validator: impl TransactionValidator,
-        client: NetworkClient,
+        client: PrimaryNetworkClient,
         network: anemo::Network,
     ) -> Vec<JoinHandle<()>> {
         info!("Starting handler for transactions");

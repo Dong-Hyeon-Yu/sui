@@ -8,7 +8,7 @@ use fastcrypto::traits::KeyPair as _;
 use itertools::Itertools;
 use mysten_metrics::RegistryService;
 use mysten_network::multiaddr::Multiaddr;
-use network::client::NetworkClient;
+use network::client::{NetworkClient, PrimaryNetworkClient};
 use node::primary_node::PrimaryNode;
 use node::worker_node::WorkerNode;
 use node::{execution_state::SimpleExecutionState, metrics::worker_metrics_registry};
@@ -436,7 +436,7 @@ impl WorkerNodeDetails {
     async fn start(
         &mut self,
         keypair: NetworkKeyPair,
-        client: NetworkClient,
+        client: PrimaryNetworkClient,
         preserve_store: bool,
     ) {
         if self.is_running().await {
@@ -503,6 +503,7 @@ pub struct AuthorityDetails {
     pub name: AuthorityIdentifier,
     pub public_key: PublicKey,
     client: NetworkClient,
+    primary_client: PrimaryNetworkClient,
     internal: Arc<RwLock<AuthorityDetailsInternal>>,
 }
 
@@ -525,6 +526,7 @@ impl AuthorityDetails {
     ) -> Self {
         // Create network client.
         let client = NetworkClient::new_from_keypair(&network_key_pair);
+        let primary_client = PrimaryNetworkClient::new_from_keypair(&network_key_pair);
 
         // Create all the nodes we have in the committee
         let public_key = key_pair.public().clone();
@@ -566,6 +568,7 @@ impl AuthorityDetails {
             public_key,
             name,
             client,
+            primary_client,
             internal: Arc::new(RwLock::new(internal)),
         }
     }
@@ -619,7 +622,7 @@ impl AuthorityDetails {
         for (id, worker) in internal.workers.iter_mut() {
             let keypair = worker_keypairs.get(*id as usize).unwrap().copy();
             worker
-                .start(keypair, self.client.clone(), preserve_store)
+                .start(keypair, self.primary_client.clone(), preserve_store)
                 .await;
         }
     }
@@ -637,7 +640,7 @@ impl AuthorityDetails {
             .unwrap_or_else(|| panic!("Worker with id {} not found ", id));
 
         worker
-            .start(keypair, self.client.clone(), preserve_store)
+            .start(keypair, self.primary_client.clone(), preserve_store)
             .await;
     }
 

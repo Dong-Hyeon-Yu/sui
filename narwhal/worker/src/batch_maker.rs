@@ -10,7 +10,7 @@ use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use mysten_metrics::metered_channel::{Receiver, Sender};
 use mysten_metrics::{monitored_scope, spawn_logged_monitored_task};
-use network::{client::NetworkClient, ReportBatchToPrimary};
+use network::{client::PrimaryNetworkClient, ReportBatchToPrimary};
 use std::sync::Arc;
 use store::{rocks::DBMap, Map};
 use sui_protocol_config::ProtocolConfig;
@@ -56,7 +56,7 @@ pub struct BatchMaker {
     /// Average resident time in the batch would be ~ (batch seal time - creation time) / 2
     batch_start_timestamp: Instant,
     /// The network client to send our batches to the primary.
-    client: NetworkClient,
+    client: PrimaryNetworkClient,
     /// The batch store to store our own batches.
     store: DBMap<BatchDigest, Batch>,
     protocol_config: ProtocolConfig,
@@ -72,7 +72,7 @@ impl BatchMaker {
         rx_batch_maker: Receiver<(Transaction, TxResponse)>,
         tx_quorum_waiter: Sender<(Batch, tokio::sync::oneshot::Sender<()>)>,
         node_metrics: Arc<WorkerMetrics>,
-        client: NetworkClient,
+        client: PrimaryNetworkClient,
         store: DBMap<BatchDigest, Batch>,
         protocol_config: ProtocolConfig,
     ) -> JoinHandle<()> {

@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use config::{AuthorityIdentifier, Committee, WorkerCache, WorkerId};
 use fastcrypto::hash::Hash;
 use itertools::Itertools;
-use network::{client::NetworkClient, ReportBatchToPrimary};
+use network::{client::PrimaryNetworkClient, ReportBatchToPrimary};
 use std::{collections::HashSet, time::Duration};
 use store::{rocks::DBMap, Map};
 use sui_protocol_config::ProtocolConfig;
@@ -31,7 +31,7 @@ pub mod handlers_tests;
 pub struct WorkerReceiverHandler<V> {
     pub protocol_config: ProtocolConfig,
     pub id: WorkerId,
-    pub client: NetworkClient,
+    pub client: PrimaryNetworkClient,
     pub store: DBMap<BatchDigest, Batch>,
     pub validator: V,
 }

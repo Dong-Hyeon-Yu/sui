@@ -9,7 +9,7 @@ use fastcrypto::traits::KeyPair;
 use mysten_metrics::RegistryService;
 use narwhal_config::{Committee, Epoch, Parameters, WorkerCache, WorkerId};
 use narwhal_executor::ExecutionState;
-use narwhal_network::client::NetworkClient;
+use narwhal_network::client::{NetworkClient, PrimaryNetworkClient};
 use narwhal_node::primary_node::PrimaryNode;
 use narwhal_node::worker_node::WorkerNodes;
 use narwhal_node::{CertificateStoreCacheMetrics, NodeStorage};
@@ -148,7 +148,8 @@ impl NarwhalManager {
         let store = NodeStorage::reopen(store_path, Some(self.store_cache_metrics.clone()));
 
         // Create a new client.
-        let network_client = NetworkClient::new_from_keypair(&self.network_keypair);
+        let worker_client = NetworkClient::new_from_keypair(&self.network_keypair);
+        let primary_client = PrimaryNetworkClient::new_from_keypair(&self.network_keypair);
 
         let name = self.primary_keypair.public().clone();
 
@@ -170,7 +171,7 @@ impl NarwhalManager {
                     committee.clone(),
                     protocol_config.clone(),
                     worker_cache.clone(),
-                    network_client.clone(),
+                    worker_client.clone(),
                     &store,
                     execution_state.clone(),
                 )
@@ -209,7 +210,7 @@ impl NarwhalManager {
                     committee.clone(),
                     protocol_config.clone(),
                     worker_cache.clone(),
-                    network_client.clone(),
+                    primary_client.clone(),
                     &store,
                     tx_validator.clone(),
                 )

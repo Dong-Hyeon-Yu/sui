@@ -8,9 +8,7 @@ use crypto::NetworkPublicKey;
 use futures::stream::FuturesOrdered;
 use futures::StreamExt;
 
-use network::PrimaryToWorkerClient;
-
-use network::client::NetworkClient;
+use network::{client::WorkerNetworkClient, FetchBatchesRequestToWorker};
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::{sync::Arc, time::Duration, vec};
@@ -44,7 +42,7 @@ struct Inner {
     worker_cache: WorkerCache,
     committee: Committee,
     protocol_config: ProtocolConfig,
-    client: NetworkClient,
+    client: WorkerNetworkClient,
     metrics: Arc<ExecutorMetrics>,
 }
 
@@ -53,7 +51,7 @@ pub fn spawn_subscriber<State: ExecutionState + Send + Sync + 'static>(
     worker_cache: WorkerCache,
     committee: Committee,
     protocol_config: ProtocolConfig,
-    client: NetworkClient,
+    client: WorkerNetworkClient,
     mut shutdown_receivers: Vec<ConditionalBroadcastReceiver>,
     rx_sequence: metered_channel::Receiver<CommittedSubDag>,
     metrics: Arc<ExecutorMetrics>,
@@ -124,7 +122,7 @@ async fn create_and_run_subscriber(
     protocol_config: ProtocolConfig,
     rx_shutdown: ConditionalBroadcastReceiver,
     rx_sequence: metered_channel::Receiver<CommittedSubDag>,
-    client: NetworkClient,
+    client: WorkerNetworkClient,
     metrics: Arc<ExecutorMetrics>,
     restored_consensus_output: Vec<CommittedSubDag>,
     tx_notifier: metered_channel::Sender<ConsensusOutput>,

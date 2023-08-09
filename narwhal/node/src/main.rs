@@ -17,7 +17,7 @@ use mysten_metrics::RegistryService;
 use narwhal_node as node;
 use narwhal_node::primary_node::PrimaryNode;
 use narwhal_node::worker_node::WorkerNode;
-use network::client::{NetworkClient, PrimaryNetworkClient};
+use network::client::{WorkerNetworkClient, PrimaryNetworkClient};
 use node::{
     execution_state::SimpleExecutionState,
     metrics::{primary_metrics_registry, start_prometheus_server, worker_metrics_registry},
@@ -278,7 +278,7 @@ async fn run(
         ("primary", _) => {
             let primary = PrimaryNode::new(parameters.clone(), registry_service);
 
-            let client = NetworkClient::new_from_keypair(&primary_network_keypair);
+            let client = WorkerNetworkClient::new_from_keypair(&primary_network_keypair);
 
             primary
                 .start(

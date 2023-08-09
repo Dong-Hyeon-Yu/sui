@@ -7,7 +7,7 @@ use mysten_metrics::RegistryService;
 use narwhal_node::execution_state::SimpleExecutionState;
 use narwhal_node::primary_node::PrimaryNode;
 use narwhal_node::worker_node::WorkerNodes;
-use network::client::{NetworkClient, PrimaryNetworkClient};
+use network::client::{WorkerNetworkClient, PrimaryNetworkClient};
 use prometheus::Registry;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
@@ -35,7 +35,7 @@ async fn simple_primary_worker_node_start_stop() {
     let authority = fixture.authorities().next().unwrap();
     let key_pair = authority.keypair();
     let network_key_pair = authority.network_keypair();
-    let client = NetworkClient::new_from_keypair(&network_key_pair);
+    let worker_client = WorkerNetworkClient::new_from_keypair(&network_key_pair);
     let primary_client = PrimaryNetworkClient::new_from_keypair(&network_key_pair);
 
     let store = NodeStorage::reopen(temp_dir(), None);
@@ -52,7 +52,7 @@ async fn simple_primary_worker_node_start_stop() {
             committee.clone(),
             latest_protocol_version(),
             worker_cache.clone(),
-            client.clone(),
+            worker_client.clone(),
             &store,
             execution_state,
         )
@@ -120,7 +120,7 @@ async fn primary_node_restart() {
     let authority = fixture.authorities().next().unwrap();
     let key_pair = authority.keypair();
     let network_key_pair = authority.network_keypair();
-    let client = NetworkClient::new_from_keypair(&network_key_pair);
+    let client = WorkerNetworkClient::new_from_keypair(&network_key_pair);
 
     let store = NodeStorage::reopen(temp_dir(), None);
 

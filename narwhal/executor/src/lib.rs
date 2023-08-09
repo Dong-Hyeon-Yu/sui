@@ -17,7 +17,7 @@ use async_trait::async_trait;
 use config::{AuthorityIdentifier, Committee, WorkerCache};
 use mockall::automock;
 use mysten_metrics::metered_channel;
-use network::client::NetworkClient;
+use network::client::WorkerNetworkClient;
 use prometheus::Registry;
 use std::sync::Arc;
 use storage::{CertificateStore, ConsensusStore};
@@ -52,7 +52,7 @@ impl Executor {
         worker_cache: WorkerCache,
         committee: Committee,
         protocol_config: &ProtocolConfig,
-        client: NetworkClient,
+        client: WorkerNetworkClient,
         execution_state: State,
         shutdown_receivers: Vec<ConditionalBroadcastReceiver>,
         rx_sequence: metered_channel::Receiver<CommittedSubDag>,

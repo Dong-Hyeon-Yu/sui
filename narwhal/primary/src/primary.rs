@@ -35,8 +35,8 @@ use mysten_metrics::metered_channel::{channel_with_total, Receiver, Sender};
 use mysten_metrics::monitored_scope;
 use mysten_network::{multiaddr::Protocol, Multiaddr};
 use network::{
-    client::NetworkClient,
-    epoch_filter::{AllowedEpoch, EPOCH_HEADER_KEY},
+    client::WorkerNetworkClient,
+    epoch_filter::{AllowedEpoch, EPOCH_HEADER_KEY}, anemo_ext::NetworkExt,
 };
 use network::{failpoints::FailpointsMakeCallbackHandler, metrics::MetricsMakeCallbackHandler};
 use parking_lot::Mutex;
@@ -63,7 +63,7 @@ use types::{
     FetchCertificatesResponse, Header, HeaderAPI, MetadataAPI, PreSubscribedBroadcastSender,
     PrimaryToPrimary, PrimaryToPrimaryServer, RequestVoteRequest, RequestVoteResponse, Round,
     SendCertificateRequest, SendCertificateResponse, Vote, VoteInfoAPI, WorkerOthersBatchMessage,
-    WorkerOurBatchMessage, WorkerOwnBatchMessage, WorkerToPrimary, WorkerToPrimaryServer,
+    WorkerOwnBatchMessage, WorkerToPrimary, WorkerToPrimaryServer, PrimaryToWorkerClient, WorkerOurBatchMessage,
 };
 
 #[cfg(any(test))]
@@ -92,7 +92,7 @@ impl Primary {
         worker_cache: WorkerCache,
         _protocol_config: ProtocolConfig,
         parameters: Parameters,
-        client: NetworkClient,
+        client: WorkerNetworkClient,
         header_store: HeaderStore,
         certificate_store: CertificateStore,
         proposer_store: ProposerStore,
@@ -229,33 +229,6 @@ impl Primary {
             tx_our_digests,
             payload_store,
         };
-
-        // client.set_worker_to_primary_local_handler(Arc::new(worker_receiver_handler.clone()));
-        
-        // let batch_fetcher = BatchFetcher::new(
-        //     worker_name,
-        //     network.clone(),
-        //     worker.store.clone(),
-        //     node_metrics.clone(),
-        //     protocol_config.clone(),
-        // );
-        // client.set_primary_to_worker_local_handler(
-        //     worker_peer_id,
-        //     Arc::new(PrimaryReceiverHandler {
-        //         authority_id: worker.authority.id(),
-        //         id: worker.id,
-        //         committee: worker.committee.clone(),
-        //         protocol_config,
-        //         worker_cache: worker.worker_cache.clone(),
-        //         store: worker.store.clone(),
-        //         request_batches_timeout: worker.parameters.sync_retry_delay,
-        //         request_batches_retry_nodes: worker.parameters.sync_retry_nodes,
-        //         network: Some(network.clone()),
-        //         batch_fetcher: Some(batch_fetcher),
-        //         validator: validator.clone(),
-        //     }),
-        // );
-
 
         let worker_service = WorkerToPrimaryServer::new(worker_receiver_handler);
 
@@ -414,6 +387,11 @@ impl Primary {
                 "Adding others worker with peer id {} and address {}",
                 peer_id, address
             );
+        }
+
+        // create worker clients
+        for worker_id in peer_types.keys() {
+            client.set_primary_to_worker_local_handler(*worker_id, PrimaryToWorkerClient::new(network.waiting_peer(*worker_id)))
         }
 
         // Add other primaries

@@ -13,7 +13,7 @@ use executor::{get_restored_consensus_output, ExecutionState, Executor, Subscrib
 use fastcrypto::traits::{KeyPair as _, VerifyingKey};
 use mysten_metrics::metered_channel;
 use mysten_metrics::{RegistryID, RegistryService};
-use network::client::NetworkClient;
+use network::client::WorkerNetworkClient;
 use primary::{Primary, PrimaryChannelMetrics, NUM_SHUTDOWN_RECEIVERS};
 use prometheus::{IntGauge, Registry};
 use std::sync::Arc;
@@ -35,7 +35,7 @@ struct PrimaryNodeInner {
     // The task handles created from primary
     handles: FuturesUnordered<JoinHandle<()>>,
     // Keeping NetworkClient here for quicker shutdown.
-    client: Option<NetworkClient>,
+    client: Option<WorkerNetworkClient>,
     // The shutdown signal channel
     tx_shutdown: Option<PreSubscribedBroadcastSender>,
     // Peer ID used for local connections.
@@ -64,7 +64,7 @@ impl PrimaryNodeInner {
         // The worker information cache.
         worker_cache: WorkerCache,
         // Client for communications.
-        client: NetworkClient,
+        client: WorkerNetworkClient,
         // The node's store
         // TODO: replace this by a path so the method can open and independent storage
         store: &NodeStorage,
@@ -186,7 +186,7 @@ impl PrimaryNodeInner {
         // The worker information cache.
         worker_cache: WorkerCache,
         // Client for communications.
-        client: NetworkClient,
+        client: WorkerNetworkClient,
         // The node's storage.
         store: &NodeStorage,
         protocol_config: ProtocolConfig,
@@ -286,7 +286,7 @@ impl PrimaryNodeInner {
         authority_id: AuthorityIdentifier,
         worker_cache: WorkerCache,
         committee: Committee,
-        client: NetworkClient,
+        client: WorkerNetworkClient,
         store: &NodeStorage,
         protocol_config: &ProtocolConfig,
         parameters: Parameters,
@@ -412,7 +412,7 @@ impl PrimaryNode {
         // The worker information cache.
         worker_cache: WorkerCache,
         // Client for communications.
-        client: NetworkClient,
+        client: WorkerNetworkClient,
         // The node's store
         // TODO: replace this by a path so the method can open and independent storage
         store: &NodeStorage,

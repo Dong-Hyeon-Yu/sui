@@ -76,18 +76,21 @@ pub trait PrimaryToWorkerRpc {
 }
 
 #[async_trait]
-pub trait PrimaryToWorkerClient {
-    async fn synchronize(
-        &self,
-        worker_name: NetworkPublicKey,
-        request: WorkerSynchronizeMessage,
-    ) -> Result<(), LocalClientError>;
-
+pub trait FetchBatchesRequestToWorker {
     async fn fetch_batches(
         &self,
         worker_name: NetworkPublicKey,
         request: FetchBatchesRequest,
     ) -> Result<FetchBatchesResponse, LocalClientError>;
+}
+
+#[async_trait]
+pub trait SynchronizeRequestToWorker {
+    async fn synchronize(
+        &self,
+        worker_name: NetworkPublicKey,
+        request: WorkerSynchronizeMessage,
+    ) -> Result<(), LocalClientError>;
 }
 
 #[async_trait]

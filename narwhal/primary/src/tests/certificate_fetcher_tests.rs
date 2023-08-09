@@ -11,7 +11,7 @@ use config::{AuthorityIdentifier, Epoch, WorkerId};
 use fastcrypto::{hash::Hash, traits::KeyPair};
 use indexmap::IndexMap;
 use itertools::Itertools;
-use network::client::NetworkClient;
+use network::client::WorkerNetworkClient;
 use once_cell::sync::OnceCell;
 use prometheus::Registry;
 use std::{collections::BTreeSet, sync::Arc, time::Duration};
@@ -131,7 +131,7 @@ async fn fetch_certificates_basic() {
     let fixture = CommitteeFixture::builder().randomize_ports(true).build();
     let worker_cache = fixture.worker_cache();
     let primary = fixture.authorities().next().unwrap();
-    let client = NetworkClient::new_from_keypair(&primary.network_keypair());
+    let client = WorkerNetworkClient::new_from_keypair(&primary.network_keypair());
     let id = primary.id();
     let fake_primary = fixture.authorities().nth(1).unwrap();
     let metrics = Arc::new(PrimaryMetrics::new(&Registry::new()));
@@ -232,7 +232,7 @@ async fn fetch_certificates_basic() {
 
     // Avoid any sort of missing payload by pre-populating the batch
     for (digest, (worker_id, _)) in headers.iter().flat_map(|h| h.payload().iter()) {
-        payload_store.write(digest, worker_id).unwrap();
+        payload_store.write(digest, worker_id as &u32).unwrap();
     }
 
     let total_certificates = fixture.authorities().count() * rounds as usize;

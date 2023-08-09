@@ -8,7 +8,7 @@ use fastcrypto::traits::KeyPair as _;
 use itertools::Itertools;
 use mysten_metrics::RegistryService;
 use mysten_network::multiaddr::Multiaddr;
-use network::client::{NetworkClient, PrimaryNetworkClient};
+use network::client::{WorkerNetworkClient, PrimaryNetworkClient};
 use node::primary_node::PrimaryNode;
 use node::worker_node::WorkerNode;
 use node::{execution_state::SimpleExecutionState, metrics::worker_metrics_registry};
@@ -322,7 +322,7 @@ impl PrimaryNodeDetails {
         metric.map(|m| m.get_metric().first().unwrap().clone())
     }
 
-    async fn start(&mut self, client: NetworkClient, preserve_store: bool) {
+    async fn start(&mut self, client: WorkerNetworkClient, preserve_store: bool) {
         if self.is_running().await {
             panic!("Tried to start a node that is already running");
         }
@@ -502,7 +502,7 @@ pub struct AuthorityDetails {
     pub id: usize,
     pub name: AuthorityIdentifier,
     pub public_key: PublicKey,
-    client: NetworkClient,
+    worker_client: WorkerNetworkClient,
     primary_client: PrimaryNetworkClient,
     internal: Arc<RwLock<AuthorityDetailsInternal>>,
 }
@@ -525,7 +525,7 @@ impl AuthorityDetails {
         worker_cache: WorkerCache,
     ) -> Self {
         // Create network client.
-        let client = NetworkClient::new_from_keypair(&network_key_pair);
+        let worker_client = WorkerNetworkClient::new_from_keypair(&network_key_pair);
         let primary_client = PrimaryNetworkClient::new_from_keypair(&network_key_pair);
 
         // Create all the nodes we have in the committee
@@ -567,7 +567,7 @@ impl AuthorityDetails {
             id,
             public_key,
             name,
-            client,
+            worker_client,
             primary_client,
             internal: Arc::new(RwLock::new(internal)),
         }
@@ -601,7 +601,7 @@ impl AuthorityDetails {
 
         internal
             .primary
-            .start(self.client.clone(), preserve_store)
+            .start(self.worker_client.clone(), preserve_store)
             .await;
     }
 
@@ -657,7 +657,8 @@ impl AuthorityDetails {
 
     /// Stops all the nodes (primary & workers).
     pub async fn stop_all(&self) {
-        self.client.shutdown();
+        self.worker_client.shutdown();
+        self.primary_client.shutdown();
 
         let internal = self.internal.read().await;
         internal.primary.stop().await;

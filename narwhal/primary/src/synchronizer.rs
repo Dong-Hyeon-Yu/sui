@@ -12,8 +12,8 @@ use mysten_metrics::metered_channel::{channel_with_total, Sender};
 use mysten_metrics::{monitored_scope, spawn_logged_monitored_task};
 use network::{
     anemo_ext::{NetworkExt, WaitingPeer},
-    client::NetworkClient,
-    PrimaryToWorkerClient, RetryConfig,
+    client::WorkerNetworkClient,
+    SynchronizeRequestToWorker, RetryConfig,
 };
 use parking_lot::Mutex;
 use std::{
@@ -70,7 +70,7 @@ struct Inner {
     /// Highest round of verfied certificate that has been received.
     highest_received_round: AtomicU64,
     /// Client for fetching payloads.
-    client: NetworkClient,
+    client: WorkerNetworkClient,
     /// The persistent storage tables.
     certificate_store: CertificateStore,
     /// The persistent store of the available batch digests produced either via our own workers
@@ -303,7 +303,7 @@ impl Synchronizer {
         committee: Committee,
         worker_cache: WorkerCache,
         gc_depth: Round,
-        client: NetworkClient,
+        client: WorkerNetworkClient,
         certificate_store: CertificateStore,
         payload_store: PayloadStore,
         tx_certificate_fetcher: Sender<CertificateFetcherCommand>,

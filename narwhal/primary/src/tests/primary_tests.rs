@@ -17,7 +17,7 @@ use fastcrypto::{
     traits::KeyPair,
 };
 use itertools::Itertools;
-use network::client::{NetworkClient, PrimaryNetworkClient};
+use network::client::{WorkerNetworkClient, PrimaryNetworkClient};
 use prometheus::Registry;
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
@@ -59,7 +59,7 @@ async fn get_network_peers_from_admin_server() {
 
     // Make the data store.
     let store = NodeStorage::reopen(temp_dir(), None);
-    let client_1 = NetworkClient::new_from_keypair(&authority_1.network_keypair());
+    let client_1 = WorkerNetworkClient::new_from_keypair(&authority_1.network_keypair());
     let primary_client_1 = PrimaryNetworkClient::new_from_keypair(&authority_1.network_keypair());
 
     let (tx_new_certificates, _rx_new_certificates) = mysten_metrics::metered_channel::channel(
@@ -170,7 +170,7 @@ async fn get_network_peers_from_admin_server() {
 
     let authority_2 = fixture.authorities().nth(1).unwrap();
     let signer_2 = authority_2.keypair().copy();
-    let client_2 = NetworkClient::new_from_keypair(&authority_2.network_keypair());
+    let client_2 = WorkerNetworkClient::new_from_keypair(&authority_2.network_keypair());
 
     let primary_2_parameters = Parameters {
         batch_size: 200, // Two transactions.
@@ -287,7 +287,7 @@ async fn test_request_vote_has_missing_parents() {
     let metrics = Arc::new(PrimaryMetrics::new(&Registry::new()));
     let primary_channel_metrics = PrimaryChannelMetrics::new(&Registry::new());
     let network = test_utils::test_network(target.network_keypair(), target.address());
-    let client = NetworkClient::new_from_keypair(&target.network_keypair());
+    let client = WorkerNetworkClient::new_from_keypair(&target.network_keypair());
 
     let (header_store, certificate_store, payload_store) = create_db_stores();
     let (tx_certificate_fetcher, _rx_certificate_fetcher) = test_utils::test_channel!(1);
@@ -458,7 +458,7 @@ async fn test_request_vote_accept_missing_parents() {
     let metrics = Arc::new(PrimaryMetrics::new(&Registry::new()));
     let primary_channel_metrics = PrimaryChannelMetrics::new(&Registry::new());
     let network = test_utils::test_network(target.network_keypair(), target.address());
-    let client = NetworkClient::new_from_keypair(&target.network_keypair());
+    let client = WorkerNetworkClient::new_from_keypair(&target.network_keypair());
 
     let (header_store, certificate_store, payload_store) = create_db_stores();
     let (tx_certificate_fetcher, _rx_certificate_fetcher) = test_utils::test_channel!(1);
@@ -617,7 +617,7 @@ async fn test_request_vote_missing_batches() {
     let metrics = Arc::new(PrimaryMetrics::new(&Registry::new()));
     let primary_channel_metrics = PrimaryChannelMetrics::new(&Registry::new());
     let network = test_utils::test_network(primary.network_keypair(), primary.address());
-    let client = NetworkClient::new_from_keypair(&primary.network_keypair());
+    let client = WorkerNetworkClient::new_from_keypair(&primary.network_keypair());
 
     let (header_store, certificate_store, payload_store) = create_db_stores();
     let (tx_certificate_fetcher, _rx_certificate_fetcher) = test_utils::test_channel!(1);
@@ -766,7 +766,7 @@ async fn test_request_vote_already_voted() {
     let metrics = Arc::new(PrimaryMetrics::new(&Registry::new()));
     let primary_channel_metrics = PrimaryChannelMetrics::new(&Registry::new());
     let network = test_utils::test_network(primary.network_keypair(), primary.address());
-    let client = NetworkClient::new_from_keypair(&primary.network_keypair());
+    let client = WorkerNetworkClient::new_from_keypair(&primary.network_keypair());
 
     let (header_store, certificate_store, payload_store) = create_db_stores();
     let (tx_certificate_fetcher, _rx_certificate_fetcher) = test_utils::test_channel!(1);
@@ -958,7 +958,7 @@ async fn test_fetch_certificates_handler() {
     let signature_service = SignatureService::new(primary.keypair().copy());
     let metrics = Arc::new(PrimaryMetrics::new(&Registry::new()));
     let primary_channel_metrics = PrimaryChannelMetrics::new(&Registry::new());
-    let client = NetworkClient::new_from_keypair(&primary.network_keypair());
+    let client = WorkerNetworkClient::new_from_keypair(&primary.network_keypair());
 
     let (header_store, certificate_store, payload_store) = create_db_stores();
     let (tx_certificate_fetcher, _rx_certificate_fetcher) = test_utils::test_channel!(1);
@@ -1133,7 +1133,7 @@ async fn test_request_vote_created_at_in_future() {
     let metrics = Arc::new(PrimaryMetrics::new(&Registry::new()));
     let primary_channel_metrics = PrimaryChannelMetrics::new(&Registry::new());
     let network = test_utils::test_network(primary.network_keypair(), primary.address());
-    let client = NetworkClient::new_from_keypair(&primary.network_keypair());
+    let client = WorkerNetworkClient::new_from_keypair(&primary.network_keypair());
 
     let (header_store, certificate_store, payload_store) = create_db_stores();
     let (tx_certificate_fetcher, _rx_certificate_fetcher) = test_utils::test_channel!(1);

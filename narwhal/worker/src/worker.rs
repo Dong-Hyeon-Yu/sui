@@ -3,10 +3,10 @@
 // SPDX-License-Identifier: Apache-2.0
 use crate::{
     batch_maker::BatchMaker,
-    handlers::{PrimaryReceiverHandler, WorkerReceiverHandler},
+    handlers::{PrimaryReceiverHandler, WorkerReceiverHandler, LazyType},
     metrics::WorkerChannelMetrics,
     quorum_waiter::QuorumWaiter,
-    TransactionValidator, NUM_SHUTDOWN_RECEIVERS,
+    TransactionValidator, NUM_SHUTDOWN_RECEIVERS, batch_fetcher::BatchFetcher,
 };
 use anemo::{codegen::InboundRequestLayer, types::Address};
 use anemo::{types::PeerInfo, Network, PeerId};
@@ -71,7 +71,7 @@ pub struct Worker {
 }
 
 impl Worker {
-    pub fn spawn(
+    pub async fn spawn(
         authority: Authority,
         keypair: NetworkKeyPair,
         id: WorkerId,
@@ -135,6 +135,9 @@ impl Worker {
             ));
         }
 
+        let lazy_network = LazyType::new();
+        let lazy_batch_fetcher = LazyType::new();
+
         // Legacy RPC interface, only used by delete_batches() for external consensus.
         let primary_service = PrimaryToWorkerServer::new(PrimaryReceiverHandler {
             authority_id: worker.authority.id(),
@@ -145,8 +148,8 @@ impl Worker {
             store: worker.store.clone(),
             request_batch_timeout: worker.parameters.sync_retry_delay,
             request_batch_retry_nodes: worker.parameters.sync_retry_nodes,
-            network: None,
-            batch_fetcher: None,
+            network: lazy_network.clone(),
+            batch_fetcher: lazy_batch_fetcher.clone(),
             validator: validator.clone(),
         });
 
@@ -284,6 +287,18 @@ impl Worker {
                 }
             }
         }
+
+        // lazy initialization for PrimaryReceiverHandler
+        let betch_fetcher = BatchFetcher::new(
+            worker_name,
+            network.clone(),
+            worker.store.clone(),
+            node_metrics.clone(),
+            protocol_config.clone(),
+        );
+
+        lazy_network.initialize(network.clone()).await;
+        lazy_batch_fetcher.initialize(betch_fetcher).await;
 
         info!("Worker {} listening to worker messages on {}", id, address);
 

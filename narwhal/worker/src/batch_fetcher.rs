@@ -7,6 +7,7 @@ use std::{
     time::Duration,
 };
 
+use anemo::Network;
 use anyhow::bail;
 use async_trait::async_trait;
 use crypto::NetworkPublicKey;
@@ -33,6 +34,7 @@ use crate::metrics::WorkerMetrics;
 const REMOTE_PARALLEL_FETCH_INTERVAL: Duration = Duration::from_secs(2);
 const WORKER_RETRY_INTERVAL: Duration = Duration::from_secs(1);
 
+#[derive(Clone)]
 pub struct BatchFetcher {
     name: NetworkPublicKey,
     network: Arc<dyn RequestBatchesNetwork>,
@@ -42,7 +44,21 @@ pub struct BatchFetcher {
 }
 
 impl BatchFetcher {
-
+    pub fn new(
+        name: NetworkPublicKey,
+        network: Network,
+        batch_store: DBMap<BatchDigest, Batch>,
+        metrics: Arc<WorkerMetrics>,
+        protocol_config: ProtocolConfig,
+    ) -> Self {
+        Self {
+            name,
+            network: Arc::new(RequestBatchesNetworkImpl { network }),
+            batch_store,
+            metrics,
+            protocol_config,
+        }
+    }
     /// Bulk fetches payload from local storage and remote workers.
     /// This function performs infinite retries and blocks until all batches are available.
     pub async fn fetch(

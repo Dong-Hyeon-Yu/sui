@@ -105,7 +105,7 @@ impl WorkerNodeInner {
             store.batch_store.clone(),
             metrics,
             &mut tx_shutdown,
-        );
+        ).await;
 
         // store the registry
         if let Some(registry) = registry {

@@ -372,6 +372,9 @@ impl Primary {
             let (peer_id, address) =
                 Self::add_peer_in_network(&network, worker.name, &worker.worker_address);
             peer_types.insert(peer_id, "our_worker".to_string());
+
+            // create worker clients
+            client.set_primary_to_worker_local_handler(peer_id, PrimaryToWorkerClient::new(network.waiting_peer(peer_id)));
             info!(
                 "Adding our worker with peer id {} and address {}",
                 peer_id, address
@@ -387,11 +390,6 @@ impl Primary {
                 "Adding others worker with peer id {} and address {}",
                 peer_id, address
             );
-        }
-
-        // create worker clients
-        for worker_id in peer_types.keys() {
-            client.set_primary_to_worker_local_handler(*worker_id, PrimaryToWorkerClient::new(network.waiting_peer(*worker_id)))
         }
 
         // Add other primaries

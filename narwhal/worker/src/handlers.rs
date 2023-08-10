@@ -9,9 +9,10 @@ use config::{AuthorityIdentifier, Committee, WorkerCache, WorkerId};
 use fastcrypto::hash::Hash;
 use itertools::Itertools;
 use network::{client::PrimaryNetworkClient, ReportBatchToPrimary};
-use std::{collections::HashSet, time::Duration};
+use std::{collections::HashSet, time::Duration, sync::Arc};
 use store::{rocks::DBMap, Map};
 use sui_protocol_config::ProtocolConfig;
+use tokio::sync::{RwLock, RwLockReadGuard};
 use tracing::{debug, trace};
 use types::{
     now, validate_batch_version, Batch, BatchAPI, BatchDigest, FetchBatchesRequest,
@@ -146,11 +147,47 @@ pub struct PrimaryReceiverHandler<V> {
     // Number of random nodes to query when retrying batch requests.
     pub request_batch_retry_nodes: usize,
     // Synchronize header payloads from other workers.
-    pub network: Option<Network>,
+    pub network: LazyType<Network>,
     // Fetch certificate payloads from other workers.
-    pub batch_fetcher: Option<BatchFetcher>,
+    pub batch_fetcher: LazyType<BatchFetcher>,
     // Validate incoming batches
     pub validator: V,
+}
+
+// TODO: initialize with channel to remove lock
+#[derive(Clone)]
+pub struct LazyType<T> {
+    pub inner: Arc<RwLock<Inner<T>>>,
+}
+
+impl <T: Clone> LazyType<T> {
+
+    pub fn new() -> Self {
+        Self {
+            inner: Arc::new(RwLock::new(Inner {
+                value: None,
+            })),
+        }
+    }
+
+    pub async fn initialize(&self, value: T) {
+        let mut inner = self.inner.write().await;
+        inner.value = Some(value);
+    }
+
+    pub async fn acquire_read_lock(&self) -> RwLockReadGuard<'_, Inner<T>> {
+        self.inner.read().await
+    }
+}
+
+pub struct Inner<T> {
+    value: Option<T>
+}
+
+impl <T> Inner<T> {
+    pub fn value(&self) -> Option<&T> {
+        self.value.as_ref()
+    }
 }
 
 #[async_trait]
@@ -159,7 +196,9 @@ impl<V: TransactionValidator> PrimaryToWorker for PrimaryReceiverHandler<V> {
         &self,
         request: anemo::Request<WorkerSynchronizeMessage>,
     ) -> Result<anemo::Response<()>, anemo::rpc::Status> {
-        let Some(network) = self.network.as_ref() else {
+
+        let network = self.network.acquire_read_lock().await;
+        let Some(network) = network.value() else {
             return Err(anemo::rpc::Status::new_with_message(
                 StatusCode::BadRequest,
                 "synchronize() is unsupported via RPC interface, please call via local worker handler instead",
@@ -268,7 +307,8 @@ impl<V: TransactionValidator> PrimaryToWorker for PrimaryReceiverHandler<V> {
         &self,
         request: anemo::Request<FetchBatchesRequest>,
     ) -> Result<anemo::Response<FetchBatchesResponse>, anemo::rpc::Status> {
-        let Some(batch_fetcher) = self.batch_fetcher.as_ref() else {
+        let batch_fetcher = self.batch_fetcher.acquire_read_lock().await;
+        let Some(batch_fetcher) = batch_fetcher.value() else {
             return Err(anemo::rpc::Status::new_with_message(
                 StatusCode::BadRequest,
                 "fetch_batches() is unsupported via RPC interface, please call via local worker handler instead",

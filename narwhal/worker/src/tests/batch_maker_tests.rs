@@ -29,7 +29,7 @@ async fn make_batch() {
     mock_server
         .expect_report_own_batch()
         .returning(|_| Ok(anemo::Response::new(())));
-    client.set_local_handler(Arc::new(mock_server));
+    client.set_worker_to_primary_local_handler(Arc::new(mock_server));
 
     // Spawn a `BatchMaker` instance.
     let id = 0;

@@ -1,28 +1,95 @@
-use mysten_metrics::monitored_scope;
+use futures::{future::try_join_all, stream::FuturesUnordered};
+use mysten_metrics::{monitored_scope, spawn_logged_monitored_task};
 use async_trait::async_trait;
 use fastcrypto::hash::Hash as _Hash;
 use narwhal_executor::ExecutionState;
-use narwhal_types::{BatchAPI, CertificateAPI, ConsensusOutput, HeaderAPI};
+use narwhal_types::{BatchAPI, CertificateAPI, ConsensusOutput, HeaderAPI, PreSubscribedBroadcastSender};
+use parking_lot::RwLock;
+use sui_types::digests::TransactionDigest;
+use tokio::{sync::mpsc::Sender, task::JoinHandle};
 // use sui_core::authority::AuthorityMetrics;
 use tracing::{info, instrument};
-use crate::types::{ExecutableEthereumTransaction, EthereumTransaction};
+use crate::{types::{ExecutableEthereumTransaction, EthereumTransaction}, transaction_manager::SimpleTransactionManager, execution_storage::MemoryStorage, executor::SerialExecutor, execution_driver::execution_process};
 use core::panic;
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
+
 
 pub struct SimpleConsensusHandler {
-    tx_consensus_certificate: tokio::sync::mpsc::Sender<Vec<ExecutableEthereumTransaction>>,
-    // metrics: Arc<AuthorityMetrics>,
+    tx_consensus_certificate: Sender<Vec<ExecutableEthereumTransaction>>,
+    tx_shutdown: Option<PreSubscribedBroadcastSender>,
+    handles: FuturesUnordered<JoinHandle<()>>,
 }
 
 impl SimpleConsensusHandler {
+
+    // ConsensusHandler has two components : SimpleTransactionManager and ExecutionDriver
+    const NUM_SHUTDOWN_RECEIVERS: u64 = 2;  
+
     pub fn new(
-        tx_consensus_certificate: tokio::sync::mpsc::Sender<Vec<ExecutableEthereumTransaction>>,
-        // metrics: Arc<AuthorityMetrics>,
+        tx_consensus_confirmation: Sender<Vec<TransactionDigest>>,
+        execution_store: Arc<RwLock<MemoryStorage>>, //TODO: make this field Arc, and remove Inner
     ) -> Self {
+    // The channel returning the result for each transaction's execution.
+        let (tx_consensus_certificate, rx_consensus_certificate) = tokio::sync::mpsc::channel(100);
+        let (tx_ready_certificate, rx_ready_certificate) = tokio::sync::mpsc::unbounded_channel();
+        let (tx_commit_notification, rx_commit_notification) = tokio::sync::mpsc::channel(100);
+        
+        let mut tx_shutdown = PreSubscribedBroadcastSender::new(Self::NUM_SHUTDOWN_RECEIVERS);
+        
+        let handles = FuturesUnordered::new();
+
+        let database = execution_store.clone();
+        let rx_shutdown = tx_shutdown.subscribe();
+        handles.push(
+            spawn_logged_monitored_task!(
+                execution_process(
+                    Arc::new(SerialExecutor::new(database, tx_commit_notification)),
+                    rx_ready_certificate,
+                    rx_shutdown
+                ),
+                "ExecutionDriver::loop"
+            )
+        );
+
+        handles.push(
+            SimpleTransactionManager::spawn(
+                execution_store.clone(),
+                tx_consensus_confirmation,
+                rx_consensus_certificate,
+                tx_ready_certificate,
+                rx_commit_notification,
+                tx_shutdown.subscribe(),
+            )
+        );
+
         Self {
             tx_consensus_certificate,
-            // metrics
+            tx_shutdown: Some(tx_shutdown),
+            handles,
         }
+    }
+
+    pub async fn shutdown(&mut self) {
+        // send the shutdown signal to the node
+        let now = Instant::now();
+        info!("Sending shutdown message to primary node");
+
+        if let Some(tx_shutdown) = self.tx_shutdown.as_ref() {
+            tx_shutdown
+                .send()
+                .expect("Couldn't send the shutdown signal to downstream components");
+            self.tx_shutdown = None;
+        }
+
+        
+
+        // Now wait until handles have been completed
+        try_join_all(&mut self.handles).await.unwrap();
+
+        info!(
+            "Narwhal primary shutdown is complete - took {} seconds",
+            now.elapsed().as_secs_f64()
+        );
     }
 }
 

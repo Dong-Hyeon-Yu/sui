@@ -3288,7 +3288,7 @@ checksum = "0206175f82b8d6bf6652ff7d71a1e27fd2e4efde587fd368662814d6ec1d9ce0"
 [[package]]
 name = "evm"
 version = "0.39.1"
-source = "git+https://github.com/Dong-Hyeon-Yu/evm.git?rev=61ffd0336b1892ef761ea8b016d615f5b03d1d41#61ffd0336b1892ef761ea8b016d615f5b03d1d41"
+source = "git+https://github.com/Dong-Hyeon-Yu/evm.git?rev=daf1c5b0a4def19371b28b65afd7d47c070c764b#daf1c5b0a4def19371b28b65afd7d47c070c764b"
 dependencies = [
  "auto_impl",
  "environmental",
@@ -3308,7 +3308,7 @@ dependencies = [
 [[package]]
 name = "evm-core"
 version = "0.39.0"
-source = "git+https://github.com/Dong-Hyeon-Yu/evm.git?rev=61ffd0336b1892ef761ea8b016d615f5b03d1d41#61ffd0336b1892ef761ea8b016d615f5b03d1d41"
+source = "git+https://github.com/Dong-Hyeon-Yu/evm.git?rev=daf1c5b0a4def19371b28b65afd7d47c070c764b#daf1c5b0a4def19371b28b65afd7d47c070c764b"
 dependencies = [
  "parity-scale-codec 3.5.0",
  "primitive-types 0.12.1",
@@ -3319,7 +3319,7 @@ dependencies = [
 [[package]]
 name = "evm-gasometer"
 version = "0.39.0"
-source = "git+https://github.com/Dong-Hyeon-Yu/evm.git?rev=61ffd0336b1892ef761ea8b016d615f5b03d1d41#61ffd0336b1892ef761ea8b016d615f5b03d1d41"
+source = "git+https://github.com/Dong-Hyeon-Yu/evm.git?rev=daf1c5b0a4def19371b28b65afd7d47c070c764b#daf1c5b0a4def19371b28b65afd7d47c070c764b"
 dependencies = [
  "environmental",
  "evm-core",
@@ -3330,7 +3330,7 @@ dependencies = [
 [[package]]
 name = "evm-runtime"
 version = "0.39.0"
-source = "git+https://github.com/Dong-Hyeon-Yu/evm.git?rev=61ffd0336b1892ef761ea8b016d615f5b03d1d41#61ffd0336b1892ef761ea8b016d615f5b03d1d41"
+source = "git+https://github.com/Dong-Hyeon-Yu/evm.git?rev=daf1c5b0a4def19371b28b65afd7d47c070c764b#daf1c5b0a4def19371b28b65afd7d47c070c764b"
 dependencies = [
  "auto_impl",
  "environmental",
@@ -9614,8 +9614,9 @@ dependencies = [
  "async-trait",
  "bcs",
  "bytes",
+ "cfg-if",
  "chrono",
- "clap 3.2.23",
+ "clap 2.34.0",
  "criterion",
  "dashmap",
  "either",
@@ -9664,6 +9665,7 @@ dependencies = [
  "sui-framework",
  "sui-genesis-builder",
  "sui-json-rpc-types",
+ "sui-keys",
  "sui-macros",
  "sui-move-build",
  "sui-network",
@@ -9680,6 +9682,8 @@ dependencies = [
  "tokio-retry",
  "tokio-stream",
  "tracing",
+ "tracing-subscriber 0.3.16",
+ "url",
  "workspace-hack",
 ]
 

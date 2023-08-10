@@ -2,13 +2,13 @@ use std::{
     collections::{HashMap, VecDeque},
     sync::Arc, cmp::max
 };
-use mysten_metrics::{monitored_scope, metered_channel::Receiver};
-use sui_core::authority::{AuthorityStore, AuthorityMetrics};
+use mysten_metrics::{monitored_scope, spawn_monitored_task, spawn_logged_monitored_task};
+use narwhal_types::ConditionalBroadcastReceiver;
 use sui_types::digests::TransactionDigest;
 use crate::{types::ExecutableEthereumTransaction, execution_storage::{MemoryStorage, ExecutionResult, ExecutionBackend}};
-// use parking_lot::RwLock;
-use tokio::sync::RwLock;
-use tokio::sync::mpsc::{UnboundedSender, self};
+use parking_lot::RwLock;
+use tokio::task::JoinHandle;
+use tokio::sync::mpsc::{UnboundedSender, Receiver, Sender, channel};
 use tracing::trace;
 use sui_types::error::SuiResult;
 
@@ -45,12 +45,10 @@ pub(crate) trait TxManager<T> {
 }
 
 pub struct SimpleTransactionManager {
-    authority_store: Arc<AuthorityStore>,
-    execution_store: Arc<tokio::sync::RwLock<MemoryStorage>>,
-    rx_consensus_certificate: mpsc::Receiver<Vec<ExecutableEthereumTransaction>>,
+    execution_store: Arc<RwLock<MemoryStorage>>,
+    rx_consensus_certificate: Receiver<Vec<ExecutableEthereumTransaction>>,
     tx_ready_certificate: UnboundedSender<ExecutableEthereumTransaction>,
     rx_commit_notification: Receiver<(TransactionDigest, ExecutionResult)>,
-    metrics: Arc<AuthorityMetrics>,
     inner: RwLock<Inner>,
 }
 
@@ -61,19 +59,16 @@ impl TxManager<ExecutableEthereumTransaction> for SimpleTransactionManager {
     }
 
     async fn commit(&self, digest: &TransactionDigest, execution_result: &ExecutionResult) {
-        let mut inner = self.inner.write().await;
+        let mut inner = self.inner.write();
         let _scope = monitored_scope("TransactionManager::commit::wlock");
 
         let Some(executed_cert) = inner.executing_certificates.remove(digest) else {
             trace!("{:?} not found in executing certificates, likely because it is a system transaction", digest);
             return;
         };
-
-        {
-            let mut database = self.execution_store.write().await;
-            database.apply_all_effects(digest, execution_result);
-        }
-
+        
+        self.execution_store.write().apply_all_effects(digest, execution_result);
+        
         let next_cert = match executed_cert.has_next() {
             true => inner.pending_certificates.remove(executed_cert.next()).expect("next certificate must exist in pending queue"),
             false => {
@@ -103,26 +98,27 @@ impl TxManager<ExecutableEthereumTransaction> for SimpleTransactionManager {
 
 impl SimpleTransactionManager {
 
-    fn new(
-        authority_store: Arc<AuthorityStore>,
-        execution_store: Arc<tokio::sync::RwLock<MemoryStorage>>,
-        rx_consensus_certificate: mpsc::Receiver<Vec<ExecutableEthereumTransaction>>,
+    pub fn spawn(
+        execution_store: Arc<RwLock<MemoryStorage>>,
+        tx_consensus_confirmation: Sender<Vec<TransactionDigest>>,
+        rx_consensus_certificate: Receiver<Vec<ExecutableEthereumTransaction>>,
         tx_ready_certificate: UnboundedSender<ExecutableEthereumTransaction>,
         rx_commit_notification: Receiver<(TransactionDigest, ExecutionResult)>,
-        metrics: Arc<AuthorityMetrics>,
-    ) -> SimpleTransactionManager {
-        Self {
-            authority_store,
-            execution_store,
-            metrics,
-            inner: RwLock::new(Inner::new()),
-            rx_consensus_certificate,
-            tx_ready_certificate,
-            rx_commit_notification
-        }
+        rv_shutdown: ConditionalBroadcastReceiver,
+    ) -> JoinHandle<()>{
+        spawn_logged_monitored_task!(
+            Self {
+                execution_store,
+                inner: RwLock::new(Inner::new()),
+                rx_consensus_certificate,
+                tx_ready_certificate,
+                rx_commit_notification
+            }.run(),
+            "transaction_manager::run()"
+        )
     }
 
-    async fn run(&mut self) {
+    pub async fn run(&mut self) {
         loop {
             tokio::select! {
                 Some((digest, execution_result)) = self.rx_commit_notification.recv() => {
@@ -166,7 +162,7 @@ impl SimpleTransactionManager {
         // 3. make given consunsus output to pending transactions
 
         // Internal lock is held only for updating the internal state.
-        let mut inner = self.inner.write().await;
+        let mut inner = self.inner.write();
         let _scope = monitored_scope("TransactionManager::enqueue::wlock");
 
         let pending = transactions.iter().enumerate().map(|(idx, tx)| {

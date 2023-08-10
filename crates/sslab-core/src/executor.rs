@@ -1,13 +1,14 @@
+
 use std::sync::Arc;
-// use parking_lot::RwLock;
-use tokio::sync::RwLock;
-use evm::{ExitReason, backend::Backend};
+
+use evm::ExitReason;
 use itertools::Itertools;
+use parking_lot::RwLock;
 use tap::tap::TapFallible;
-use mysten_metrics::{monitored_scope, metered_channel::Sender};
+use mysten_metrics::monitored_scope;
 use sui_macros::fail_point_async;
 use sui_types::{error::{SuiResult, ExecutionError}, digests::TransactionDigest};
-use tokio::sync::{oneshot, Mutex, mpsc::error::SendError};
+use tokio::sync::{oneshot, Mutex, mpsc::{error::SendError, Sender}};
 use tracing::{debug, info};
 use crate::{types::ExecutableEthereumTransaction, execution_storage::{ExecutionBackend, MemoryStorage, ExecutionResult}}; 
 
@@ -18,13 +19,19 @@ pub struct SerialExecutor {
 
     execution_store: Arc<RwLock<MemoryStorage>>,
     notify_commit: Sender<(TransactionDigest, ExecutionResult)>,
-
-    /// Shuts down the execution task. Used only in testing.
-    #[allow(unused)]
-    tx_execution_shutdown: Mutex<Option<oneshot::Sender<()>>>,
 }
 
 impl SerialExecutor {
+
+    pub fn new(
+        execution_store: Arc<RwLock<MemoryStorage>>,
+        notify_commit: Sender<(TransactionDigest, ExecutionResult)>,
+    ) -> Self {
+        Self {
+            execution_store,
+            notify_commit,
+        }
+    }
     
     // #[instrument(level = "trace", skip_all)]
     pub async fn try_execute_immediately(
@@ -48,32 +55,34 @@ impl SerialExecutor {
         &self,
         certificate: &ExecutableEthereumTransaction,
     ) -> SuiResult<((), Option<ExecutionError>)> {  
-        let database = self.execution_store.read().await;
 
         let mut effects = vec![];
         let mut logs = vec![];
-        // TODO: apply..?
-        for tx in certificate.data() {
-            let mut executor = database.executor();
-            let mut runtime = tx.execution_part(database.backend().code(*tx.to_addr()));
-            
-            match executor.execute(&mut runtime) {
-                ExitReason::Succeed(_) => {
-                    let (effect, log) = executor.into_state().deconstruct();
-
-                    effects.extend(effect.into_iter().collect_vec());
-                    logs.extend(log.into_iter().collect_vec());
-                }
-                ExitReason::Revert(_) => {
-                    // do nothing: explicit revert is not an error
-                    continue;
-                }
-                ExitReason::Error(_) => {
-                    // do nothing: normal EVM error
-                    continue;
-                }
-                ExitReason::Fatal(_) => {
-                    return Err(sui_types::error::SuiError::ExecutionError(String::from("Fatal error occurred on EVM!")));
+        
+        {
+            let store = self.execution_store.read();
+            for tx in certificate.data() {
+                let mut executor = store.executor();
+                let mut runtime = tx.execution_part(store.code(*tx.to_addr()));
+                
+                match executor.execute(&mut runtime) {
+                    ExitReason::Succeed(_) => {
+                        let (effect, log) = executor.into_state().deconstruct();
+    
+                        effects.extend(effect.into_iter().collect_vec());
+                        logs.extend(log.into_iter().collect_vec());
+                    }
+                    ExitReason::Revert(_) => {
+                        // do nothing: explicit revert is not an error
+                        continue;
+                    }
+                    ExitReason::Error(_) => {
+                        // do nothing: normal EVM error
+                        continue;
+                    }
+                    ExitReason::Fatal(_) => {
+                        return Err(sui_types::error::SuiError::ExecutionError(String::from("Fatal error occurred on EVM!")));
+                    }
                 }
             }
         }
@@ -130,5 +139,9 @@ impl SerialExecutor {
         //         .kind()
         //         .num_commands() as f64,
         // );
+    }
+
+    pub fn is_tx_already_executed(&self, tx_digest: &TransactionDigest) -> SuiResult<bool> {
+        self.execution_store.read().is_tx_already_executed(tx_digest)
     }
 }

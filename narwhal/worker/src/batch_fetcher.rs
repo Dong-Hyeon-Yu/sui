@@ -43,21 +43,6 @@ pub struct BatchFetcher {
 }
 
 impl BatchFetcher {
-    pub fn new(
-        name: NetworkPublicKey,
-        network: Network,
-        batch_store: DBMap<BatchDigest, Batch>,
-        metrics: Arc<WorkerMetrics>,
-        protocol_config: ProtocolConfig,
-    ) -> Self {
-        Self {
-            name,
-            network: Arc::new(RequestBatchesNetworkImpl { network }),
-            batch_store,
-            metrics,
-            protocol_config,
-        }
-    }
 
     /// Bulk fetches payload from local storage and remote workers.
     /// This function performs infinite retries and blocks until all batches are available.

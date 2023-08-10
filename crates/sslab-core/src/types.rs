@@ -114,6 +114,7 @@ impl SpecId {
     }
 }
 
+#[derive(Clone)]
 pub struct ChainConfig {
     chain_id: SpecId,
     config: Config

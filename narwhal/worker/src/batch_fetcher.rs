@@ -7,7 +7,6 @@ use std::{
     time::Duration,
 };
 
-use anemo::Network;
 use anyhow::bail;
 use async_trait::async_trait;
 use crypto::NetworkPublicKey;

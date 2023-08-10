@@ -2,7 +2,7 @@ use std::{
     collections::{HashMap, VecDeque},
     sync::Arc, cmp::max
 };
-use mysten_metrics::{monitored_scope, spawn_monitored_task, spawn_logged_monitored_task};
+use mysten_metrics::{monitored_scope, spawn_logged_monitored_task};
 use narwhal_types::ConditionalBroadcastReceiver;
 use sui_types::digests::TransactionDigest;
 use crate::{types::ExecutableEthereumTransaction, execution_storage::{MemoryStorage, ExecutionResult, ExecutionBackend}};
@@ -46,9 +46,11 @@ pub(crate) trait TxManager<T> {
 
 pub struct SimpleTransactionManager {
     execution_store: Arc<RwLock<MemoryStorage>>,
+    tx_execution_confirmation: Sender<TransactionDigest>,
     rx_consensus_certificate: Receiver<Vec<ExecutableEthereumTransaction>>,
     tx_ready_certificate: UnboundedSender<ExecutableEthereumTransaction>,
     rx_commit_notification: Receiver<(TransactionDigest, ExecutionResult)>,
+    rx_shutdown: ConditionalBroadcastReceiver,
     inner: RwLock<Inner>,
 }
 
@@ -100,19 +102,21 @@ impl SimpleTransactionManager {
 
     pub fn spawn(
         execution_store: Arc<RwLock<MemoryStorage>>,
-        tx_consensus_confirmation: Sender<Vec<TransactionDigest>>,
+        tx_execution_confirmation: Sender<TransactionDigest>,
         rx_consensus_certificate: Receiver<Vec<ExecutableEthereumTransaction>>,
         tx_ready_certificate: UnboundedSender<ExecutableEthereumTransaction>,
         rx_commit_notification: Receiver<(TransactionDigest, ExecutionResult)>,
-        rv_shutdown: ConditionalBroadcastReceiver,
+        rx_shutdown: ConditionalBroadcastReceiver,
     ) -> JoinHandle<()>{
         spawn_logged_monitored_task!(
             Self {
                 execution_store,
                 inner: RwLock::new(Inner::new()),
+                tx_execution_confirmation,
                 rx_consensus_certificate,
                 tx_ready_certificate,
-                rx_commit_notification
+                rx_commit_notification,
+                rx_shutdown
             }.run(),
             "transaction_manager::run()"
         )
@@ -123,10 +127,15 @@ impl SimpleTransactionManager {
             tokio::select! {
                 Some((digest, execution_result)) = self.rx_commit_notification.recv() => {
                     let _ = self.commit(&digest, &execution_result);
+                    let _ = self.tx_execution_confirmation.send(digest).await;
                 }
 
                 Some(transactions) = self.rx_consensus_certificate.recv() => {
                     let _ = self.enqueue(transactions).await;
+                }
+
+                _ = self.rx_shutdown.receiver.recv() => {
+                    break;
                 }
             }
         }

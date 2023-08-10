@@ -11,7 +11,7 @@
 use clap::{crate_name, crate_version, App, AppSettings, ArgMatches, SubCommand};
 use eyre::Context;
 use fastcrypto::traits::KeyPair as _;
-use mysten_metrics::RegistryService;
+use mysten_metrics::{RegistryService, spawn_logged_monitored_task};
 use narwhal_config::{Committee, Import, Parameters, WorkerCache, WorkerId};
 use narwhal_crypto::{KeyPair, NetworkKeyPair};
 use narwhal_node as node;
@@ -271,10 +271,6 @@ async fn run(
 
     let store = NodeStorage::reopen(store_path, Some(certificate_store_cache_metrics));
 
-    //TODO: set receive channel into Consensus Handler
-    // The channel returning the result for each transaction's execution.
-    let (_tx_transaction_confirmation, _rx_transaction_confirmation) = channel(100);
-
     // Check whether to run a primary, a worker, or an entire authority.
     let (primary, worker) = match matches.subcommand() {
         // Spawn the primary and consensus core.
@@ -285,6 +281,8 @@ async fn run(
 
             let execution_store = Arc::new(RwLock::new(MemoryStorage::default(SpecId::ISTANBUL)));
 
+
+
             primary
                 .start(
                     primary_keypair,
@@ -294,7 +292,7 @@ async fn run(
                     worker_cache,
                     client.clone(),
                     &store,
-                    Arc::new(SimpleConsensusHandler::new(_tx_transaction_confirmation, execution_store)),
+                    Arc::new(SimpleConsensusHandler::new(execution_store)),
                 )
                 .await?;
 

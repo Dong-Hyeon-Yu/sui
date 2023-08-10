@@ -5,7 +5,6 @@ use fastcrypto::hash::Hash as _Hash;
 use narwhal_executor::ExecutionState;
 use narwhal_types::{BatchAPI, CertificateAPI, ConsensusOutput, HeaderAPI, PreSubscribedBroadcastSender};
 use parking_lot::RwLock;
-use sui_types::digests::TransactionDigest;
 use tokio::{sync::mpsc::Sender, task::JoinHandle};
 // use sui_core::authority::AuthorityMetrics;
 use tracing::{info, instrument};
@@ -23,20 +22,39 @@ pub struct SimpleConsensusHandler {
 impl SimpleConsensusHandler {
 
     // ConsensusHandler has two components : SimpleTransactionManager and ExecutionDriver
-    const NUM_SHUTDOWN_RECEIVERS: u64 = 2;  
+    const NUM_SHUTDOWN_RECEIVERS: u64 = 3;  
 
     pub fn new(
-        tx_consensus_confirmation: Sender<Vec<TransactionDigest>>,
         execution_store: Arc<RwLock<MemoryStorage>>, //TODO: make this field Arc, and remove Inner
     ) -> Self {
-    // The channel returning the result for each transaction's execution.
         let (tx_consensus_certificate, rx_consensus_certificate) = tokio::sync::mpsc::channel(100);
         let (tx_ready_certificate, rx_ready_certificate) = tokio::sync::mpsc::unbounded_channel();
         let (tx_commit_notification, rx_commit_notification) = tokio::sync::mpsc::channel(100);
-        
+        // The channel returning the result for each transaction's execution.
+        let (tx_execution_confirmation, rx_execution_confirmation) = tokio::sync::mpsc::channel(100);
+
         let mut tx_shutdown = PreSubscribedBroadcastSender::new(Self::NUM_SHUTDOWN_RECEIVERS);
         
         let handles = FuturesUnordered::new();
+
+        let mut rx_shutdown = tx_shutdown.subscribe();
+        handles.push(spawn_logged_monitored_task!(async move {
+            let mut rx = rx_execution_confirmation;
+
+            loop {
+                tokio::select! {
+                    Some(tx_hash) = rx.recv() => {
+                        info!(?tx_hash, "Transaction executed");
+                    }
+                    _ = rx_shutdown.receiver.recv() => {
+                        info!("Shutdown signal received. Exiting executor ...");
+                        return;
+                    }
+                }
+            }}, 
+            "ExecutionDriver::confirmation_loop")
+        );
+
 
         let database = execution_store.clone();
         let rx_shutdown = tx_shutdown.subscribe();
@@ -54,7 +72,7 @@ impl SimpleConsensusHandler {
         handles.push(
             SimpleTransactionManager::spawn(
                 execution_store.clone(),
-                tx_consensus_confirmation,
+                tx_execution_confirmation,
                 rx_consensus_certificate,
                 tx_ready_certificate,
                 rx_commit_notification,

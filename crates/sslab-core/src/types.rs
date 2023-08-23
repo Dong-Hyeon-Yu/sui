@@ -1,22 +1,33 @@
 use std::rc::Rc;
 use std::sync::Arc;
 use enumn;
-use ethers_core::types::Address;
-use ethers_core::types::transaction::eip2718::TypedTransaction;
-use ethers_core::utils::keccak256;
+use ethers_core::types::Transaction;
+use ethers_core::types::{Address, transaction::eip2718::TypedTransaction};
+use ethers_core::utils::rlp::{Decodable, DecoderError};
+use ethers_core::utils::{rlp::Rlp, keccak256};
 use evm::{Runtime, Config, Context};
 use narwhal_types::Certificate;
 use once_cell::sync::OnceCell;
 use serde::{Serialize, Deserialize};
+
 use sui_types::digests::TransactionDigest;
 use crate::executor::{DEFAULT_EVM_MEMORY_LIMIT, DEFAULT_EVM_STACK_LIMIT};
-
-// pub type EthereumTransaction = Transaction;
+use crate::transaction_validator::TxValidationError;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct EthereumTransaction(TypedTransaction);
 
 impl EthereumTransaction {
+
+    pub fn decode(bytes: &[u8]) -> Result<EthereumTransaction, TxValidationError> {
+        let rlp = Rlp::new(bytes);
+
+        let mut tx = Transaction::decode(&rlp)?;
+
+        tx.from = tx.recover_from()?;
+
+        Ok(EthereumTransaction(From::from(&tx)))
+    }
 
     pub fn execution_part(&self, code :Vec<u8>) -> Runtime {
         

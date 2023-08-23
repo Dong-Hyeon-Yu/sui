@@ -8,8 +8,8 @@ use sui_types::digests::TransactionDigest;
 use crate::{types::ExecutableEthereumTransaction, execution_storage::{MemoryStorage, ExecutionResult, ExecutionBackend}};
 use parking_lot::RwLock;
 use tokio::task::JoinHandle;
-use tokio::sync::mpsc::{UnboundedSender, Receiver, Sender, channel};
-use tracing::trace;
+use tokio::sync::mpsc::{UnboundedSender, Receiver, Sender};
+use tracing::{trace, info, debug};
 use sui_types::error::SuiResult;
 
 
@@ -70,7 +70,8 @@ impl TxManager<ExecutableEthereumTransaction> for SimpleTransactionManager {
         };
         
         self.execution_store.write().apply_all_effects(digest, execution_result);
-        
+        info!("Transaction-{} committed", digest);
+
         let next_cert = match executed_cert.has_next() {
             true => inner.pending_certificates.remove(executed_cert.next()).expect("next certificate must exist in pending queue"),
             false => {
@@ -201,14 +202,14 @@ impl SimpleTransactionManager {
                 //     .inc();
                 continue;
             }
-            // TODO: skip already executed txes
-            // if self.authority_store.is_tx_already_executed(&digest)? {
+            // skip already executed txes
+            if self.execution_store.read().is_tx_already_executed(&digest)? {
                 // self.metrics
                 //     .transaction_manager_num_enqueued_certificates
                 //     .with_label_values(&["already_executed"])
                 //     .inc();
-            //     continue;
-            // }
+                continue;
+            }
 
             // Ready transactions can start to execute.
             // self.metrics

@@ -4,4 +4,4 @@ pub mod types;
 pub mod transaction_manager;
 pub mod executor;
 pub mod execution_storage;
-pub mod benchmark_client;
+pub mod transaction_validator;

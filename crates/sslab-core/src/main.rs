@@ -11,18 +11,17 @@
 use clap::{crate_name, crate_version, App, AppSettings, ArgMatches, SubCommand};
 use eyre::Context;
 use fastcrypto::traits::KeyPair as _;
-use mysten_metrics::{RegistryService, spawn_logged_monitored_task};
+use mysten_metrics::RegistryService;
 use narwhal_config::{Committee, Import, Parameters, WorkerCache, WorkerId};
 use narwhal_crypto::{KeyPair, NetworkKeyPair};
 use narwhal_node as node;
 use narwhal_node::primary_node::PrimaryNode;
 use narwhal_node::worker_node::WorkerNode;
 use narwhal_network::client::{WorkerNetworkClient, PrimaryNetworkClient};
-use narwhal_worker::TrivialTransactionValidator;
 use node::metrics::{primary_metrics_registry, start_prometheus_server, worker_metrics_registry};
 use parking_lot::RwLock;
 use prometheus::Registry;
-use sslab_core::{consensus_handler::SimpleConsensusHandler, types::SpecId};
+use sslab_core::{consensus_handler::SimpleConsensusHandler, types::SpecId, transaction_validator::EthereumTxValidator};
 use sui_simulator::telemetry_subscribers;
 use std::sync::Arc;
 use narwhal_node::{CertificateStoreCacheMetrics, NodeStorage};
@@ -33,7 +32,6 @@ use sui_keys::keypair_file::{
 use sui_protocol_config::{Chain, ProtocolConfig, ProtocolVersion};
 use sui_types::crypto::{get_key_pair_from_rng, AuthorityKeyPair, SuiKeyPair};
 use telemetry_subscribers::TelemetryGuards;
-use tokio::sync::mpsc::channel;
 #[cfg(feature = "benchmark")]
 use tracing::subscriber::set_global_default;
 use tracing::{info, warn};
@@ -325,7 +323,7 @@ async fn run(
                     worker_cache,
                     client,
                     &store,
-                    TrivialTransactionValidator::default(),
+                    EthereumTxValidator::default(),
                     None,
                 )
                 .await?;

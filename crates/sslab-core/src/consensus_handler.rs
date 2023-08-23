@@ -52,7 +52,7 @@ impl SimpleConsensusHandler {
                     }
                 }
             }}, 
-            "ExecutionDriver::confirmation_loop")
+            "confirmation_loop")
         );
 
 
@@ -157,9 +157,7 @@ impl ExecutionState for SimpleConsensusHandler {
                 // self.metrics.consensus_handler_processed_batches.inc();
                 for serialized_transaction in batch.transactions() {
 
-                    let transaction = match bcs::from_bytes::<EthereumTransaction>(
-                        serialized_transaction,
-                    ) {
+                    let transaction = match EthereumTransaction::decode(serialized_transaction,) {
                         Ok(transaction) => transaction,
                         Err(err) => {
                             // This should have been prevented by Narwhal batch verification.

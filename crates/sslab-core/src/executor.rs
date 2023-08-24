@@ -1,15 +1,16 @@
 
-use std::sync::Arc;
+use std::{sync::Arc, collections::BTreeMap};
 
-use evm::ExitReason;
+use ethers_core::types::{U256, H160};
+use evm::{ExitReason, backend::{Apply, Log}};
 use itertools::Itertools;
 use parking_lot::RwLock;
 use tap::tap::TapFallible;
 use mysten_metrics::monitored_scope;
 use sui_macros::fail_point_async;
 use sui_types::{error::{SuiResult, ExecutionError}, digests::TransactionDigest};
-use tokio::sync::{oneshot, Mutex, mpsc::{error::SendError, Sender}};
-use tracing::{debug, info};
+use tokio::sync::mpsc::{error::SendError, Sender};
+use tracing::{debug, info, warn};
 use crate::{types::ExecutableEthereumTransaction, execution_storage::{ExecutionBackend, MemoryStorage, ExecutionResult}}; 
 
 pub(crate) const DEFAULT_EVM_STACK_LIMIT:usize = 1024;
@@ -62,28 +63,79 @@ impl SerialExecutor {
         {
             let store = self.execution_store.read();
             for tx in certificate.data() {
-                let mut executor = store.executor();
-                let mut runtime = tx.execution_part(store.code(*tx.to_addr()));
                 
-                match executor.execute(&mut runtime) {
-                    ExitReason::Succeed(_) => {
-                        let (effect, log) = executor.into_state().deconstruct();
-    
-                        effects.extend(effect.into_iter().collect_vec());
-                        logs.extend(log.into_iter().collect_vec());
+                let mut executor = store.executor();
+
+                match tx.to_addr() {
+                    Some(to_addr) => {
+                        let mut runtime = tx.execution_part(store.code(*to_addr));
+                
+                        match executor.execute(&mut runtime) {
+                            ExitReason::Succeed(_) => {
+                                let (effect, log) = executor.into_state().deconstruct();
+            
+                                effects.extend(effect.into_iter().collect_vec());
+                                logs.extend(log.into_iter().collect_vec());
+                            }
+                            ExitReason::Revert(_) => {
+                                // do nothing: explicit revert is not an error
+                                continue;
+                            }
+                            ExitReason::Error(_) => {
+                                // do nothing: normal EVM error
+                                continue;
+                            }
+                            ExitReason::Fatal(_) => {
+                                return Err(sui_types::error::SuiError::ExecutionError(String::from("Fatal error occurred on EVM!")));
+                            }
+                        }
                     }
-                    ExitReason::Revert(_) => {
-                        // do nothing: explicit revert is not an error
-                        continue;
-                    }
-                    ExitReason::Error(_) => {
-                        // do nothing: normal EVM error
-                        continue;
-                    }
-                    ExitReason::Fatal(_) => {
-                        return Err(sui_types::error::SuiError::ExecutionError(String::from("Fatal error occurred on EVM!")));
+                    None => {  // create address
+                        match tx.data() {  
+                            Some(data) => { // create contract
+                                let init_code = data.to_owned().to_vec();
+                                let (_, addr) = executor.transact_create(tx.caller(), tx.value(), init_code.clone(), tx.gas_limit(), tx.access_list());
+                            
+                                match addr.try_into() as Result<[u8; 20], _> {
+                                    Ok(addr) => {
+                                        info!("create contract address: {:?}", addr);
+                                        effects.push(Apply::Modify {
+                                            address: H160::from(addr),
+                                            basic: evm::backend::Basic { balance: U256::zero(), nonce: U256::zero() },
+                                            code: Some(init_code),
+                                            storage: BTreeMap::new(),
+                                            reset_storage: false,
+                                        });
+                                        logs.push(Log {
+                                            address: H160::from(addr),
+                                            topics: vec![],
+                                            data: vec![],
+                                        });
+                                    },
+                                    Err(e) => warn!("failed to create contract: {:?}", e)
+                                };
+
+                                
+                            },
+                            None => {  // create user account
+                                info!("create user account: {:?}", tx.caller());
+                                effects.push(Apply::Modify {
+                                    address: tx.caller(),
+                                    basic: evm::backend::Basic { balance: tx.value(), nonce: tx.nonce() },
+                                    code: None,
+                                    storage: BTreeMap::new(),
+                                    reset_storage: false,
+                                });
+                                logs.push(Log {
+                                    address: tx.caller(),
+                                    topics: vec![],
+                                    data: vec![],
+                                });
+                            }
+                        }
                     }
                 }
+                
             }
         }
 

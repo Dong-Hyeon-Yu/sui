@@ -1,7 +1,8 @@
+use std::ops::Add;
 use std::rc::Rc;
 use std::sync::Arc;
 use enumn;
-use ethers_core::types::Transaction;
+use ethers_core::types::{Transaction, H256, U256, Bytes};
 use ethers_core::types::{Address, transaction::eip2718::TypedTransaction};
 use ethers_core::utils::rlp::{Decodable, DecoderError};
 use ethers_core::utils::{rlp::Rlp, keccak256};
@@ -46,8 +47,34 @@ impl EthereumTransaction {
         )
     }
 
-    pub fn to_addr(&self) -> &Address {
-        self.0.to_addr().unwrap()
+    pub fn to_addr(&self) -> Option<&Address> {
+        self.0.to_addr()
+    }
+
+    pub fn caller(&self) -> Address {
+        self.0.from().unwrap().clone()
+    }
+
+    pub fn value(&self) -> U256 {
+        self.0.value().unwrap().clone()
+    }
+
+    pub fn data(&self) -> Option<&Bytes> {
+        self.0.data() 
+    }
+
+    pub fn gas_limit(&self) -> u64 {
+        self.0.gas().unwrap().clone().as_u64()
+    }
+
+    pub fn access_list(&self) -> Vec<(Address, Vec<H256>)> {
+        match self.0.access_list() {
+            Some(list) => list.clone().0.iter().map(|item| (item.address, item.storage_keys.clone())).collect(),
+            None => vec![]
+        }
+    }
+    pub fn nonce(&self) -> U256 {
+        self.0.nonce().unwrap().clone()
     }
 }
 

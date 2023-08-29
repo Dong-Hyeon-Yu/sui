@@ -1,13 +1,9 @@
-use std::ops::Add;
 use std::rc::Rc;
-use std::sync::Arc;
 use enumn;
-use ethers_core::types::{Transaction, H256, U256, Bytes};
+use ethers_core::types::{H256, U256, Bytes};
 use ethers_core::types::{Address, transaction::eip2718::TypedTransaction};
-use ethers_core::utils::rlp::{Decodable, DecoderError};
 use ethers_core::utils::{rlp::Rlp, keccak256};
 use evm::{Runtime, Config, Context};
-use narwhal_types::Certificate;
 use once_cell::sync::OnceCell;
 use serde::{Serialize, Deserialize};
 
@@ -20,14 +16,16 @@ pub struct EthereumTransaction(TypedTransaction);
 
 impl EthereumTransaction {
 
-    pub fn decode(bytes: &[u8]) -> Result<EthereumTransaction, TxValidationError> {
+    pub fn encode(&self) -> Vec<u8> {
+        self.0.rlp().to_vec()
+    }
+
+    pub fn decode(bytes: &[u8]) -> Result<EthereumTransaction, TxValidationError> { 
         let rlp = Rlp::new(bytes);
 
-        let mut tx = Transaction::decode(&rlp)?;
+        let (tx, _) = TypedTransaction::decode_signed(&rlp)?;
 
-        tx.from = tx.recover_from()?;
-
-        Ok(EthereumTransaction(From::from(&tx)))
+        Ok(EthereumTransaction(tx))
     }
 
     pub fn execution_part(&self, code :Vec<u8>) -> Runtime {
@@ -83,14 +81,12 @@ impl EthereumTransaction {
 pub struct ExecutableEthereumTransaction{
     digest: OnceCell<TransactionDigest>,
     data: Vec<EthereumTransaction>, 
-    certificate: Arc<Certificate>,
 }
 
 impl ExecutableEthereumTransaction {
-    pub fn new(batch: Vec<EthereumTransaction>, cert: Arc<Certificate>) -> ExecutableEthereumTransaction {
+    pub fn new(batch: Vec<EthereumTransaction>) -> ExecutableEthereumTransaction {
         Self {
             data: batch,
-            certificate: cert,
             digest: OnceCell::new()
         }
     }
@@ -154,7 +150,6 @@ impl SpecId {
 
 #[derive(Clone)]
 pub struct ChainConfig {
-    chain_id: SpecId,
     config: Config
 }
 
@@ -184,7 +179,6 @@ impl ChainConfig {
         };
 
         Self {
-            chain_id,
             config
         }
     }

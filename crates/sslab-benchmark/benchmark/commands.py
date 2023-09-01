@@ -74,14 +74,13 @@ class CommandMaker:
                 f'--parameters {parameters} worker --id {id}')
 
     @staticmethod
-    def run_client(address, size, rate, nodes):
+    def run_client(address, rate, nodes):
         assert isinstance(address, str)
-        assert isinstance(size, int) and size > 0
         assert isinstance(rate, int) and rate >= 0
         assert isinstance(nodes, list)
         assert all(isinstance(x, str) for x in nodes)
         nodes = f'--nodes {" ".join(nodes)}' if nodes else ''
-        return f'./sslab-benchmark-client {address} --size {size} --rate {rate} {nodes}'
+        return f'./sslab-benchmark-client {address} --rate {rate} {nodes}'
 
     @staticmethod
     def alias_demo_binaries(origin):

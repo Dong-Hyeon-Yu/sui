@@ -279,8 +279,6 @@ class BenchParameters:
             else:
                 self.collocate = True
 
-            self.tx_size = int(json['tx_size'])
-
             self.duration = int(json['duration'])
 
             if 'failpoints' in json:

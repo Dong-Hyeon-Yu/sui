@@ -109,7 +109,7 @@ impl SmallBankTransactionHandler {
             // .value(1_000_000 as i32)
             .gas(u64::MAX)
             .data(hex::decode(CONTRACT_BYTECODE).unwrap())
-            .nonce(self.get_random_nonce());
+            .nonce(U256::one());
 
         self.submit_transaction(tx_request).await
     }
@@ -126,7 +126,7 @@ impl SmallBankTransactionHandler {
     async fn register_admin_account(&mut self) -> U256 {
         info!("Register admin account");
 
-        let nonce = self.get_random_nonce();
+        let nonce = U256::one();
 
         let tx_request = TransactionRequest::default()
             .from(self.admin_wallet.address())

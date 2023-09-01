@@ -117,7 +117,6 @@ class LocalBench:
                 for (id, address) in addresses:
                     cmd = CommandMaker.run_client(
                         address,
-                        self.tx_size,
                         rate_share,
                         [x for y in workers_addresses for _, x in y]
                     )

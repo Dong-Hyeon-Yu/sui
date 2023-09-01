@@ -16,7 +16,6 @@ use tracing::{info, subscriber::set_global_default, warn};
 use tracing_subscriber::filter::EnvFilter;
 use narwhal_types::{TransactionProto, TransactionsClient};
 use url::Url;
-
 use crate::workloads::handlers::{SmallBankTransactionHandler, DEFAULT_CHAIN_ID};
 
 
@@ -34,7 +33,6 @@ async fn main() -> Result<(), eyre::Report> {
         should be passed. The benchmarking client will first try to connect to all of those nodes before start sending\n\
         any transactions. That confirms the system is up and running and ready to start processing the transactions.")
         .args_from_usage("<ADDR> 'The network address of the node where to send txs. A url format is expected ex http://127.0.0.1:7000'")
-        .args_from_usage("--size=<INT> 'The size of each transaction in bytes'")
         .args_from_usage("--rate=<INT> 'The rate (txs/s) at which to send the transactions'")
         .args_from_usage("--nodes=[ADDR]... 'Network addresses, comma separated, that must be reachable before starting the benchmark.'")
         .setting(AppSettings::ArgRequiredElseHelp)
@@ -62,11 +60,6 @@ async fn main() -> Result<(), eyre::Report> {
             "Invalid url format {target_str}. Should provide something like http://127.0.0.1:7000"
         )
     })?;
-    let size = matches
-        .value_of("size")
-        .unwrap()
-        .parse::<usize>()
-        .context("The size of transactions must be a non-negative integer")?;
     let rate = matches
         .value_of("rate")
         .unwrap()
@@ -82,14 +75,11 @@ async fn main() -> Result<(), eyre::Report> {
     info!("Node address: {target}");
 
     // NOTE: This log entry is used to compute performance.
-    info!("Transactions size: {size} B");
-
-    // NOTE: This log entry is used to compute performance.
     info!("Transactions rate: {rate} tx/s");
 
+    // let client = MultipleClient::new(target, rate, nodes);
     let client = Client {
         target,
-        size,
         rate,
         nodes,
     };
@@ -101,9 +91,66 @@ async fn main() -> Result<(), eyre::Report> {
     client.send().await.context("Failed to submit transactions")
 }
 
+struct MultipleClient {
+    clients: Vec<Arc<Client>>,
+}
+
+impl MultipleClient {
+
+    const MAX_RATE_PER_CLIENT: u64 = 12500;
+
+    pub fn new (target: Url, rate: u64, nodes: Vec<Url>) -> MultipleClient {
+        let num_of_clients = std::cmp::max((rate + Self::MAX_RATE_PER_CLIENT - 1) / Self::MAX_RATE_PER_CLIENT, 1);
+
+        info!("Number of clients: {num_of_clients}");
+
+        let mut clients = Vec::new();
+
+        for _ in 0..num_of_clients {
+            let client = Client {
+                target: target.clone(),
+                rate: rate / num_of_clients,
+                nodes: nodes.clone(),
+            };
+            clients.push(Arc::new(client));
+        }
+        MultipleClient {
+            clients
+        }
+    }
+
+    pub async fn wait(&self) {
+        join_all(
+            self.clients.iter().cloned().map(|client| {
+                tokio::spawn(async move {
+                    client.wait().await;
+                })
+            })
+        ).await;
+    }
+
+    pub async fn send(&self) -> Result<(), eyre::Report> {
+        let results = join_all(
+            self.clients.iter().cloned().map(|client| {
+                tokio::spawn(async move {
+                    client.send().await
+                })
+            })
+        ).await;
+
+        for result in results {
+            if let Err(e) = result {
+                return Err(e.into());
+            }
+        }
+
+        Ok(())
+    }
+}
+
+
 struct Client {
     target: Url,
-    size: usize,
     rate: u64,
     nodes: Vec<Url>,
 }
@@ -127,13 +174,6 @@ impl Client {
                 "Transaction rate is too low, should be at least {} tx/s and multiples of {}",
                 PRECISION, PRECISION
             )));
-        }
-
-        // The transaction size must be at least 16 bytes to ensure all txs are different.
-        if self.size < 9 {
-            return Err(eyre::Report::msg(
-                "Transaction size must be at least 9 bytes",
-            ));
         }
 
         // Connect to the mempool.

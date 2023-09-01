@@ -41,7 +41,7 @@ class LogParser:
         except (ValueError, IndexError, AttributeError) as e:
             exception(e)
             raise ParseError(f'Failed to parse clients\' logs: {e}')
-        self.size, self.rate, self.start, misses, self.sent_samples \
+        self.rate, self.start, misses, self.sent_samples \
             = zip(*results)
         self.misses = sum(misses)
 
@@ -127,7 +127,6 @@ class LogParser:
         if search(r'Error', log) is not None:
             raise ParseError('Client(s) panicked')
 
-        size = int(search(r'Transactions size: (\d+)', log).group(1))
         rate = int(search(r'Transactions rate: (\d+)', log).group(1))
 
         tmp = search(r'(.*?) .* Start ', log).group(1)
@@ -138,7 +137,7 @@ class LogParser:
         tmp = findall(r'(.*?) .* sample transaction (\d+)', log)
         samples = {int(tx_id): self._to_posix(t) for t, tx_id in tmp}
 
-        return size, rate, start, misses, samples
+        return rate, start, misses, samples 
     
     def _parse_executions(self, log):
         if search(r'(?:panicked)', log) is not None:
@@ -302,10 +301,10 @@ class LogParser:
         max_concurrent_requests = self.configs[0]['max_concurrent_requests']
 
         consensus_latency = self._consensus_latency() * 1_000
-        consensus_tps, consensus_bps, _ = self._consensus_throughput()
+        consensus_tps, consensus_bps, duration = self._consensus_throughput()
         execution_latency = self._execution_latency() * 1_000
         execution_tps, execution_bps, _ = self._execution_throughput()
-        end_to_end_tps, end_to_end_bps, duration = self._end_to_end_throughput()
+        end_to_end_tps, end_to_end_bps, _ = self._end_to_end_throughput()
         end_to_end_latency = self._end_to_end_latency() * 1_000
 
         # TODO: support primary and worker on different processes, and fail on

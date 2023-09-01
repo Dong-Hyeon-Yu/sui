@@ -142,7 +142,7 @@ impl SerialExecutor {
             }
             ExitReason::Revert(e) => {
                 // do nothing: explicit revert is not an error
-                debug!("tx execution revert: {:?}", e);
+                trace!("tx execution revert: {:?}", e);
                 Ok(true)
             }
             ExitReason::Error(e) => {

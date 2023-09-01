@@ -66,6 +66,7 @@ exclude = [
 
 members = [
     "crates/sslab-core",
+    "crates/sslab-benchmark",
     
     "crates/anemo-benchmark",
     "crates/mysten-common",
@@ -416,6 +417,7 @@ anemo-tower = { git = "https://github.com/mystenlabs/anemo.git", rev = "0f0ae8d8
 
 ### Workspace Members ###
 sslab-core = { path = "crates/sslab-core" }
+sslab-benchmark = { path = "crates/sslab-benchmark" }
 
 anemo-benchmark = { path = "crates/anemo-benchmark" }
 mysten-common = { path = "crates/mysten-common" }

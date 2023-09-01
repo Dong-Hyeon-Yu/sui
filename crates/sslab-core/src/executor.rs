@@ -1,32 +1,29 @@
 
-use std::{sync::Arc, collections::BTreeMap};
+use std::collections::BTreeMap;
 
-use ethers_core::types::{U256, H160};
 use evm::{ExitReason, backend::{Apply, Log}};
-use itertools::Itertools;
-use parking_lot::RwLock;
+use narwhal_types::BatchDigest;
 use tap::tap::TapFallible;
-use mysten_metrics::monitored_scope;
 use sui_macros::fail_point_async;
-use sui_types::{error::{SuiResult, ExecutionError}, digests::TransactionDigest};
+use sui_types::error::{SuiResult, ExecutionError, SuiError};
 use tokio::sync::mpsc::{error::SendError, Sender};
-use tracing::{debug, info, warn};
-use crate::{types::ExecutableEthereumTransaction, execution_storage::{ExecutionBackend, MemoryStorage, ExecutionResult}}; 
+use tracing::{debug, info, warn, instrument, trace};
+use crate::{types::ExecutableEthereumBatch, execution_storage::{ExecutionBackend, MemoryStorage, ExecutionResult}}; 
 
 pub(crate) const DEFAULT_EVM_STACK_LIMIT:usize = 1024;
 pub(crate) const DEFAULT_EVM_MEMORY_LIMIT:usize = usize::MAX; 
 
 pub struct SerialExecutor {
 
-    execution_store: Arc<RwLock<MemoryStorage>>,
-    notify_commit: Sender<(TransactionDigest, ExecutionResult)>,
+    execution_store: MemoryStorage,  // copy of global state.
+    notify_commit: Sender<(BatchDigest, ExecutionResult)>,
 }
 
 impl SerialExecutor {
 
     pub fn new(
-        execution_store: Arc<RwLock<MemoryStorage>>,
-        notify_commit: Sender<(TransactionDigest, ExecutionResult)>,
+        execution_store: MemoryStorage,  // copy of global state.
+        notify_commit: Sender<(BatchDigest, ExecutionResult)>,
     ) -> Self {
         Self {
             execution_store,
@@ -34,108 +31,93 @@ impl SerialExecutor {
         }
     }
     
-    // #[instrument(level = "trace", skip_all)]
     pub async fn try_execute_immediately(
-        &self,
-        certificate: &ExecutableEthereumTransaction,
+        &mut self,
+        certificate: &ExecutableEthereumBatch,
         // execution_store: &Arc<MemoryStorage>,
-    ) -> SuiResult<((), Option<ExecutionError>)> {  //TODO: return type
-        let _scope = monitored_scope("Execution::try_execute_immediately");
+    ) -> SuiResult<((), Option<ExecutionError>)> {  
         let tx_digest = *certificate.digest();
-        debug!("execute_certificate_internal");
-
-        // let database = self.execution_store.read();
+        debug!("try_execute_immediately");
 
         self.process_certificate(certificate)
             .await
             .tap_err(|e| info!(?tx_digest, "process_certificate failed: {e}"))
     }
 
-    // #[instrument(level = "trace", skip_all)]
-    pub async fn process_certificate(
-        &self,
-        certificate: &ExecutableEthereumTransaction,
+    #[instrument(level="trace", skip_all)]
+    async fn process_certificate(
+        &mut self,
+        certificate: &ExecutableEthereumBatch,
     ) -> SuiResult<((), Option<ExecutionError>)> {  
+        debug!("process_certificate");
 
         let mut effects = vec![];
         let mut logs = vec![];
+        let store = &mut self.execution_store;
+
         
-        {
-            let store = self.execution_store.read();
-            for tx in certificate.data() {
-                
-                let mut executor = store.executor();
+        for tx in certificate.data() {
 
-                match tx.to_addr() {
-                    Some(to_addr) => {
-                        let mut runtime = tx.execution_part(store.code(*to_addr));
-                
-                        match executor.execute(&mut runtime) {
-                            ExitReason::Succeed(_) => {
-                                let (effect, log) = executor.into_state().deconstruct();
+            let mut effect: Vec<Apply> = vec![];
+            let mut log: Vec<Log> = vec![];
             
-                                effects.extend(effect.into_iter().collect_vec());
-                                logs.extend(log.into_iter().collect_vec());
-                            }
-                            ExitReason::Revert(_) => {
-                                // do nothing: explicit revert is not an error
-                                continue;
-                            }
-                            ExitReason::Error(_) => {
-                                // do nothing: normal EVM error
-                                continue;
-                            }
-                            ExitReason::Fatal(_) => {
-                                return Err(sui_types::error::SuiError::ExecutionError(String::from("Fatal error occurred on EVM!")));
-                            }
-                        }
-                    }
-                    None => {  // create address
-                        match tx.data() {  
-                            Some(data) => { // create contract
-                                let init_code = data.to_owned().to_vec();
-                                let (_, addr) = executor.transact_create(tx.caller(), tx.value(), init_code.clone(), tx.gas_limit(), tx.access_list());
-                            
-                                match addr.try_into() as Result<[u8; 20], _> {
-                                    Ok(addr) => {
-                                        info!("create contract address: {:?}", addr);
-                                        effects.push(Apply::Modify {
-                                            address: H160::from(addr),
-                                            basic: evm::backend::Basic { balance: U256::zero(), nonce: U256::zero() },
-                                            code: Some(init_code),
-                                            storage: BTreeMap::new(),
-                                            reset_storage: false,
-                                        });
-                                        logs.push(Log {
-                                            address: H160::from(addr),
-                                            topics: vec![],
-                                            data: vec![],
-                                        });
-                                    },
-                                    Err(e) => warn!("failed to create contract: {:?}", e)
-                                };
+            let mut executor = store.executor(tx.gas_limit());
 
-                                
-                            },
-                            None => {  // create user account
-                                info!("create user account: {:?}", tx.caller());
-                                effects.push(Apply::Modify {
-                                    address: tx.caller(),
-                                    basic: evm::backend::Basic { balance: tx.value(), nonce: tx.nonce() },
-                                    code: None,
-                                    storage: BTreeMap::new(),
-                                    reset_storage: false,
-                                });
-                                logs.push(Log {
-                                    address: tx.caller(),
-                                    topics: vec![],
-                                    data: vec![],
-                                });
-                            }
+            if let Some(to_addr) = tx.to_addr() {
+
+                let (reason, _) = executor.transact_call(
+                    tx.caller(), *to_addr, tx.value(), tx.data().unwrap().to_owned().to_vec(), 
+                    tx.gas_limit(), tx.access_list()
+                );
+
+                match Self::_process_transact_call_result(reason) {
+                    Ok(fail) => {
+                        if fail {
+                            continue;
+                        } else {
+                            // debug!("success to execute a transaction {}", tx.id());
+                            (effect, log) = executor.into_state().deconstruct();
+                            Self::_process_local_effect(store, effect, log, &mut effects, &mut logs);
                         }
-                    }
+                    },
+                    Err(e) => return Err(e)
                 }
-                
+            } else { 
+                if let Some(data) = tx.data() {
+                     // create EOA
+                    let init_code = data.to_vec();
+                    let (e, _) = executor.transact_create(tx.caller(), tx.value(), init_code.clone(), tx.gas_limit(), tx.access_list());
+
+                    match Self::_process_transact_create_result(e) {
+                        Ok(fail) => {
+                            if fail {
+                                continue;
+                            } else {
+                                debug!("success to deploy a contract!");
+                                (effect, log) = executor.into_state().deconstruct();
+                                Self::_process_local_effect(store, effect, log, &mut effects, &mut logs);
+                            }
+                        },
+                        Err(e) => return Err(e)
+                        
+                    }
+                } else {
+                    // create user account
+                    debug!("create user account: {:?} with balance {:?} and nonce {:?}", tx.caller(), tx.value(), tx.nonce());
+                    effect.push(Apply::Modify {
+                        address: tx.caller(),
+                        basic: evm::backend::Basic { balance: tx.value(), nonce: tx.nonce() },
+                        code: None,
+                        storage: BTreeMap::new(),
+                        reset_storage: false,
+                    });
+                    log.push(Log {
+                        address: tx.caller(),
+                        topics: vec![],
+                        data: vec![],
+                    });
+                    Self::_process_local_effect(store, effect, log, &mut effects, &mut logs);
+                }
             }
         }
 
@@ -153,15 +135,64 @@ impl SerialExecutor {
         Ok(((), None))
     }
 
+    fn _process_transact_call_result(reason: ExitReason) -> Result<bool, SuiError> {
+        match reason {
+            ExitReason::Succeed(_) => {
+                Ok(false)
+            }
+            ExitReason::Revert(e) => {
+                // do nothing: explicit revert is not an error
+                debug!("tx execution revert: {:?}", e);
+                Ok(true)
+            }
+            ExitReason::Error(e) => {
+                // do nothing: normal EVM error
+                warn!("tx execution error: {:?}", e);
+                Ok(true)
+            }
+            ExitReason::Fatal(e) => {
+                warn!("tx execution fatal error: {:?}", e);
+                Err(SuiError::ExecutionError(String::from("Fatal error occurred on EVM!")))
+            }
+        }
+    }
+
+    fn _process_transact_create_result(reason: ExitReason) -> Result<bool, SuiError> {
+        match reason {
+            ExitReason::Succeed(_) => {
+                Ok(false)
+            }
+            ExitReason::Revert(e) => {
+                // do nothing: explicit revert is not an error
+                debug!("fail to deploy contract: {:?}", e);
+                Ok(true)
+            }
+            ExitReason::Error(e) => {
+                // do nothing: normal EVM error
+                warn!("fail to deploy contract: {:?}", e);
+                Ok(true)
+            }
+            ExitReason::Fatal(e) => {
+                warn!("fatal error occurred when deploying contract: {:?}", e);
+                Err(SuiError::ExecutionError(String::from("Fatal error occurred on EVM!")))
+            }
+        }
+    }
+
+    fn _process_local_effect(store: &mut MemoryStorage, effect: Vec<Apply>, log: Vec<Log>, effects: &mut Vec<Apply>, logs: &mut Vec<Log>) {
+        trace!("process_local_effect: {effect:?}");
+        effects.extend(effect.clone());
+        logs.extend(log.clone());
+        store.apply_local_effect(effect, log);
+    }
+
     async fn commit_cert_and_notify(
         &self,
-        certificate: &ExecutableEthereumTransaction,
+        batch: &ExecutableEthereumBatch,
         execution_result : ExecutionResult,
         // _storage_guard: StorageGuard
-    ) -> Result<(), SendError<(TransactionDigest, ExecutionResult)>> {
-        let _scope: Option<mysten_metrics::MonitoredScopeGuard> =
-            monitored_scope("Execution::commit_cert_and_notify");
-
+    ) -> Result<(), SendError<(BatchDigest, ExecutionResult)>> {
+        debug!("commit_cert_and_notify");
         // self.commit_certificate(certificate, execution_result, ).await;
 
         // Notifies transaction manager about transaction and output objects committed.
@@ -171,29 +202,10 @@ impl SerialExecutor {
         // REQUIRED: this must be called after commit_certificate() (above), which writes output
         // objects into storage. Otherwise, the transaction manager may schedule a transaction
         // before the output objects are actually available.
-         self.notify_commit.send((*certificate.digest(), execution_result)).await
-
-        // Update metrics.
-        // self.metrics.total_effects.inc();
-        // self.metrics.total_certs.inc();
-
-        // self.metrics
-        //     .num_input_objs
-        //     .observe(input_object_count as f64);
-        // self.metrics
-        //     .num_shared_objects
-        //     .observe(shared_object_count as f64);
-        // self.metrics.batch_size.observe(
-        //     certificate
-        //         .data()
-        //         .intent_message()
-        //         .value
-        //         .kind()
-        //         .num_commands() as f64,
-        // );
+         self.notify_commit.send((*batch.digest(), execution_result)).await
     }
 
-    pub fn is_tx_already_executed(&self, tx_digest: &TransactionDigest) -> SuiResult<bool> {
-        self.execution_store.read().is_tx_already_executed(tx_digest)
+    pub fn is_tx_already_executed(&self, tx_digest: &BatchDigest) -> SuiResult<bool> {
+        self.execution_store.is_tx_already_executed(tx_digest)
     }
 }

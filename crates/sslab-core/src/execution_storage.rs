@@ -1,18 +1,16 @@
 use std::collections::{BTreeMap, HashSet};
 use ethers_core::types::{U64, H160, U256, Address};
 use evm::{backend::{MemoryBackend, Apply, Log, ApplyBackend, Backend}, executor::stack::{PrecompileFn, StackExecutor, MemoryStackState, StackSubstateMetadata}, Config};
-use sui_types::{error::SuiResult, digests::TransactionDigest};
+use narwhal_types::BatchDigest;
+use sui_types::error::SuiResult;
 
 use crate::{types::{SpecId, ChainConfig}, transaction_manager::MIN_HASHMAP_CAPACITY};
-
-const DEFAULT_TX_GAS_LIMIT: u64 = 21000;
 
 pub struct ExecutionResult {
     pub logs: Vec<Log>,
     pub effects: Vec::<Apply>,
 }
 
-#[async_trait::async_trait]
 pub trait ExecutionBackend {
 
     fn config(&self) -> &Config;
@@ -21,16 +19,18 @@ pub trait ExecutionBackend {
 
     fn code(&self, address: Address) -> Vec<u8>;
 
-    fn apply_all_effects(&mut self, cert: &TransactionDigest, execution_result: &ExecutionResult);
+    fn apply_all_effects(&mut self, cert: &BatchDigest, execution_result: &ExecutionResult);
 
-    fn is_tx_already_executed(&self, tx_digest: &TransactionDigest) -> SuiResult<bool>;
+    fn apply_local_effect(&mut self, effect: Vec<Apply>, log: Vec<Log>);
+
+    fn is_tx_already_executed(&self, tx_digest: &BatchDigest) -> SuiResult<bool>;
 }
 
 /// This storage is used for evm global state.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct MemoryStorage {
-    executed_tx: HashSet<TransactionDigest>,
-    backend: MemoryBackend,  //TODO: change to MutexTable for concurrent execution.
+    executed_tx: HashSet<BatchDigest>,
+    pub backend: MemoryBackend,  //TODO: change to MutexTable for concurrent execution.
     precompiles: BTreeMap<H160, PrecompileFn>,
     config: ChainConfig,
     // checkpoint:  ArcSwap<BTreeMap<H160, MemoryAccount>>?
@@ -56,11 +56,11 @@ impl MemoryStorage {
             origin: H160::default(), 
             chain_id: U256::from(chain_id as u64), 
             block_hashes: Vec::new(), 
-            block_number: U256::zero(), 
-            block_coinbase: H160::default(), 
-            block_timestamp: U256::from(0), 
-            block_difficulty: U256::from(1), 
-            block_gas_limit: U256::from(30_000_000), 
+            block_number: Default::default(), 
+            block_coinbase: Default::default(), 
+            block_timestamp: Default::default(), 
+            block_difficulty: Default::default(), 
+            block_gas_limit: Default::default(), 
             block_base_fee_per_gas: U256::zero(), //Gwei 
             block_randomness: None
         };
@@ -72,17 +72,16 @@ impl MemoryStorage {
         )
     }
 
-    pub fn executor(&self) -> StackExecutor<MemoryStackState<MemoryBackend>, BTreeMap<H160, PrecompileFn>> {
+    pub fn executor(&self, gas_limit: u64) -> StackExecutor<MemoryStackState<MemoryBackend>, BTreeMap<H160, PrecompileFn>> {
 
         StackExecutor::new_with_precompiles(
-            MemoryStackState::new(StackSubstateMetadata::new(DEFAULT_TX_GAS_LIMIT, self.config()), &self.backend),
-            self.config.config(),
+            MemoryStackState::new(StackSubstateMetadata::new(gas_limit, self.config()), &self.backend),
+            self.config(),
             self.precompiles(),
         )
     }
 }
 
-#[async_trait::async_trait]
 impl ExecutionBackend for MemoryStorage {
 
     fn config(&self) -> &Config {
@@ -97,15 +96,19 @@ impl ExecutionBackend for MemoryStorage {
         self.backend.code(address)
     }
 
-    fn apply_all_effects(&mut self, cert: &TransactionDigest, execution_result: &ExecutionResult) {
+    fn apply_all_effects(&mut self, cert: &BatchDigest, execution_result: &ExecutionResult) {
         let effects = execution_result.effects.clone();
         let logs = execution_result.logs.clone();
 
         self.backend.apply(effects, logs, false);
         self.executed_tx.insert(*cert);
     }
+
+    fn apply_local_effect(&mut self, effect: Vec<Apply>, log: Vec<Log>) {
+        self.backend.apply(effect, log, false);    
+    }
      
-    fn is_tx_already_executed(&self, tx_digest: &TransactionDigest) -> SuiResult<bool> {
+    fn is_tx_already_executed(&self, tx_digest: &BatchDigest) -> SuiResult<bool> {
         Ok(self.executed_tx.contains(tx_digest))
     }
 }

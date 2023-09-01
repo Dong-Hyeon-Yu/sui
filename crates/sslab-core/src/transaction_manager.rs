@@ -3,13 +3,12 @@ use std::{
     sync::Arc, cmp::max
 };
 use mysten_metrics::{monitored_scope, spawn_logged_monitored_task};
-use narwhal_types::ConditionalBroadcastReceiver;
-use sui_types::digests::TransactionDigest;
-use crate::{types::ExecutableEthereumTransaction, execution_storage::{MemoryStorage, ExecutionResult, ExecutionBackend}};
+use narwhal_types::{ConditionalBroadcastReceiver, BatchDigest};
+use crate::{types::ExecutableEthereumBatch, execution_storage::{MemoryStorage, ExecutionResult, ExecutionBackend}};
 use parking_lot::RwLock;
 use tokio::task::JoinHandle;
 use tokio::sync::mpsc::{UnboundedSender, Receiver, Sender};
-use tracing::{trace, info, debug};
+use tracing::{instrument, debug, warn, trace};
 use sui_types::error::SuiResult;
 
 
@@ -17,85 +16,56 @@ use sui_types::error::SuiResult;
 pub(crate) const MIN_HASHMAP_CAPACITY: usize = 1000;
 
 
-#[derive(Clone, Debug)]
-struct PendingCertificate {
-    // Certified transaction to be executed.
-    pub certificate: ExecutableEthereumTransaction,
-    pub next: TransactionDigest,
-}
-
-impl PendingCertificate {
-    fn digest(&self) -> &TransactionDigest {
-        self.certificate.digest()
-    }
-
-    fn next(&self) -> &TransactionDigest {
-        &self.next
-    }
-
-    fn has_next(&self) -> bool {
-        self.next != TransactionDigest::default()
-    }
-}
-
 #[async_trait::async_trait]
 pub(crate) trait TxManager<T> {
+    
     async fn enqueue(&self, transactions: Vec<T>) -> SuiResult<()>;
-    async fn commit(&self, certificate: &TransactionDigest, execution_result: &ExecutionResult);
+
+    async fn commit(&self, certificate: &BatchDigest, execution_result: &ExecutionResult);
 }
 
 pub struct SimpleTransactionManager {
     execution_store: Arc<RwLock<MemoryStorage>>,
-    tx_execution_confirmation: Sender<TransactionDigest>,
-    rx_consensus_certificate: Receiver<Vec<ExecutableEthereumTransaction>>,
-    tx_ready_certificate: UnboundedSender<ExecutableEthereumTransaction>,
-    rx_commit_notification: Receiver<(TransactionDigest, ExecutionResult)>,
+    tx_execution_confirmation: Sender<BatchDigest>,
+    rx_consensus_certificate: Receiver<Vec<ExecutableEthereumBatch>>,
+    tx_ready_certificate: UnboundedSender<ExecutableEthereumBatch>,
+    rx_commit_notification: Receiver<(BatchDigest, ExecutionResult)>,
     rx_shutdown: ConditionalBroadcastReceiver,
     inner: RwLock<Inner>,
 }
 
 #[async_trait::async_trait]
-impl TxManager<ExecutableEthereumTransaction> for SimpleTransactionManager {
-    async fn enqueue(&self, transactions: Vec<ExecutableEthereumTransaction>) -> SuiResult<()> {
+impl TxManager<ExecutableEthereumBatch> for SimpleTransactionManager {
+    async fn enqueue(&self, transactions: Vec<ExecutableEthereumBatch>) -> SuiResult<()> {
         self._enqueue(transactions).await
     }
 
-    async fn commit(&self, digest: &TransactionDigest, execution_result: &ExecutionResult) {
+    #[instrument(level = "trace", skip_all)] 
+    async fn commit(&self, digest: &BatchDigest, execution_result: &ExecutionResult) {
         let mut inner = self.inner.write();
         let _scope = monitored_scope("TransactionManager::commit::wlock");
 
-        let Some(executed_cert) = inner.executing_certificates.remove(digest) else {
-            trace!("{:?} not found in executing certificates, likely because it is a system transaction", digest);
+        let Some(_) = inner.executing_certificates.remove(digest) else {
+            warn!("{:?} not found in executing certificates", digest);
             return;
         };
         
         self.execution_store.write().apply_all_effects(digest, execution_result);
-        info!("Transaction-{} committed", digest);
 
-        let next_cert = match executed_cert.has_next() {
-            true => inner.pending_certificates.remove(executed_cert.next()).expect("next certificate must exist in pending queue"),
-            false => {
-                if inner.pending_queue.is_empty() {
-                    return  // unlikely happens. empty queue means that consensus progresses slower than execution.
-                } else {
-                    let cert = inner.pending_queue.pop_front().unwrap();
-                    inner.pending_certificates.remove(&cert).expect("pending certificate in queue must exist")
-                }
-            }
+
+        if inner.pending_queue.is_empty() {
+            return  // unlikely happens. empty queue means that consensus progresses slower than execution.
+        } else {
+            let next_cert = inner.pending_queue.pop_front().unwrap();
+            let next_batch = inner.pending_certificates.remove(&next_cert).expect("pending certificate in queue must exist");
+
+            assert!(inner.executing_certificates.insert(next_cert.clone(), next_batch.clone()).is_none());
+            let _ = self
+                .tx_ready_certificate
+                .send(next_batch);
+
+            inner.maybe_shrink_capacity();
         };
-
-        let cert = next_cert.certificate.clone();
-        inner.executing_certificates.insert(cert.digest().clone(), next_cert);
-        let _ = self
-            .tx_ready_certificate
-            .send(cert);
-
-        // self.metrics
-        // .transaction_manager_num_executing_certificates
-        // .set(inner.executing_certificates.len() as i64);
-
-        inner.maybe_shrink_capacity();
-        
     }
 }
 
@@ -103,10 +73,10 @@ impl SimpleTransactionManager {
 
     pub fn spawn(
         execution_store: Arc<RwLock<MemoryStorage>>,
-        tx_execution_confirmation: Sender<TransactionDigest>,
-        rx_consensus_certificate: Receiver<Vec<ExecutableEthereumTransaction>>,
-        tx_ready_certificate: UnboundedSender<ExecutableEthereumTransaction>,
-        rx_commit_notification: Receiver<(TransactionDigest, ExecutionResult)>,
+        tx_execution_confirmation: Sender<BatchDigest>,
+        rx_consensus_certificate: Receiver<Vec<ExecutableEthereumBatch>>,
+        tx_ready_certificate: UnboundedSender<ExecutableEthereumBatch>,
+        rx_commit_notification: Receiver<(BatchDigest, ExecutionResult)>,
         rx_shutdown: ConditionalBroadcastReceiver,
     ) -> JoinHandle<()>{
         spawn_logged_monitored_task!(
@@ -123,16 +93,21 @@ impl SimpleTransactionManager {
         )
     }
 
+    #[instrument(level = "trace", skip_all)]
     pub async fn run(&mut self) {
         loop {
             tokio::select! {
+
+                biased;
+
                 Some((digest, execution_result)) = self.rx_commit_notification.recv() => {
-                    let _ = self.commit(&digest, &execution_result);
+                    let _ = self.commit(&digest, &execution_result).await;
                     let _ = self.tx_execution_confirmation.send(digest).await;
                 }
 
-                Some(transactions) = self.rx_consensus_certificate.recv() => {
-                    let _ = self.enqueue(transactions).await;
+                Some(ethereum_batches) = self.rx_consensus_certificate.recv() => {
+                    debug!("Received {} batches from consensus", ethereum_batches.len());
+                    let _ = self.enqueue(ethereum_batches).await;
                 }
 
                 _ = self.rx_shutdown.receiver.recv() => {
@@ -142,87 +117,32 @@ impl SimpleTransactionManager {
         }
     }
 
-    async fn _enqueue(&self, transactions: Vec<ExecutableEthereumTransaction>) -> SuiResult<()>{
-
-        // TODO: filter out already executed transactionss
-        // let transactions: Vec<_> = transactions
-        // .into_iter()
-        // .filter(|tx| {
-        //     let digest = *tx.digest();
-        //     // skip already executed txes
-        //     if self
-        //         .authority_store
-        //         .is_tx_already_executed(&digest)
-        //         .expect("Failed to check if tx is already executed")
-        //     {
-        //         // also ensure the transaction will not be retried after restart.
-        //         let _ = epoch_store.remove_pending_execution(&digest);
-        //         self.metrics
-        //             .transaction_manager_num_enqueued_certificates
-        //             .with_label_values(&["already_executed"])
-        //             .inc();
-        //         false
-        //     } else {
-        //         true
-        //     }
-        // })
-        // .collect();
-
-
-        // 3. make given consunsus output to pending transactions
+    #[instrument(level = "trace", skip_all)]
+    async fn _enqueue(&self, transactions: Vec<ExecutableEthereumBatch>) -> SuiResult<()>{
 
         // Internal lock is held only for updating the internal state.
         let mut inner = self.inner.write();
-        let _scope = monitored_scope("TransactionManager::enqueue::wlock");
 
-        let pending = transactions.iter().enumerate().map(|(idx, tx)| {
-            if transactions.len() > idx + 1 {
-                PendingCertificate {certificate: tx.clone(), next: *transactions[idx+1].digest()}
-            } else {
-                PendingCertificate {certificate: tx.clone(), next: TransactionDigest::default()}
-            }
-        });
-
-        for pending_cert in pending {
-            let digest = *pending_cert.certificate.digest();
+        for tx in transactions {
+            let digest = tx.digest();
 
             // skip already pending txes
-            if inner.pending_certificates.contains_key(&digest) {
-                // self.metrics
-                //     .transaction_manager_num_enqueued_certificates
-                //     .with_label_values(&["already_pending"])
-                //     .inc();
+            if inner.pending_certificates.contains_key(digest) {
                 continue;
             }
             // skip already executing txes
-            if inner.executing_certificates.contains_key(&digest) {
-                // self.metrics
-                //     .transaction_manager_num_enqueued_certificates
-                //     .with_label_values(&["already_executing"])
-                //     .inc();
+            if inner.executing_certificates.contains_key(digest) {
                 continue;
             }
             // skip already executed txes
-            if self.execution_store.read().is_tx_already_executed(&digest)? {
-                // self.metrics
-                //     .transaction_manager_num_enqueued_certificates
-                //     .with_label_values(&["already_executed"])
-                //     .inc();
+            if self.execution_store.read().is_tx_already_executed(digest)? {
                 continue;
             }
 
             // Ready transactions can start to execute.
-            // self.metrics
-            //     .transaction_manager_num_enqueued_certificates
-            //     .with_label_values(&["ready"])
-            //     .inc();
             // Send to execution driver for execution.
-            self.certificate_ready(&mut inner, pending_cert); 
+            self.certificate_ready(&mut inner, tx); 
         }
-
-        // self.metrics
-        //     .transaction_manager_num_pending_transactions
-        //     .set(inner.pending_transactions.len() as i64);
 
         inner.maybe_reserve_capacity();
 
@@ -230,30 +150,28 @@ impl SimpleTransactionManager {
     }
 
     /// Sends the ready certificate for execution.
-    fn certificate_ready(&self, inner: &mut Inner, pending_certificate: PendingCertificate) {
-        let cert = pending_certificate.certificate.clone();
-        trace!(tx_digest = ?cert.digest(), "transaction ready");
-        
-        // If there are no pending transactions and no current executing transaction, send to execution driver directly.
+    #[instrument(level = "trace", skip_all)]
+    fn certificate_ready(&self, inner: &mut Inner, pending_certificate: ExecutableEthereumBatch) {
+        let cert = pending_certificate.digest();
+        trace!(tx_digest = ?cert, "transaction ready");
+
+        // If no current executing transaction, send to execution driver directly.
         if inner.pending_certificates.is_empty() && inner.executing_certificates.is_empty() {
 
             // Record as an executing certificate.
-            inner.executing_certificates.insert(cert.digest().clone(), pending_certificate);
+            inner.executing_certificates.insert(*cert, pending_certificate.clone());
 
             let _ = self
             .tx_ready_certificate
-            .send(cert);
-        // self.metrics.transaction_manager_num_ready.inc();
-        // self.metrics.execution_driver_dispatch_queue.inc();
+            .send(pending_certificate);
         } else {
             assert!(inner
                 .pending_certificates
-                .insert(cert.digest().clone(), pending_certificate)
+                .insert(*cert, pending_certificate.clone())
                 .is_none());
-            inner.pending_queue.push_back(*cert.digest());
+            inner.pending_queue.push_back(*cert);
         }
     }
-
     
 }
 
@@ -265,11 +183,11 @@ struct Inner {
 
     // A transaction enqueued to TransactionManager must be in either pending_transactions or
     // executing_certificates.
-    pending_queue: VecDeque<TransactionDigest>,
+    pending_queue: VecDeque<BatchDigest>,
     // Maps transaction digests to their content and missing input objects.
-    pending_certificates: HashMap<TransactionDigest, PendingCertificate>,
+    pending_certificates: HashMap<BatchDigest, ExecutableEthereumBatch>,
     // Maps executing transaction digests to their acquired input object locks.
-    executing_certificates: HashMap<TransactionDigest, PendingCertificate>,
+    executing_certificates: HashMap<BatchDigest, ExecutableEthereumBatch>,
 }
 
 impl Inner {

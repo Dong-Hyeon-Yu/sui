@@ -74,11 +74,11 @@ tracing-subscriber.workspace = true
 workspace-hack = { version = "0.1", path = "../workspace-hack" }
 sui-core.workspace = true
 
-evm = { git="https://github.com/Dong-Hyeon-Yu/evm.git", rev = "daf1c5b0a4def19371b28b65afd7d47c070c764b"}
-# revm = { version = "3.3.0", default-features = true, features = ["std", "secp256k1", "ethersdb", "serde"] }
+evm = { git="https://github.com/Dong-Hyeon-Yu/evm.git", branch = "master" }#rev = "daf1c5b0a4def19371b28b65afd7d47c070c764b"}
 ethers-providers = { version = "^2.0.0" }
 ethers-core = { version = "^2.0.0" }
 enumn = "0.1.11"
+# console-subscriber = "^0.1.0"
 
 [dev-dependencies]
 criterion.workspace = true
@@ -95,9 +95,10 @@ sui-types = { workspace = true, features = ["test-utils"] }
 
 [features]
 benchmark = ["narwhal-node/benchmark"]
-trace_transaction = ["narwhal-node/trace_transaction"]
-
 
 [[bin]]
 name = "narwhal-node"
 path = "src/main.rs"
+
+# [build]
+# rustflags = ["--cfg", "tokio_unstable"]

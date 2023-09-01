@@ -2,12 +2,11 @@ use std::rc::Rc;
 use enumn;
 use ethers_core::types::{H256, U256, Bytes};
 use ethers_core::types::{Address, transaction::eip2718::TypedTransaction};
-use ethers_core::utils::{rlp::Rlp, keccak256};
+use ethers_core::utils::rlp::Rlp;
 use evm::{Runtime, Config, Context};
-use once_cell::sync::OnceCell;
+use narwhal_types::BatchDigest;
 use serde::{Serialize, Deserialize};
 
-use sui_types::digests::TransactionDigest;
 use crate::executor::{DEFAULT_EVM_MEMORY_LIMIT, DEFAULT_EVM_STACK_LIMIT};
 use crate::transaction_validator::TxValidationError;
 
@@ -15,6 +14,10 @@ use crate::transaction_validator::TxValidationError;
 pub struct EthereumTransaction(TypedTransaction);
 
 impl EthereumTransaction {
+
+    pub fn id(&self) -> u64 {
+        u64::from_be_bytes(self.0.sighash()[2..10].try_into().ok().unwrap())
+    }
 
     pub fn encode(&self) -> Vec<u8> {
         self.0.rlp().to_vec()
@@ -78,35 +81,26 @@ impl EthereumTransaction {
 
 
 #[derive(Clone, Debug, Default)]
-pub struct ExecutableEthereumTransaction{
-    digest: OnceCell<TransactionDigest>,
+pub struct ExecutableEthereumBatch{
+    digest: BatchDigest,
     data: Vec<EthereumTransaction>, 
 }
 
-impl ExecutableEthereumTransaction {
-    pub fn new(batch: Vec<EthereumTransaction>) -> ExecutableEthereumTransaction {
+impl ExecutableEthereumBatch {
+    pub fn new(batch: Vec<EthereumTransaction>, digest: BatchDigest) -> ExecutableEthereumBatch {
         Self {
             data: batch,
-            digest: OnceCell::new()
+            digest
         }
     }
 
-    pub fn digest(&self) -> &TransactionDigest {
-        self.digest.get_or_init(|| {
-            let mut _bytes: Vec<u8> = Vec::new();
-            
-            for tx in &self.data {
-                _bytes.extend(tx.0.rlp().to_vec());
-            }
-            TransactionDigest::new(keccak256(&_bytes))
-        })
+    pub fn digest(&self) -> &BatchDigest {
+        &self.digest
     }
 
     pub fn data(&self) -> &Vec<EthereumTransaction> {
         &self.data
     }
-
-
 }
 
 
@@ -148,7 +142,7 @@ impl SpecId {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ChainConfig {
     config: Config
 }

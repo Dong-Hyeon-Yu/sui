@@ -1,20 +1,18 @@
 use futures::{future::try_join_all, stream::FuturesUnordered};
-use mysten_metrics::{monitored_scope, spawn_logged_monitored_task};
+use mysten_metrics::spawn_logged_monitored_task;
 use async_trait::async_trait;
 use fastcrypto::hash::Hash as _Hash;
 use narwhal_executor::ExecutionState;
 use narwhal_types::{BatchAPI, CertificateAPI, ConsensusOutput, HeaderAPI, PreSubscribedBroadcastSender};
 use parking_lot::RwLock;
 use tokio::{sync::mpsc::Sender, task::JoinHandle};
-// use sui_core::authority::AuthorityMetrics;
 use tracing::{info, instrument};
-use crate::{types::{ExecutableEthereumTransaction, EthereumTransaction}, transaction_manager::SimpleTransactionManager, execution_storage::MemoryStorage, executor::SerialExecutor, execution_driver::execution_process};
+use crate::{types::{ExecutableEthereumBatch, EthereumTransaction}, transaction_manager::SimpleTransactionManager, execution_storage::MemoryStorage, execution_driver::execution_process};
 use core::panic;
 use std::{sync::Arc, time::Instant};
 
-
 pub struct SimpleConsensusHandler {
-    tx_consensus_certificate: Sender<Vec<ExecutableEthereumTransaction>>,
+    tx_consensus_certificate: Sender<Vec<ExecutableEthereumBatch>>,
     tx_shutdown: Option<PreSubscribedBroadcastSender>,
     handles: FuturesUnordered<JoinHandle<()>>,
 }
@@ -43,8 +41,9 @@ impl SimpleConsensusHandler {
 
             loop {
                 tokio::select! {
-                    Some(tx_hash) = rx.recv() => {
-                        info!(?tx_hash, "Transaction executed");
+                    Some(digest) = rx.recv() => {
+                        // NOTE: This log entry is used to compute performance.
+                        info!("Executed Batch -> {:?}", digest);
                     }
                     _ = rx_shutdown.receiver.recv() => {
                         info!("Shutdown signal received. Exiting executor ...");
@@ -61,8 +60,9 @@ impl SimpleConsensusHandler {
         handles.push(
             spawn_logged_monitored_task!(
                 execution_process(
-                    Arc::new(SerialExecutor::new(database, tx_commit_notification)),
+                    database,
                     rx_ready_certificate,
+                    tx_commit_notification,
                     rx_shutdown
                 ),
                 "ExecutionDriver::loop"
@@ -117,14 +117,11 @@ impl ExecutionState for SimpleConsensusHandler {
     /// This function will be called by Narwhal, after Narwhal sequenced this certificate.
     #[instrument(level = "trace", skip_all)]
     async fn handle_consensus_output(&self, consensus_output: ConsensusOutput) {
-        let _scope = monitored_scope("HandleConsensusOutput");
-
         let round = consensus_output.sub_dag.leader_round();
 
         /* (serialized, transaction, output_cert) */
-        let mut transactions : Vec<ExecutableEthereumTransaction> = vec![];
+        let mut ethereum_batches : Vec<ExecutableEthereumBatch> = vec![];
         let timestamp = consensus_output.sub_dag.commit_timestamp();
-        // let leader_author = consensus_output.sub_dag.leader.header().author();
 
         info!(
             "Received consensus output {:?} at leader round {}, subdag index {}, timestamp {} ",
@@ -134,10 +131,6 @@ impl ExecutionState for SimpleConsensusHandler {
             timestamp.clone(),
         );
 
-        // self.metrics
-        //     .consensus_committed_subdags
-        //     .with_label_values(&[&leader_author.to_string()])
-        //     .inc();
         for (cert, batches) in consensus_output
             .sub_dag
             .certificates
@@ -145,19 +138,19 @@ impl ExecutionState for SimpleConsensusHandler {
             .zip(consensus_output.batches.iter())
         {
             assert_eq!(cert.header().payload().len(), batches.len());
-            // let author = cert.header().author();
-            // self.metrics
-            //     .consensus_committed_certificates
-            //     .with_label_values(&[&author.to_string()])
-            //     .inc();
-            let mut _batch_tx: Vec<EthereumTransaction> = vec![];
+            
             let output_cert = Arc::new(cert.clone());
             for batch in batches {
                 assert!(output_cert.header().payload().contains_key(&batch.digest()));
-                // self.metrics.consensus_handler_processed_batches.inc();
+
+                if batch.transactions().is_empty() {
+                    continue;
+                }
+
+                let mut _batch_tx: Vec<EthereumTransaction> = vec![];
                 for serialized_transaction in batch.transactions() {
 
-                    let transaction = match EthereumTransaction::decode(serialized_transaction,) {
+                    let transaction = match EthereumTransaction::decode(serialized_transaction) {
                         Ok(transaction) => transaction,
                         Err(err) => {
                             // This should have been prevented by Narwhal batch verification.
@@ -167,24 +160,20 @@ impl ExecutionState for SimpleConsensusHandler {
                             );
                         }
                     };
-                    // self.metrics
-                    //     .consensus_handler_processed
-                    //     .with_label_values(&[classify(&transaction)])
-                    //     .inc();
                     _batch_tx.push(transaction);
                 }
+
+                if !_batch_tx.is_empty() {
+                    ethereum_batches.push(ExecutableEthereumBatch::new(_batch_tx, batch.digest()));
+                }
             }
-            transactions.push(ExecutableEthereumTransaction::new(_batch_tx, output_cert));
         }
 
-        // self.metrics
-        // .consensus_handler_processed_bytes
-        // .inc_by(bytes as u64);
-
-
-        let _ = self.tx_consensus_certificate
-            .send(transactions)
-            .await;
+        if !ethereum_batches.is_empty() {
+            let _ = self.tx_consensus_certificate
+                .send(ethereum_batches)
+                .await;
+        }
     }
 
     async fn last_executed_sub_dag_index(&self) -> u64 {

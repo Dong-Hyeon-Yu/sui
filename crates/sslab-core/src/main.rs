@@ -8,6 +8,7 @@
     rust_2021_compatibility
 )]
 
+use cfg_if;
 use clap::{crate_name, crate_version, App, AppSettings, ArgMatches, SubCommand};
 use eyre::Context;
 use fastcrypto::traits::KeyPair as _;
@@ -15,16 +16,15 @@ use mysten_metrics::RegistryService;
 use narwhal_config::{Committee, Import, Parameters, WorkerCache, WorkerId};
 use narwhal_crypto::{KeyPair, NetworkKeyPair};
 use narwhal_node as node;
-use narwhal_node::primary_node::PrimaryNode;
-use narwhal_node::worker_node::WorkerNode;
+use narwhal_node::{CertificateStoreCacheMetrics, NodeStorage, worker_node::WorkerNode, primary_node::PrimaryNode};
 use narwhal_network::client::{WorkerNetworkClient, PrimaryNetworkClient};
 use node::metrics::{primary_metrics_registry, start_prometheus_server, worker_metrics_registry};
 use parking_lot::RwLock;
 use prometheus::Registry;
-use sslab_core::{consensus_handler::SimpleConsensusHandler, types::SpecId, transaction_validator::EthereumTxValidator};
+use sslab_core::types::SpecId;
+use sslab_core::{consensus_handler::SimpleConsensusHandler, transaction_validator::EthereumTxValidator};
 use sui_simulator::telemetry_subscribers;
 use std::sync::Arc;
-use narwhal_node::{CertificateStoreCacheMetrics, NodeStorage};
 use sui_keys::keypair_file::{
     read_authority_keypair_from_file, read_network_keypair_from_file,
     write_authority_keypair_to_file, write_keypair_to_file,
@@ -32,9 +32,10 @@ use sui_keys::keypair_file::{
 use sui_protocol_config::{Chain, ProtocolConfig, ProtocolVersion};
 use sui_types::crypto::{get_key_pair_from_rng, AuthorityKeyPair, SuiKeyPair};
 use telemetry_subscribers::TelemetryGuards;
+use tracing::{info, warn};
+
 #[cfg(feature = "benchmark")]
 use tracing::subscriber::set_global_default;
-use tracing::{info, warn};
 #[cfg(feature = "benchmark")]
 use tracing_subscriber::filter::{EnvFilter, LevelFilter};
 

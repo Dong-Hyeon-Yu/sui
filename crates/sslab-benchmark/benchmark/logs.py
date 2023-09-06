@@ -352,6 +352,7 @@ class LogParser:
             f' \tBatch to header avg latency: {round(batch_to_header_latency):,} ms\n'
             f' Header to certificate avg latency: {round(header_to_cert_latency):,} ms\n'
             f' \tRequest vote outbound avg latency: {round(request_vote_outbound_latency):,} ms\n'
+            f' Average Batch size: {round(mean(self.sizes.values())/1024)} KB\n'
             f' Average Transaction size: {round(sum(self.sizes.values()) / self.total_ordered_tx)} B\n'
             f' \tActual Sending Rate: {round(self.total_sending_tx / duration):,} tx/s\n'
             f' \tTotal Sending Transactions: {self.total_sending_tx} tx\n'

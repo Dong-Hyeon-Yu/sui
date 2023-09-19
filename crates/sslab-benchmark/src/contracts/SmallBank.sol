@@ -46,7 +46,6 @@ contract SmallBank {
         uint bal2 = checkingStore[arg1];
         uint amount = arg2;
         
-        require(bal1 >= amount);
         bal1 -= amount;
         bal2 += amount;
         

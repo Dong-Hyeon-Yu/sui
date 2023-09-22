@@ -77,12 +77,12 @@ async fn main() -> Result<(), eyre::Report> {
     // NOTE: This log entry is used to compute performance.
     info!("Transactions rate: {rate} tx/s");
 
-    // let client = MultipleClient::new(target, rate, nodes);
-    let client = Client {
-        target,
-        rate,
-        nodes,
-    };
+    let client = MultipleClient::new(target, rate, nodes);
+    // let client = Client {
+    //     target,
+    //     rate,
+    //     nodes,
+    // };
 
     // Wait for all nodes to be online and synchronized.
     client.wait().await;
@@ -97,7 +97,7 @@ struct MultipleClient {
 
 impl MultipleClient {
 
-    const MAX_RATE_PER_CLIENT: u64 = 12500;
+    const MAX_RATE_PER_CLIENT: u64 = 1000;
 
     pub fn new (target: Url, rate: u64, nodes: Vec<Url>) -> MultipleClient {
         let num_of_clients = std::cmp::max((rate + Self::MAX_RATE_PER_CLIENT - 1) / Self::MAX_RATE_PER_CLIENT, 1);

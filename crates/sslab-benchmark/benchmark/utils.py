@@ -39,37 +39,38 @@ class PathMaker:
 
     @staticmethod
     def committee_file():
-        return join(PathMaker.logs_path(), '.committee.json')
+        return '.committee.json'
 
     @staticmethod
     def workers_file():
-        return join(PathMaker.logs_path(), '.workers.json')
+        return '.workers.json'
 
     @staticmethod
     def parameters_file():
-        return join(PathMaker.logs_path(), '.parameters.json')
+        return '.parameters.json'
 
     @staticmethod
     def primary_key_file(i):
         assert isinstance(i, int) and i >= 0
-        return join(PathMaker.logs_path(), f'.primary-{i}-key.json')
+        return f'.primary-{i}-key.json'
 
     @staticmethod
     def primary_network_key_file(i):
         assert isinstance(i, int) and i >= 0
-        return join(PathMaker.logs_path(), f'.primary-{i}-network-key.json')
+        return f'.primary-{i}-network-key.json'
 
     @staticmethod
     def worker_key_file(i):
         assert isinstance(i, int) and i >= 0
-        return join(PathMaker.logs_path(), f'.worker-{i}-key.json')
+        return f'.worker-{i}-key.json'
 
     @staticmethod
     def db_path(i, j=None):
         assert isinstance(i, int) and i >= 0
         assert (isinstance(j, int) and i >= 0) or j is None
         worker_id = f'-{j}' if j is not None else ''
-        return join(PathMaker.logs_path(), f'.db-{i}{worker_id}')
+        return f'.db-{i}{worker_id}'
+
 
     @staticmethod
     def logs_path():

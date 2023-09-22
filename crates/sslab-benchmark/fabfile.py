@@ -9,8 +9,9 @@ from benchmark.full_demo import Demo
 from benchmark.logs import ParseError, LogParser
 from benchmark.utils import Print
 from benchmark.plot import Ploter, PlotError
-from benchmark.instance import InstanceManager
+from benchmark.aws_instance import InstanceManager
 from benchmark.remote import Bench, BenchError
+from benchmark.LAN import LANBench
 
 
 @task
@@ -282,6 +283,54 @@ def install(ctx):
     except BenchError as e:
         Print.error(e)
 
+
+@task
+def LAN(ctx, debug=False):
+    bench_params = {
+        'faults': 0,
+        'nodes': [4],
+        'workers': 1,
+        'collocate': True,
+        'rate': [10_000],# 110_000],
+        'tx_size': 270,
+        'duration': 30,
+        'runs': 1,
+    }
+    node_params = {
+        'header_num_of_batches_threshold': 32,
+        'max_header_num_of_batches': 1000,
+        'max_header_delay': '200ms',  # ms
+        'gc_depth': 50,  # rounds
+        'sync_retry_delay': '10_000ms',  # ms
+        'sync_retry_nodes': 3,  # number of nodes
+        'batch_size': 500_000,  # bytes
+        'max_batch_delay': '200ms',  # ms,
+        'block_synchronizer': {
+            'range_synchronize_timeout': '30_000ms',
+            'certificates_synchronize_timeout': '2_000ms',
+            'payload_synchronize_timeout': '2_000ms',
+            'payload_availability_timeout': '2_000ms',
+            'handler_certificate_deliver_timeout': '2_000ms'
+        },
+        "consensus_api_grpc": {
+            "socket_addr": "/ip4/127.0.0.1/tcp/0/http",
+            "get_collections_timeout": "5_000ms",
+            "remove_collections_timeout": "5_000ms"
+        },
+        'max_concurrent_requests': 500_000,
+        'prometheus_metrics': {
+            "socket_addr": "/ip4/0.0.0.0/tcp/0/http"
+        },
+        "network_admin_server": {
+            # Use a random available local port.
+            "primary_network_admin_server_port": 0,
+            "worker_network_admin_server_base_port": 0
+        },
+    }
+    try:
+        LANBench(ctx).run(bench_params, node_params, debug)
+    except BenchError as e:
+        Print.error(e)
 
 @task
 def remote(ctx, debug=False):

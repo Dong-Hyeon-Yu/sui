@@ -16,7 +16,7 @@ from benchmark.config import Committee, NodeParameters, WorkerCache, BenchParame
 from benchmark.utils import BenchError, Print, PathMaker, progress_bar
 from benchmark.commands import CommandMaker
 from benchmark.logs import LogParser, ParseError
-from benchmark.aws_instance import InstanceManager
+from benchmark.local_instance import InstanceManager
 
 
 class FabricError(Exception):
@@ -32,13 +32,13 @@ class ExecutionError(Exception):
     pass
 
 
-class Bench:
+class LANBench:
     def __init__(self, ctx):
         self.manager = InstanceManager.make()
         self.settings = self.manager.settings
         try:
             ctx.connect_kwargs.pkey = RSAKey.from_private_key_file(
-                self.manager.settings.key_path
+                self.manager.settings.key_path, self.manager.settings.passphrase
             )
             self.connect = ctx.connect_kwargs
         except (IOError, PasswordRequiredException, SSHException) as e:
@@ -65,6 +65,7 @@ class Bench:
             'sudo apt-get -y install cmake',
 
             # Install rust (non-interactive).
+            'sudo apt-get -y install curl',
             'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y',
             'source $HOME/.cargo/env',
             'rustup default stable',
@@ -74,10 +75,17 @@ class Bench:
             'sudo apt-get install pkg-config',
             'sudo apt-get install libssl-dev',
 
+            # Install protobuf.
+            'sudo apt-get install -y protobuf-compiler',
+
+            # Install tmux
+            'sudo apt-get install -y tmux',
+
             # Clone the repo.
+            'sudo apt-get install -y git',
             f'(git clone {self.settings.repo_url} || (cd {self.settings.repo_name} ; git pull))'
         ]
-        hosts = self.manager.hosts(flat=True)
+        hosts = self.settings(flat=True)
         try:
             g = Group(*hosts, user=self.settings.user, connect_kwargs=self.connect)
             g.run(' && '.join(cmd), hide=True)
@@ -89,11 +97,11 @@ class Bench:
     def kill(self, hosts=[], delete_logs=False):
         assert isinstance(hosts, list)
         assert isinstance(delete_logs, bool)
-        hosts = hosts if hosts else self.manager.hosts(flat=True)
+        hosts = hosts if hosts else self.manager.hosts()
         delete_logs = CommandMaker.clean_logs() if delete_logs else 'true'
         cmd = [delete_logs, f'({CommandMaker.kill()} || true)']
         try:
-            g = Group(*hosts, user='ubuntu', connect_kwargs=self.connect)
+            g = Group(*hosts, user=self.settings.user, connect_kwargs=self.connect)
             g.run(' && '.join(cmd), hide=True)
         except GroupException as e:
             raise BenchError('Failed to kill nodes', FabricError(e))
@@ -105,42 +113,31 @@ class Bench:
 
             # Ensure there are enough hosts.
             hosts = self.manager.hosts()
-            if sum(len(x) for x in hosts.values()) < nodes:
+            if len(hosts) < nodes:
                 return []
 
-            # Select the hosts in different data centers.
-            ordered = zip(*hosts.values())
-            ordered = [x for y in ordered for x in y]
-            return ordered[:nodes]
+            return hosts[:nodes]
 
         # Spawn the primary and each worker on a different machine. Each
         # authority runs in a single data center.
         else:
-            primaries = max(bench_parameters.nodes)
+            nodes = max(bench_parameters.nodes) * (bench_parameters.workers+1)
 
             # Ensure there are enough hosts.
             hosts = self.manager.hosts()
-            if len(hosts.keys()) < primaries:
+            if len(hosts) < nodes:
                 return []
-            for ips in hosts.values():
-                if len(ips) < bench_parameters.workers + 1:
-                    return []
 
-            # Ensure the primary and its workers are in the same region.
-            selected = []
-            for region in list(hosts.keys())[:primaries]:
-                ips = list(hosts[region])[:bench_parameters.workers + 1]
-                selected.append(ips)
-            return selected
+            return hosts[:nodes]
 
     def _background_run(self, host, command, log_file):
         name = splitext(basename(log_file))[0]
         cmd = f'tmux new -d -s "{name}" "{command} |& tee {log_file}"'
-        c = Connection(host, user='ubuntu', connect_kwargs=self.connect)
+        c = Connection(host, user=self.settings.user, connect_kwargs=self.connect)
         output = c.run(cmd, hide=True)
         self._check_stderr(output)
 
-    def _update(self, hosts, bench_parameters):
+    def _update(self, hosts, bench_parameters, include_execution=False):
         if bench_parameters.collocate:
             ips = list(set(hosts))
         else:
@@ -155,12 +152,18 @@ class Bench:
             f'(cd {self.settings.repo_name} && git checkout -f {self.settings.branch} --)',
             f'(cd {self.settings.repo_name} && git pull -f)',
             'source $HOME/.cargo/env',
-            f'(cd {self.settings.repo_name}/narwhal/node && {compile_cmd})',
-            CommandMaker.alias_binaries(
-                f'./{self.settings.repo_name}/target/release/'
-            )
+            f'(cd {self.settings.repo_name}/crates/sslab-benchmark&& {compile_cmd})',  
         ]
-        g = Group(*ips, user='ubuntu', connect_kwargs=self.connect)
+        if include_execution:
+            cmd += [f'(cd {self.settings.repo_name}/crates/sslab-core && {compile_cmd})']
+        else:
+            cmd += [f'(cd {self.settings.repo_name}/narwhal/node && {compile_cmd})']
+
+        cmd += [CommandMaker.alias_binaries(
+            f'./{self.settings.repo_name}/target/release/'
+        )]
+        
+        g = Group(*ips, user=self.settings.user, connect_kwargs=self.connect)
         g.run(' && '.join(cmd), hide=True)
 
     def _config(self, hosts, node_parameters, bench_parameters):
@@ -175,6 +178,11 @@ class Bench:
         cmd = CommandMaker.compile()
         Print.info(f"About to run {cmd}...")
         subprocess.run(cmd, check=True, cwd=PathMaker.node_crate_path())
+
+        # Recompile the latest client code.
+        cmd = CommandMaker.compile()
+        Print.info(f"About to run {cmd} at {PathMaker.client_crate_path()}...")
+        subprocess.run(cmd, check=True, cwd=PathMaker.client_crate_path())
 
         # Create alias for the client and nodes binary.
         cmd = CommandMaker.alias_binaries(PathMaker.binary_path())
@@ -250,7 +258,7 @@ class Bench:
             primary_names, prefix='Uploading config files:')
         for i, name in enumerate(progress):
             for ip in list(committee.ips(name) | worker_cache.ips(name)):
-                c = Connection(ip, user='ubuntu', connect_kwargs=self.connect)
+                c = Connection(ip, user=self.settings.user, connect_kwargs=self.connect)
                 c.run(f'{CommandMaker.cleanup()} || true', hide=True)
                 c.put(PathMaker.committee_file(), '.')
                 c.put(PathMaker.workers_file(), '.')
@@ -281,7 +289,6 @@ class Bench:
                 host = address.split(':')[1].strip("/")
                 cmd = CommandMaker.run_client(
                     address,
-                    bench_parameters.tx_size,
                     rate_share,
                     [x for y in workers_addresses for _, x in y]
                 )
@@ -342,7 +349,7 @@ class Bench:
         for i, addresses in enumerate(progress):
             for id, address in addresses:
                 host = address.split(':')[1].strip("/")
-                c = Connection(host, user='ubuntu',
+                c = Connection(host, user=self.settings.user,
                                connect_kwargs=self.connect)
                 c.get(
                     PathMaker.client_log_file(i, id),
@@ -358,7 +365,7 @@ class Bench:
             primary_addresses, prefix='Downloading primaries logs:')
         for i, address in enumerate(progress):
             host = address.split(':')[1].strip("/")
-            c = Connection(host, user='ubuntu', connect_kwargs=self.connect)
+            c = Connection(host, user=self.settings.user, connect_kwargs=self.connect)
             c.get(
                 PathMaker.primary_log_file(i),
                 local=PathMaker.primary_log_file(i)
@@ -427,7 +434,7 @@ class Bench:
                             bench_parameters.workers,
                             bench_parameters.collocate,
                             r,
-                            bench_parameters.tx_size,
+                            270,
                         ))
                     except (subprocess.SubprocessError, GroupException, ParseError) as e:
                         self.kill(hosts=selected_hosts)

@@ -9,24 +9,30 @@ class SettingsError(Exception):
 
 
 class Settings:
-    def __init__(self, key_name, key_path, base_port, repo_name, repo_url,
+    def __init__(self, key_name, key_path, passphrase, base_port, user, LAN_hosts, repo_name, repo_url,
                  branch, instance_type, aws_regions):
         inputs_str = [
-            key_name, key_path, repo_name, repo_url, branch, instance_type
+            key_name, key_path, passphrase, user, repo_name, repo_url, branch, instance_type
         ]
-        if isinstance(aws_regions, list):
-            regions = aws_regions
-        else:
-            regions = [aws_regions]
+        regions = aws_regions if isinstance(aws_regions, list) else [aws_regions]
+        hosts = LAN_hosts if isinstance(LAN_hosts, list) else [LAN_hosts]
+
         inputs_str += regions
+        inputs_str += hosts
+
         ok = all(isinstance(x, str) for x in inputs_str)
         ok &= isinstance(base_port, int)
         ok &= len(regions) > 0
+        ok &= len(hosts) > 0
         if not ok:
             raise SettingsError('Invalid settings types')
 
         self.key_name = key_name
         self.key_path = key_path
+        self.passphrase = passphrase
+
+        self.user = user
+        self.hosts = hosts
 
         self.base_port = base_port
 
@@ -46,7 +52,10 @@ class Settings:
             return cls(
                 data['key']['name'],
                 data['key']['path'],
+                data['key']['passphrase'],
                 data['port'],
+                data['user'],
+                data['LAN']['hosts'],
                 data['repo']['name'],
                 data['repo']['url'],
                 data['repo']['branch'],

@@ -1,13 +1,23 @@
 {
     "key": {
-        "name": "aws-sui",
-        "path": "/Users/username/.ssh/aws-sui.pem"
+        "name": "key",
+        "path": "/USER/user/.ssh/key",
+        "passphrase": ""
+    },
+    "user": "nezha",
+    "LAN" : {
+        "hosts": [
+            "141.123.121.128",
+            "141.123.121.129",
+            "141.123.121.130",
+            "141.123.121.131"
+        ]
     },
     "port": 5000,
     "repo": {
         "name": "sui",
-        "url": "https://github.com/mystenlabs/sui",
-        "branch": "main"
+        "url": "https://github.com/Dong-Hyeon-Yu/sui",
+        "branch": "EVM-Serial-Execution"
     },
     "instances": {
         "type": "m5d.8xlarge",

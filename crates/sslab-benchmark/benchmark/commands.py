@@ -16,14 +16,14 @@ class CommandMaker:
 
     @staticmethod
     def clean_logs():
-        return f'rm -r {PathMaker.logs_path()} ; mkdir -p {PathMaker.logs_path()}'
+        return f'rm {PathMaker.logs_path()}/*.log'
 
     @staticmethod
-    def compile(failpoints=True, release=True, traceEvm=False):
+    def compile(failpoints=True, release=True):
         cmd = ["cargo", "build", "--quiet","--features", "benchmark"]
 
-        if failpoints:
-            cmd = cmd + [cmd.pop(-1) + " fail/failpoints"]
+        # if failpoints:
+        #     cmd = cmd + [cmd.pop(-1) + " fail/failpoints"]
 
         if release:
             cmd = cmd + ["--release"]

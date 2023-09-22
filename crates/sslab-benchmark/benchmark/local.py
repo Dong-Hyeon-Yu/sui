@@ -53,15 +53,15 @@ class LocalBench:
             subprocess.run([cmd], shell=True, stderr=subprocess.DEVNULL)
             sleep(0.5)  # Removing the store may take time.
 
-            # Recompile the latest client code.
-            cmd = CommandMaker.compile(failpoints=failpoints, release=release)
-            Print.info(f"About to run {cmd} at {PathMaker.client_crate_path()}...")
-            subprocess.run(cmd, check=True, cwd=PathMaker.client_crate_path())
-
             # Recompile the latest narwhal-node code.
             cmd = CommandMaker.compile(failpoints=failpoints, release=release, traceEvm=True)
             Print.info(f"About to run {cmd} at {PathMaker.node_crate_path()}...")
             subprocess.run(cmd, check=True, cwd=PathMaker.node_crate_path())
+
+            # Recompile the latest client code.
+            cmd = CommandMaker.compile(failpoints=failpoints, release=release)
+            Print.info(f"About to run {cmd} at {PathMaker.client_crate_path()}...")
+            subprocess.run(cmd, check=True, cwd=PathMaker.client_crate_path())
 
             # Create alias for the client and nodes binary.
             cmd = CommandMaker.alias_binaries(PathMaker.binary_path(release))

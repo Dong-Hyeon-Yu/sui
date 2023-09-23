@@ -13,10 +13,14 @@ class CommandMaker:
         return (
             f'rm -r .db-* ; rm .*.json ; mkdir -p {PathMaker.results_path()}'
         )
+    
+    @staticmethod
+    def clean_db():
+        return f'rm -r .db-* ; echo "db cleaned"'
 
     @staticmethod
     def clean_logs():
-        return f'rm {PathMaker.logs_path()}/*.log'
+        return f'rm -r {PathMaker.logs_path()} ; mkdir -p {PathMaker.logs_path()}'
 
     @staticmethod
     def compile(failpoints=True, release=True):

@@ -134,6 +134,7 @@ class LANBench:
         name = splitext(basename(log_file))[0]
         cmd = f'tmux new -d -s "{name}" "{command} |& tee {log_file}"'
         c = Connection(host, user=self.settings.user, connect_kwargs=self.connect)
+        c.run(CommandMaker.clean_db(), hide=True)
         output = c.run(cmd, hide=True)
         self._check_stderr(output)
 
@@ -392,7 +393,7 @@ class LANBench:
 
         # Update nodes.
         try:
-            self._update(selected_hosts, bench_parameters)
+            self._update(selected_hosts, bench_parameters, True)
         except (GroupException, ExecutionError) as e:
             e = FabricError(e) if isinstance(e, GroupException) else e
             raise BenchError('Failed to update nodes', e)

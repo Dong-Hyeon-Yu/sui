@@ -77,12 +77,12 @@ async fn main() -> Result<(), eyre::Report> {
     // NOTE: This log entry is used to compute performance.
     info!("Transactions rate: {rate} tx/s");
 
-    // let client = MultipleClient::new(target, rate, nodes);
-    let client = Client {
-        target,
-        rate,
-        nodes,
-    };
+    let client = MultipleClient::new(target, rate, nodes);
+    // let client = Client {
+    //     target,
+    //     rate,
+    //     nodes,
+    // };
 
     // Wait for all nodes to be online and synchronized.
     client.wait().await;

@@ -291,9 +291,9 @@ def LAN(ctx, debug=False):
         'nodes': [4],
         'workers': 1,
         'collocate': True,
-        'rate': [10_000],# 110_000],
+        'rate': [10_000, 50_000, 100_000, 150_000, 200_000, 250_000],
         'tx_size': 270,
-        'duration': 30,
+        'duration': 100,
         'runs': 1,
     }
     node_params = {

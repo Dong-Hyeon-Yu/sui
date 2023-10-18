@@ -4,7 +4,7 @@ use evm::{backend::{MemoryBackend, Apply, Log, ApplyBackend, Backend}, executor:
 use narwhal_types::BatchDigest;
 use sui_types::error::SuiResult;
 
-use crate::{types::{SpecId, ChainConfig}, transaction_manager::MIN_HASHMAP_CAPACITY};
+use crate::types::{SpecId, ChainConfig};
 
 pub struct ExecutionResult {
     pub logs: Vec<Log>,
@@ -30,11 +30,9 @@ pub trait ExecutionBackend {
 #[derive(Clone, Debug)]
 pub struct MemoryStorage {
     executed_tx: HashSet<BatchDigest>,
-    pub backend: MemoryBackend,  //TODO: change to MutexTable for concurrent execution.
+    backend: MemoryBackend,  
     precompiles: BTreeMap<H160, PrecompileFn>,
     config: ChainConfig,
-    // checkpoint:  ArcSwap<BTreeMap<H160, MemoryAccount>>?
-    // mutex_table: MutexTable<TransactionDigest>, // TODO MutexTable for transaction locks (prevent concurrent execution of same transaction)
 }
 
 impl MemoryStorage {
@@ -43,7 +41,7 @@ impl MemoryStorage {
         let config = ChainConfig::new(SpecId::try_from_u8(chain_id.byte(0)).unwrap());
 
         Self { 
-            executed_tx: HashSet::with_capacity(MIN_HASHMAP_CAPACITY),
+            executed_tx: HashSet::new(), // TODO: GC or narrow down its usage scope.
             backend,
             precompiles,
             config
@@ -72,13 +70,23 @@ impl MemoryStorage {
         )
     }
 
-    pub fn executor(&self, gas_limit: u64) -> StackExecutor<MemoryStackState<MemoryBackend>, BTreeMap<H160, PrecompileFn>> {
+    pub fn executor(&self, gas_limit: u64, simulation: bool) -> StackExecutor<MemoryStackState<MemoryBackend>, BTreeMap<H160, PrecompileFn>> {
 
         StackExecutor::new_with_precompiles(
             MemoryStackState::new(StackSubstateMetadata::new(gas_limit, self.config()), &self.backend),
             self.config(),
             self.precompiles(),
+            simulation
         )
+    }
+
+    pub fn snapshot(&self) -> MemoryStorage {
+        MemoryStorage {
+            executed_tx: HashSet::new(),
+            backend: self.backend.clone(),
+            precompiles: self.precompiles.clone(),
+            config: self.config.clone(),
+        }
     }
 }
 

@@ -1,41 +1,33 @@
-use futures::{future::try_join_all, stream::FuturesUnordered};
+use futures::stream::FuturesUnordered;
 use mysten_metrics::spawn_logged_monitored_task;
 use async_trait::async_trait;
 use fastcrypto::hash::Hash as _Hash;
 use narwhal_executor::ExecutionState;
-use narwhal_types::{BatchAPI, CertificateAPI, ConsensusOutput, HeaderAPI, PreSubscribedBroadcastSender};
-use parking_lot::RwLock;
-use tokio::{sync::mpsc::Sender, task::JoinHandle};
+use narwhal_types::{BatchAPI, CertificateAPI, ConsensusOutput, HeaderAPI, PreSubscribedBroadcastSender, BatchDigest};
+use tokio::{sync::mpsc::{Sender, Receiver}, task::JoinHandle};
 use tracing::{info, instrument};
-use crate::{types::{ExecutableEthereumBatch, EthereumTransaction}, transaction_manager::SimpleTransactionManager, execution_storage::MemoryStorage, execution_driver::execution_process};
+use crate::{types::{ExecutableEthereumBatch, EthereumTransaction}, executor::ExecutionComponent};
 use core::panic;
-use std::{sync::Arc, time::Instant};
+use std::sync::Arc;
 
 pub struct SimpleConsensusHandler {
     tx_consensus_certificate: Sender<Vec<ExecutableEthereumBatch>>,
-    tx_shutdown: Option<PreSubscribedBroadcastSender>,
+    // tx_shutdown: Option<PreSubscribedBroadcastSender>,
     handles: FuturesUnordered<JoinHandle<()>>,
 }
 
 impl SimpleConsensusHandler {
+  
 
-    // ConsensusHandler has two components : SimpleTransactionManager and ExecutionDriver
-    const NUM_SHUTDOWN_RECEIVERS: u64 = 3;  
-
-    pub fn new(
-        execution_store: Arc<RwLock<MemoryStorage>>, //TODO: make this field Arc, and remove Inner
-    ) -> Self {
-        let (tx_consensus_certificate, rx_consensus_certificate) = tokio::sync::mpsc::channel(100);
-        let (tx_ready_certificate, rx_ready_certificate) = tokio::sync::mpsc::unbounded_channel();
-        let (tx_commit_notification, rx_commit_notification) = tokio::sync::mpsc::channel(100);
-        // The channel returning the result for each transaction's execution.
-        let (tx_execution_confirmation, rx_execution_confirmation) = tokio::sync::mpsc::channel(100);
-
-        let mut tx_shutdown = PreSubscribedBroadcastSender::new(Self::NUM_SHUTDOWN_RECEIVERS);
-        
+    pub fn new<Executor>(
+        mut executor: Executor,
+        tx_consensus_certificate: Sender<Vec<ExecutableEthereumBatch>>,
+        rx_execution_confirmation: Receiver<BatchDigest>, 
+    ) -> Self 
+        where Executor: ExecutionComponent + Send + Sync + 'static
+    {   
         let handles = FuturesUnordered::new();
 
-        let mut rx_shutdown = tx_shutdown.subscribe();
         handles.push(spawn_logged_monitored_task!(async move {
             let mut rx = rx_execution_confirmation;
 
@@ -45,70 +37,51 @@ impl SimpleConsensusHandler {
                         // NOTE: This log entry is used to compute performance.
                         info!("Executed Batch -> {:?}", digest);
                     }
-                    _ = rx_shutdown.receiver.recv() => {
-                        info!("Shutdown signal received. Exiting executor ...");
-                        return;
-                    }
+                    // _ = rx_shutdown.receiver.recv() => {
+                    //     info!("Shutdown signal received. Exiting executor ...");
+                    //     return;
+                    // }
                 }
             }}, 
             "confirmation_loop")
         );
 
-
-        let database = execution_store.clone();
-        let rx_shutdown = tx_shutdown.subscribe();
         handles.push(
             spawn_logged_monitored_task!(
-                execution_process(
-                    database,
-                    rx_ready_certificate,
-                    tx_commit_notification,
-                    rx_shutdown
-                ),
-                "ExecutionDriver::loop"
-            )
-        );
-
-        handles.push(
-            SimpleTransactionManager::spawn(
-                execution_store.clone(),
-                tx_execution_confirmation,
-                rx_consensus_certificate,
-                tx_ready_certificate,
-                rx_commit_notification,
-                tx_shutdown.subscribe(),
+                executor.run(),
+                "executor.run()"
             )
         );
 
         Self {
             tx_consensus_certificate,
-            tx_shutdown: Some(tx_shutdown),
+            // tx_shutdown: Some(tx_shutdown),
             handles,
         }
     }
 
-    pub async fn shutdown(&mut self) {
-        // send the shutdown signal to the node
-        let now = Instant::now();
-        info!("Sending shutdown message to primary node");
+    // pub async fn shutdown(&mut self) {
+    //     // send the shutdown signal to the node
+    //     let now = Instant::now();
+    //     info!("Sending shutdown message to primary node");
 
-        if let Some(tx_shutdown) = self.tx_shutdown.as_ref() {
-            tx_shutdown
-                .send()
-                .expect("Couldn't send the shutdown signal to downstream components");
-            self.tx_shutdown = None;
-        }
+    //     if let Some(tx_shutdown) = self.tx_shutdown.as_ref() {
+    //         tx_shutdown
+    //             .send()
+    //             .expect("Couldn't send the shutdown signal to downstream components");
+    //         self.tx_shutdown = None;
+    //     }
 
         
 
-        // Now wait until handles have been completed
-        try_join_all(&mut self.handles).await.unwrap();
+    //     // Now wait until handles have been completed
+    //     try_join_all(&mut self.handles).await.unwrap();
 
-        info!(
-            "Narwhal primary shutdown is complete - took {} seconds",
-            now.elapsed().as_secs_f64()
-        );
-    }
+    //     info!(
+    //         "Narwhal primary shutdown is complete - took {} seconds",
+    //         now.elapsed().as_secs_f64()
+    //     );
+    // }
 }
 
 #[async_trait]

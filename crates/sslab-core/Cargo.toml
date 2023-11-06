@@ -74,11 +74,13 @@ tracing-subscriber.workspace = true
 workspace-hack = { version = "0.1", path = "../workspace-hack" }
 sui-core.workspace = true
 
-evm = { git="https://github.com/Dong-Hyeon-Yu/evm.git", rev = "662a39208128494bb53a868e0033c75d4ab1a2fe"}
+evm = { git="https://github.com/Dong-Hyeon-Yu/evm.git", rev="120a40a5d4f817c34012285b472b28b89a47049e"}#branch="master"}
 ethers-providers = { version = "^2.0.0" }
 ethers-core = { version = "^2.0.0" }
 enumn = "0.1.11"
 rayon = "1.8.0"
+nohash-hasher = "0.2.0"
+hashbrown = "0.14.2"
 # console-subscriber = "^0.1.0"
 
 [dev-dependencies]

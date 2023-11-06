@@ -54,7 +54,7 @@ class LocalBench:
             sleep(0.5)  # Removing the store may take time.
 
             # Recompile the latest narwhal-node code.
-            cmd = CommandMaker.compile(failpoints=failpoints, release=release, traceEvm=True)
+            cmd = CommandMaker.compile(failpoints=failpoints, release=release)
             Print.info(f"About to run {cmd} at {PathMaker.node_crate_path()}...")
             subprocess.run(cmd, check=True, cwd=PathMaker.node_crate_path())
 

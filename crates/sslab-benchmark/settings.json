@@ -1,23 +1,22 @@
 {
     "key": {
         "name": "to_nezha",
-        "path": "/home/ydh9516/.ssh/to_nezha",
-        "passphrase": "ydgall@@9516"
+        "path": "/home/ydh9516/.ssh/ansible"
     },
     "user": "nezha",
     "LAN" : {
         "hosts": [
-            "141.223.121.128",
-            "141.223.121.129",
-            "141.223.121.130",
-            "141.223.121.131"
+            "141.223.121.124",
+            "141.223.121.125",
+            "141.223.121.126",
+            "141.223.121.127"
         ]
     },
     "port": 5000,
     "repo": {
         "name": "sui",
         "url": "https://github.com/Dong-Hyeon-Yu/sui",
-        "branch": "EVM-Serial-Execution"
+        "branch": "nezha"
     },
     "instances": {
         "type": "m5d.8xlarge",

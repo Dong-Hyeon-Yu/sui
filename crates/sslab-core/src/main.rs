@@ -21,6 +21,8 @@ use narwhal_network::client::{WorkerNetworkClient, PrimaryNetworkClient};
 use node::metrics::{primary_metrics_registry, start_prometheus_server, worker_metrics_registry};
 use parking_lot::RwLock;
 use prometheus::Registry;
+use sslab_core::executor::ParallelExecutor;
+use sslab_core::nezha::Nezha;
 use sslab_core::types::SpecId;
 use sslab_core::{consensus_handler::SimpleConsensusHandler, transaction_validator::EthereumTxValidator};
 use sui_simulator::telemetry_subscribers;
@@ -278,9 +280,22 @@ async fn run(
 
             let client = WorkerNetworkClient::new_from_keypair(&primary_network_keypair);
 
+            let (tx_consensus_certificate, rx_consensus_certificate) = tokio::sync::mpsc::channel(100);
+            let (tx_execution_confirmation, rx_execution_confirmation) = tokio::sync::mpsc::channel(100);
+
             let execution_store = Arc::new(RwLock::new(MemoryStorage::default(SpecId::ISTANBUL)));
-
-
+            let execution_model = Nezha::new(execution_store);
+            let executor = ParallelExecutor::new(
+                rx_consensus_certificate,
+                tx_execution_confirmation,
+                execution_model
+            );
+            let consensus_handler = SimpleConsensusHandler::new(
+                executor,
+                tx_consensus_certificate,
+                rx_execution_confirmation,
+            );
+            
 
             primary
                 .start(
@@ -291,7 +306,7 @@ async fn run(
                     worker_cache,
                     client.clone(),
                     &store,
-                    Arc::new(SimpleConsensusHandler::new(execution_store)),
+                    Arc::new(consensus_handler),
                 )
                 .await?;
 

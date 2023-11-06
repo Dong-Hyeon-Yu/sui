@@ -1,0 +1,29 @@
+- name: Install dependencies
+  hosts: nezha-core				# /etc/ansible/hosts
+  		
+  tasks:					
+    - name: Ansible Update Cache and Upgrade all Packages
+      register: updatesys
+      apt:
+        name: "*"
+        state: present
+        update_cache: yes
+      become: yes	
+
+    - name: install dependencies		
+      apt: 
+        name: 
+          - build-essential
+          - cmake
+          - clang       # RocksDB
+          - pkg-config  # RocksDB
+          - libssl-dev  # RocksDB        
+        state: present
+      become: yes	
+      
+    - name: install rustup
+      register: result
+      shell: |
+        curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y &&
+        source $HOME/.cargo/env &&
+        rustup default stable

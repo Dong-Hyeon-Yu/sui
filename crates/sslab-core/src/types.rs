@@ -3,7 +3,8 @@ use enumn;
 use ethers_core::types::{H256, U256, Bytes};
 use ethers_core::types::{Address, transaction::eip2718::TypedTransaction};
 use ethers_core::utils::rlp::Rlp;
-use evm::{Runtime, Config, Context};
+use evm::backend::{Apply, Log};
+use evm::{Runtime, Config, Context, executor::stack::RwSet};
 use narwhal_types::BatchDigest;
 use serde::{Serialize, Deserialize};
 
@@ -76,6 +77,35 @@ impl EthereumTransaction {
     }
     pub fn nonce(&self) -> U256 {
         self.0.nonce().unwrap().clone()
+    }
+}
+
+// SimulcationResult includes the batch digests and rw sets of each transctions in a ConsensusOutput.
+#[derive(Clone, Debug, Default)]
+pub struct SimulationResult {
+    pub digests: Vec<BatchDigest>,
+    pub rw_sets: Vec<SimulatedTransaction>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct SimulatedTransaction {
+    tx_id: u64,
+    rw_set: Option<RwSet>,
+    effects: Vec<Apply>,
+    logs: Vec<Log>,
+}
+
+impl SimulatedTransaction {
+    pub fn new(tx_id: u64, rw_set: Option<RwSet>, effects: Vec<Apply>, logs: Vec<Log>) -> Self {
+        Self { tx_id, rw_set, effects, logs }
+    }
+
+    pub fn deconstruct(self) -> (u64, Option<RwSet>, Vec<Apply>, Vec<Log>) {
+        (self.tx_id, self.rw_set, self.effects, self.logs)
+    }
+
+    pub fn id(&self) -> &u64 {
+        &self.tx_id
     }
 }
 

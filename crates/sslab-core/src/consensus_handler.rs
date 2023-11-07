@@ -3,10 +3,10 @@ use mysten_metrics::spawn_logged_monitored_task;
 use async_trait::async_trait;
 use fastcrypto::hash::Hash as _Hash;
 use narwhal_executor::ExecutionState;
-use narwhal_types::{BatchAPI, CertificateAPI, ConsensusOutput, HeaderAPI, BatchDigest};
+use narwhal_types::{BatchAPI, CertificateAPI, ConsensusOutput, HeaderAPI};
 use tokio::{sync::mpsc::{Sender, Receiver}, task::JoinHandle};
 use tracing::{info, instrument};
-use crate::{types::{ExecutableEthereumBatch, EthereumTransaction, ExecutableConsensusOutput}, executor::ExecutionComponent};
+use crate::{types::{ExecutableEthereumBatch, EthereumTransaction, ExecutableConsensusOutput, ExecutionResult}, executor::ExecutionComponent};
 use core::panic;
 use std::sync::Arc;
 
@@ -23,7 +23,7 @@ impl SimpleConsensusHandler {
     pub fn new<Executor>(
         mut executor: Executor,
         tx_consensus_certificate: Sender<ExecutableConsensusOutput>,
-        rx_execution_confirmation: Receiver<BatchDigest>, 
+        rx_execution_confirmation: Receiver<ExecutionResult>, 
     ) -> Self 
         where Executor: ExecutionComponent + Send + Sync + 'static
     {   
@@ -34,9 +34,11 @@ impl SimpleConsensusHandler {
 
             loop {
                 tokio::select! {
-                    Some(digest) = rx.recv() => {
+                    Some(digests) = rx.recv() => {
                         // NOTE: This log entry is used to compute performance.
-                        info!("Executed Batch -> {:?}", digest);
+                        digests.iter().for_each(|digest|
+                            info!("Executed Batch -> {:?}", digest)
+                        );
                     }
                     // _ = rx_shutdown.receiver.recv() => {
                     //     info!("Shutdown signal received. Exiting executor ...");

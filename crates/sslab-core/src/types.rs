@@ -175,6 +175,21 @@ impl ExecutableConsensusOutput {
     }
 }
 
+pub struct ExecutionResult {
+    pub digests: Vec<BatchDigest>,
+}
+
+impl ExecutionResult {
+    pub fn new(digests: Vec<BatchDigest>) -> Self {
+        Self {
+            digests
+        }
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &BatchDigest> {
+        self.digests.iter()
+    }
+}
 
 /// SpecId and their activation block
 /// Information was obtained from: https://github.com/ethereum/execution-specs

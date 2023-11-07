@@ -1,13 +1,11 @@
-use futures::future;
 use std::collections::BTreeMap;
 use evm::{ExitReason, backend::{Apply, Log}};
-use narwhal_types::BatchDigest;
 use sui_types::error::SuiError;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tracing::{debug, warn, trace, info};
 
 use crate::{
-    types::{ExecutableEthereumBatch, EthereumTransaction, ExecutableConsensusOutput}, 
+    types::{ExecutableEthereumBatch, EthereumTransaction, ExecutableConsensusOutput, ExecutionResult}, 
     execution_storage::{ExecutionBackend, MemoryStorage}
 }; 
 
@@ -16,7 +14,7 @@ pub(crate) const DEFAULT_EVM_MEMORY_LIMIT:usize = usize::MAX;
 
 
 pub trait ParallelExecutable {
-    fn execute(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> Vec<BatchDigest>;
+    fn execute(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> ExecutionResult;
 }
 
 
@@ -24,7 +22,7 @@ pub struct ParallelExecutor<ExecutionModel: ParallelExecutable + Send + Sync> {
 
     rx_consensus_certificate: Receiver<ExecutableConsensusOutput>, 
 
-    tx_execution_confirmation: Sender<BatchDigest>,  
+    tx_execution_confirmation: Sender<ExecutionResult>,  
 
     // rx_shutdown: ConditionalBroadcastReceiver,
 
@@ -50,10 +48,10 @@ impl<ExecutionModel: ParallelExecutable + Send + Sync> ExecutionComponent for Pa
                         consensus_output.timestamp(),
                     );
                     
-                    let digests = self.execute(consensus_output.data());
+                    let result = self.execute(consensus_output.data());
                     
                     // digests.into_iter().for_each(|digest| self.tx_execution_confirmation.send(digest).ok().unwrap())
-                    future::join_all(digests.into_iter().map(|digest| self.tx_execution_confirmation.send(digest))).await;
+                    let _ = self.tx_execution_confirmation.send(result).await;
                 }
 
                 // _ = self.rx_shutdown.receiver.recv() => {
@@ -68,7 +66,7 @@ impl<ExecutionModel: ParallelExecutable + Send + Sync> ExecutionComponent for Pa
 impl<ExecutionModel: ParallelExecutable + Send + Sync> ParallelExecutor<ExecutionModel> {
     pub fn new(
         rx_consensus_certificate: Receiver<ExecutableConsensusOutput>, 
-        tx_execution_confirmation: Sender<BatchDigest>,  
+        tx_execution_confirmation: Sender<ExecutionResult>,  
         // rx_shutdown: ConditionalBroadcastReceiver,
         execution_model: ExecutionModel
     ) -> Self {
@@ -80,7 +78,7 @@ impl<ExecutionModel: ParallelExecutable + Send + Sync> ParallelExecutor<Executio
         }
     }
 
-    fn execute(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> Vec<BatchDigest> {
+    fn execute(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> ExecutionResult {
         self.execution_model.execute(consensus_output)
     }
 }

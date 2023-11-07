@@ -8,12 +8,11 @@ use hashbrown;
 
 use ethers_core::types::{H160, H256};
 use itertools::Itertools;
-use narwhal_types::BatchDigest;
 use parking_lot::RwLock;
 use rayon::prelude::*;
 use tracing::{info, debug, warn, error};
 
-use crate::{types::{SimulatedTransaction, SimulationResult, ExecutableEthereumBatch}, executor::{EvmExecutionUtils, ParallelExecutable}, execution_storage::ExecutionBackend};
+use crate::{types::{SimulatedTransaction, SimulationResult, ExecutableEthereumBatch, ExecutionResult}, executor::{EvmExecutionUtils, ParallelExecutable}, execution_storage::ExecutionBackend};
 use crate::execution_storage::MemoryStorage;
 
 pub struct Nezha {
@@ -21,7 +20,7 @@ pub struct Nezha {
 }
 
 impl ParallelExecutable for Nezha {
-    fn execute(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> Vec<BatchDigest> {
+    fn execute(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> ExecutionResult {
         info!("Simulation started.");
         let SimulationResult { digests, rw_sets } = self._simulate(consensus_output);
         info!("Simulation finished.");
@@ -37,7 +36,7 @@ impl ParallelExecutable for Nezha {
         self._concurrent_commit(scheduled_info);
         info!("Concurrent commit finished.");
 
-        digests
+        ExecutionResult::new(digests)
     }
 }
 

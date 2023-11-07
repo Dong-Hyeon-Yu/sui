@@ -281,19 +281,16 @@ async fn run(
             let client = WorkerNetworkClient::new_from_keypair(&primary_network_keypair);
 
             let (tx_consensus_certificate, rx_consensus_certificate) = tokio::sync::mpsc::channel(100);
-            let (tx_execution_confirmation, rx_execution_confirmation) = tokio::sync::mpsc::channel(100);
 
             let execution_store = Arc::new(RwLock::new(MemoryStorage::default(SpecId::ISTANBUL)));
             let execution_model = Nezha::new(execution_store);
             let executor = ParallelExecutor::new(
                 rx_consensus_certificate,
-                tx_execution_confirmation,
                 execution_model
             );
             let consensus_handler = SimpleConsensusHandler::new(
                 executor,
                 tx_consensus_certificate,
-                rx_execution_confirmation,
             );
             
 

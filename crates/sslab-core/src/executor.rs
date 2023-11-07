@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use evm::{ExitReason, backend::{Apply, Log}};
 use sui_types::error::SuiError;
-use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::sync::mpsc::{Receiver};
 use tracing::{debug, warn, trace, info};
 
 use crate::{
@@ -21,8 +21,6 @@ pub trait ParallelExecutable {
 pub struct ParallelExecutor<ExecutionModel: ParallelExecutable + Send + Sync> { 
 
     rx_consensus_certificate: Receiver<ExecutableConsensusOutput>, 
-
-    tx_execution_confirmation: Sender<ExecutionResult>,  
 
     // rx_shutdown: ConditionalBroadcastReceiver,
 
@@ -48,10 +46,12 @@ impl<ExecutionModel: ParallelExecutable + Send + Sync> ExecutionComponent for Pa
                         consensus_output.timestamp(),
                     );
                     
-                    let result = self.execute(consensus_output.data());
+                    let digests = self.execute(consensus_output.data());
                     
-                    // digests.into_iter().for_each(|digest| self.tx_execution_confirmation.send(digest).ok().unwrap())
-                    let _ = self.tx_execution_confirmation.send(result).await;
+                    // NOTE: This log entry is used to compute performance.
+                    digests.iter().for_each(|digest|
+                        info!("Executed Batch -> {:?}", digest)
+                    );
                 }
 
                 // _ = self.rx_shutdown.receiver.recv() => {
@@ -66,13 +66,11 @@ impl<ExecutionModel: ParallelExecutable + Send + Sync> ExecutionComponent for Pa
 impl<ExecutionModel: ParallelExecutable + Send + Sync> ParallelExecutor<ExecutionModel> {
     pub fn new(
         rx_consensus_certificate: Receiver<ExecutableConsensusOutput>, 
-        tx_execution_confirmation: Sender<ExecutionResult>,  
         // rx_shutdown: ConditionalBroadcastReceiver,
         execution_model: ExecutionModel
     ) -> Self {
         Self {
             rx_consensus_certificate,
-            tx_execution_confirmation,
             // rx_shutdown,
             execution_model
         }

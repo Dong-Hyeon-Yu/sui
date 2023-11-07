@@ -4,9 +4,9 @@ use async_trait::async_trait;
 use fastcrypto::hash::Hash as _Hash;
 use narwhal_executor::ExecutionState;
 use narwhal_types::{BatchAPI, CertificateAPI, ConsensusOutput, HeaderAPI};
-use tokio::{sync::mpsc::{Sender, Receiver}, task::JoinHandle};
+use tokio::{sync::mpsc::Sender, task::JoinHandle};
 use tracing::{info, instrument};
-use crate::{types::{ExecutableEthereumBatch, EthereumTransaction, ExecutableConsensusOutput, ExecutionResult}, executor::ExecutionComponent};
+use crate::{types::{ExecutableEthereumBatch, EthereumTransaction, ExecutableConsensusOutput}, executor::ExecutionComponent};
 use core::panic;
 use std::sync::Arc;
 
@@ -23,31 +23,10 @@ impl SimpleConsensusHandler {
     pub fn new<Executor>(
         mut executor: Executor,
         tx_consensus_certificate: Sender<ExecutableConsensusOutput>,
-        rx_execution_confirmation: Receiver<ExecutionResult>, 
     ) -> Self 
         where Executor: ExecutionComponent + Send + Sync + 'static
     {   
         let handles = FuturesUnordered::new();
-
-        handles.push(spawn_logged_monitored_task!(async move {
-            let mut rx = rx_execution_confirmation;
-
-            loop {
-                tokio::select! {
-                    Some(digests) = rx.recv() => {
-                        // NOTE: This log entry is used to compute performance.
-                        digests.iter().for_each(|digest|
-                            info!("Executed Batch -> {:?}", digest)
-                        );
-                    }
-                    // _ = rx_shutdown.receiver.recv() => {
-                    //     info!("Shutdown signal received. Exiting executor ...");
-                    //     return;
-                    // }
-                }
-            }}, 
-            "confirmation_loop")
-        );
 
         handles.push(
             spawn_logged_monitored_task!(

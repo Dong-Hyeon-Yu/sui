@@ -5,7 +5,8 @@ use ethers_core::types::{Address, transaction::eip2718::TypedTransaction};
 use ethers_core::utils::rlp::Rlp;
 use evm::backend::{Apply, Log};
 use evm::{Runtime, Config, Context, executor::stack::RwSet};
-use narwhal_types::BatchDigest;
+use fastcrypto::hash::Hash;
+use narwhal_types::{BatchDigest, ConsensusOutput, ConsensusOutputDigest};
 use serde::{Serialize, Deserialize};
 
 use crate::executor::{DEFAULT_EVM_MEMORY_LIMIT, DEFAULT_EVM_STACK_LIMIT};
@@ -130,6 +131,47 @@ impl ExecutableEthereumBatch {
 
     pub fn data(&self) -> &Vec<EthereumTransaction> {
         &self.data
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ExecutableConsensusOutput {
+    digest: ConsensusOutputDigest,
+    data: Vec<ExecutableEthereumBatch>,
+    timestamp: u64,
+    round: u64,
+    sub_dag_index: u64,
+}
+
+impl ExecutableConsensusOutput {
+    pub fn new(data: Vec<ExecutableEthereumBatch>, consensus_output: &ConsensusOutput) -> ExecutableConsensusOutput {
+        Self {
+            digest: consensus_output.digest(),
+            data,
+            timestamp: consensus_output.sub_dag.commit_timestamp(),
+            round: consensus_output.sub_dag.leader_round(),
+            sub_dag_index: consensus_output.sub_dag.sub_dag_index,
+        }
+    }
+
+    pub fn digest(&self) -> &ConsensusOutputDigest {
+        &self.digest
+    }
+
+    pub fn data(self) -> Vec<ExecutableEthereumBatch> {
+        self.data
+    }
+
+    pub fn timestamp(&self) -> &u64 {
+        &self.timestamp
+    }
+
+    pub fn round(&self) -> &u64 {
+        &self.round
+    }
+
+    pub fn sub_dag_index(&self) -> &u64 {
+        &self.sub_dag_index
     }
 }
 

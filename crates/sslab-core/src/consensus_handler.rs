@@ -3,15 +3,15 @@ use mysten_metrics::spawn_logged_monitored_task;
 use async_trait::async_trait;
 use fastcrypto::hash::Hash as _Hash;
 use narwhal_executor::ExecutionState;
-use narwhal_types::{BatchAPI, CertificateAPI, ConsensusOutput, HeaderAPI, PreSubscribedBroadcastSender, BatchDigest};
+use narwhal_types::{BatchAPI, CertificateAPI, ConsensusOutput, HeaderAPI, BatchDigest};
 use tokio::{sync::mpsc::{Sender, Receiver}, task::JoinHandle};
 use tracing::{info, instrument};
-use crate::{types::{ExecutableEthereumBatch, EthereumTransaction}, executor::ExecutionComponent};
+use crate::{types::{ExecutableEthereumBatch, EthereumTransaction, ExecutableConsensusOutput}, executor::ExecutionComponent};
 use core::panic;
 use std::sync::Arc;
 
 pub struct SimpleConsensusHandler {
-    tx_consensus_certificate: Sender<Vec<ExecutableEthereumBatch>>,
+    tx_consensus_certificate: Sender<ExecutableConsensusOutput>,
     // tx_shutdown: Option<PreSubscribedBroadcastSender>,
     handles: FuturesUnordered<JoinHandle<()>>,
 }
@@ -21,7 +21,7 @@ impl SimpleConsensusHandler {
 
     pub fn new<Executor>(
         mut executor: Executor,
-        tx_consensus_certificate: Sender<Vec<ExecutableEthereumBatch>>,
+        tx_consensus_certificate: Sender<ExecutableConsensusOutput>,
         rx_execution_confirmation: Receiver<BatchDigest>, 
     ) -> Self 
         where Executor: ExecutionComponent + Send + Sync + 'static
@@ -142,9 +142,11 @@ impl ExecutionState for SimpleConsensusHandler {
             }
         }
 
+        let executable_consensus_output = ExecutableConsensusOutput::new(ethereum_batches.clone(), &consensus_output);
+
         if !ethereum_batches.is_empty() {
             let _ = self.tx_consensus_certificate
-                .send(ethereum_batches)
+                .send(executable_consensus_output)
                 .await;
         }
     }

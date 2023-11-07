@@ -7,7 +7,7 @@ use tokio::sync::mpsc::{Receiver, Sender};
 use tracing::{debug, warn, trace, info};
 
 use crate::{
-    types::{ExecutableEthereumBatch, EthereumTransaction}, 
+    types::{ExecutableEthereumBatch, EthereumTransaction, ExecutableConsensusOutput}, 
     execution_storage::{ExecutionBackend, MemoryStorage}
 }; 
 
@@ -22,7 +22,7 @@ pub trait ParallelExecutable {
 
 pub struct ParallelExecutor<ExecutionModel: ParallelExecutable + Send + Sync> { 
 
-    rx_consensus_certificate: Receiver<Vec<ExecutableEthereumBatch>>, 
+    rx_consensus_certificate: Receiver<ExecutableConsensusOutput>, 
 
     tx_execution_confirmation: Sender<BatchDigest>,  
 
@@ -43,10 +43,16 @@ impl<ExecutionModel: ParallelExecutable + Send + Sync> ExecutionComponent for Pa
         loop {
             tokio::select! {
                 Some(consensus_output) = self.rx_consensus_certificate.recv() => {
-                    debug!("Received a batch from consensus");
+                    info!(
+                        "Received consensus output at leader round {}, subdag index {}, timestamp {} ",
+                        consensus_output.round(),
+                        consensus_output.sub_dag_index(),
+                        consensus_output.timestamp(),
+                    );
                     
-                    let digests = self.execute(consensus_output);
+                    let digests = self.execute(consensus_output.data());
                     
+                    // digests.into_iter().for_each(|digest| self.tx_execution_confirmation.send(digest).ok().unwrap())
                     future::join_all(digests.into_iter().map(|digest| self.tx_execution_confirmation.send(digest))).await;
                 }
 
@@ -61,7 +67,7 @@ impl<ExecutionModel: ParallelExecutable + Send + Sync> ExecutionComponent for Pa
 
 impl<ExecutionModel: ParallelExecutable + Send + Sync> ParallelExecutor<ExecutionModel> {
     pub fn new(
-        rx_consensus_certificate: Receiver<Vec<ExecutableEthereumBatch>>, 
+        rx_consensus_certificate: Receiver<ExecutableConsensusOutput>, 
         tx_execution_confirmation: Sender<BatchDigest>,  
         // rx_shutdown: ConditionalBroadcastReceiver,
         execution_model: ExecutionModel

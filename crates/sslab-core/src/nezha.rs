@@ -111,7 +111,7 @@ impl Nezha {
                 storage.apply_local_effect(effects, logs);
             });
 
-
+        info!("{} transactions are aborted.", scheduled_info.aborted_txs.len());
         // let (tx, rx) = std::sync::mpsc::channel::<Vec<SimulatedTransaction>>();
 
         // let thread = std::thread::spawn(move || {

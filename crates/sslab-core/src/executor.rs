@@ -88,6 +88,7 @@ impl<ExecutionModel: ParallelExecutable + Send + Sync> ParallelExecutor<Executio
 
 pub struct EvmExecutionUtils;
 
+#[allow(dead_code)]
 impl EvmExecutionUtils {
     pub fn execute_tx(tx: &EthereumTransaction, snapshot: &MemoryStorage, simulate: bool) -> Result<Option<(Vec<Apply>, Vec<Log>)>, SuiError> {
         let mut executor = snapshot.executor(tx.gas_limit(), simulate);

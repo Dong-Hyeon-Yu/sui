@@ -10,6 +10,7 @@ use crate::{types::{ExecutableEthereumBatch, EthereumTransaction, ExecutableCons
 use core::panic;
 use std::sync::Arc;
 
+#[allow(dead_code)]
 pub struct SimpleConsensusHandler {
     tx_consensus_certificate: Sender<ExecutableConsensusOutput>,
     // tx_shutdown: Option<PreSubscribedBroadcastSender>,

@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use evm::{ExitReason, backend::{Apply, Log}};
 use sui_types::error::SuiError;
-use tokio::sync::mpsc::{Receiver};
+use tokio::sync::mpsc::Receiver;
 use tracing::{debug, warn, trace, info};
 
 use crate::{

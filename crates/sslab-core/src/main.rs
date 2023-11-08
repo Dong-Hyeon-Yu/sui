@@ -22,7 +22,7 @@ use node::metrics::{primary_metrics_registry, start_prometheus_server, worker_me
 use parking_lot::RwLock;
 use prometheus::Registry;
 use sslab_core::executor::ParallelExecutor;
-use sslab_core::nezha::Nezha;
+use sslab_core::execution_models::nezha::Nezha;
 use sslab_core::types::SpecId;
 use sslab_core::{consensus_handler::SimpleConsensusHandler, transaction_validator::EthereumTxValidator};
 use sui_simulator::telemetry_subscribers;

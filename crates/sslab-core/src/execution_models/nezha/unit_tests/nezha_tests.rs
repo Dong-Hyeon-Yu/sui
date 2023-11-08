@@ -1,7 +1,8 @@
 use ethers_core::types::{H160, H256};
 use evm::executor::stack::{RwSet, Simulatable};
 
-use crate::{types::SimulatedTransaction, nezha::AddressBasedConflictGraph};
+use super::{types::SimulatedTransaction, address_based_conflict_graph::AddressBasedConflictGraph};
+
 
 fn transaction_with_rw(tx_id: u64, read_addr: u64, write_addr: u64) -> SimulatedTransaction {
     let mut set = RwSet::new();

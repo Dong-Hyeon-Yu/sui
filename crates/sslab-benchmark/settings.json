@@ -1,7 +1,7 @@
 {
     "key": {
-        "name": "to_nezha",
-        "path": "/home/ydh9516/.ssh/ansible"
+        "name": "ansible",
+        "path": "/home/nezha/.ssh/ansible"
     },
     "user": "nezha",
     "LAN" : {

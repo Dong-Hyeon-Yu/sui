@@ -50,7 +50,7 @@ class CommandMaker:
         return f'./narwhal-node generate_network_keys --filename {filename}'
      
     @staticmethod
-    def run_primary(primary_keys, primary_network_keys, worker_keys, committee, workers, store, parameters, debug=False):
+    def run_primary(primary_keys, primary_network_keys, worker_keys, committee, workers, store, parameters, concurrency_level=10, debug=False):
         assert isinstance(primary_keys, str)
         assert isinstance(primary_network_keys, str)
         assert isinstance(worker_keys, str)
@@ -61,7 +61,7 @@ class CommandMaker:
         v = '-vvv' if debug else '-vv'
         return (f'./narwhal-node {v} run --primary-keys {primary_keys} --primary-network-keys {primary_network_keys} '
                 f'--worker-keys {worker_keys} --committee {committee} --workers {workers} --store {store} '
-                f'--parameters {parameters} primary')
+                f'--parameters {parameters} primary --concurrency-level {concurrency_level}')
 
     @staticmethod
     def run_worker(primary_keys, primary_network_keys, worker_keys, committee, workers, store, parameters, id, debug=False):

@@ -1,5 +1,6 @@
 use std::{sync::Arc, rc::Rc};
 use itertools::Itertools;
+use narwhal_types::BatchDigest;
 use parking_lot::RwLock;
 use rayon::prelude::*;
 use tokio::time::Instant;
@@ -18,12 +19,69 @@ use crate::{
 use super::{types::SimulatedTransaction, address_based_conflict_graph::{Transaction, FastHashMap}};
 
 pub struct Nezha {
-    global_state: Arc<RwLock<MemoryStorage>>,
+    inner: ConcurrencyLevelManager
 }
 
 impl ParallelExecutable for Nezha {
-    fn execute(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> ExecutionResult {
+    fn execute(&mut self, consensus_output: Vec<ExecutableEthereumBatch>) -> ExecutionResult {
 
+        // ExecutionResult::new(self.inner._execute(consensus_output))  // this is the original case w/o adjusting concurrency level.
+        self.inner.prepare_execution(consensus_output)
+    }
+}
+
+impl Nezha {
+    pub fn new(global_state: Arc<RwLock<MemoryStorage>>, concurrency_level: usize) -> Self {
+        Self {
+            inner: ConcurrencyLevelManager::new(global_state, concurrency_level)
+        }
+    }
+}
+
+struct ConcurrencyLevelManager {
+    concurrency_level: usize,
+    pending_batches: Vec<ExecutableEthereumBatch>,
+    global_state: Arc<RwLock<MemoryStorage>>
+}
+
+impl ConcurrencyLevelManager {
+    
+    fn new(global_state: Arc<RwLock<MemoryStorage>>, concurrency_level: usize) -> Self {
+        Self {
+            concurrency_level,
+            pending_batches: Vec::with_capacity(concurrency_level),
+            global_state
+        }
+    }
+
+    fn prepare_execution(&mut self, consensus_output: Vec<ExecutableEthereumBatch>) -> ExecutionResult {
+        let mut result = vec![];
+
+        if self.remaining_capacity() > consensus_output.len() {
+            warn!("capacity is not fulled. transacion execution is delayed.");
+            self.pending_batches.extend(consensus_output);
+        }
+        else {
+            let mut target = consensus_output;
+
+            while !target.is_empty() {
+                warn!("target len: {}", target.len());
+                let split_idx = std::cmp::min(self.remaining_capacity(), target.len());
+                let remains: Vec<ExecutableEthereumBatch> = target.split_off(split_idx);
+                self.pending_batches.extend(target);
+                target = remains;
+
+                if self.is_full() {
+                    let to_be_executed = self.pending_batches.drain(..).collect_vec();
+                    result.extend(self._execute(to_be_executed));
+                }
+            } 
+        }
+
+        ExecutionResult::new(result)
+    }
+
+    fn _execute(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> Vec<BatchDigest> {
         let mut now = Instant::now();
         let SimulationResult { digests, rw_sets } = self._simulate(consensus_output);
         let mut time = now.elapsed().as_millis();
@@ -47,16 +105,9 @@ impl ParallelExecutable for Nezha {
         info!("Concurrent commit took {} ms for {} transactions.", time, scheduled_tx_len);
         info!("{} transactions are aborted.", aborted_tx_len);
 
-        ExecutionResult::new(digests)
+        digests
     }
-}
-
-impl Nezha {
-    pub fn new(global_state: Arc<RwLock<MemoryStorage>>) -> Self {
-        Self {
-            global_state,
-        }
-    }
+    
     //TODO: create Simulator having a thread pool for cpu-bound jobs.
     fn _simulate(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> SimulationResult {
         let local_state = self.global_state.read();
@@ -98,7 +149,7 @@ impl Nezha {
                 .collect();
 
             let _ = tx.send(result);
-        }).join().ok();
+        }).join().expect("fail to join the simulation thread.");
 
         match rx.recv() {
             Ok(rw_sets) => {
@@ -134,7 +185,17 @@ impl Nezha {
         //     }
         // });
     }
+
+    fn remaining_capacity(&self) -> usize {
+        self.concurrency_level - self.pending_batches.len()
+    }
+
+    fn is_full(&self) -> bool {
+        self.pending_batches.len() >= self.concurrency_level
+    }
 }
+
+
 
 pub(crate) struct ScheduledInfo {
     pub scheduled_txs: Vec<Vec<SimulatedTransaction>>,  

@@ -74,7 +74,11 @@ async fn main() -> Result<(), eyre::Report> {
                 .args_from_usage("--workers=<FILE> 'The file containing worker information'")
                 .args_from_usage("--parameters=[FILE] 'The file containing the node parameters'")
                 .args_from_usage("--store=<PATH> 'The path where to create the data store'")
-                .subcommand(SubCommand::with_name("primary").about("Run a single primary"))
+                .subcommand(
+                    SubCommand::with_name("primary")
+                    .about("Run a single primary")
+                    .args_from_usage("--concurrency-level=<INT> 'The number of transactions to execute in parallel, especially for NEZHA'")
+                )
                 .subcommand(
                     SubCommand::with_name("worker")
                         .about("Run a single worker")
@@ -252,6 +256,16 @@ async fn run(
     let workers_file = matches.value_of("workers").unwrap();
     let parameters_file = matches.value_of("parameters");
     let store_path = matches.value_of("store").unwrap();
+    let concurrency_level = match matches.subcommand() {
+        ("primary", Some(sub_matches)) => {
+            sub_matches
+                .value_of("concurrency-level")
+                .unwrap()
+                .parse::<usize>()
+                .context("The concurrency level must be a positive integer")?
+        }
+        _ => 10,
+    };
 
     // Read the workers and node's keypair from file.
     let worker_cache =
@@ -283,7 +297,7 @@ async fn run(
             let (tx_consensus_certificate, rx_consensus_certificate) = tokio::sync::mpsc::channel(100);
 
             let execution_store = Arc::new(RwLock::new(MemoryStorage::default(SpecId::ISTANBUL)));
-            let execution_model = Nezha::new(execution_store);
+            let execution_model = Nezha::new(execution_store, concurrency_level);
             let executor = ParallelExecutor::new(
                 rx_consensus_certificate,
                 execution_model

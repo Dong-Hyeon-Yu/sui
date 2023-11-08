@@ -286,6 +286,12 @@ class BenchParameters:
             else:
                 self.failpoints = False
 
+            clevel = json['concurrency_level']
+            clevel = clevel if isinstance(clevel, list) else [clevel]
+            if not clevel or any(x < 1 for x in clevel):
+                raise ConfigError('Missing or invalid number of concurrency level')
+            self.concurrency_level = [int(x) for x in clevel]
+
             self.runs = int(json['runs']) if 'runs' in json else 1
         except KeyError as e:
             raise ConfigError(f'Malformed bench parameters: missing key {e}')

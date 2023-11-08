@@ -14,7 +14,7 @@ pub(crate) const DEFAULT_EVM_MEMORY_LIMIT:usize = usize::MAX;
 
 
 pub trait ParallelExecutable {
-    fn execute(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> ExecutionResult;
+    fn execute(&mut self, consensus_output: Vec<ExecutableEthereumBatch>) -> ExecutionResult;
 }
 
 

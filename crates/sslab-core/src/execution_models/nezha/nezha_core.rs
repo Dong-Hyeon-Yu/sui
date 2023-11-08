@@ -58,14 +58,12 @@ impl ConcurrencyLevelManager {
         let mut result = vec![];
 
         if self.remaining_capacity() > consensus_output.len() {
-            warn!("capacity is not fulled. transacion execution is delayed.");
             self.pending_batches.extend(consensus_output);
         }
         else {
             let mut target = consensus_output;
 
             while !target.is_empty() {
-                warn!("target len: {}", target.len());
                 let split_idx = std::cmp::min(self.remaining_capacity(), target.len());
                 let remains: Vec<ExecutableEthereumBatch> = target.split_off(split_idx);
                 self.pending_batches.extend(target);
@@ -134,11 +132,10 @@ impl ConcurrencyLevelManager {
             let result : Vec<SimulatedTransaction> = tx_list
                 .par_iter()
                 .filter_map(|tx| {
-                    let mut executor = snapshot.executor(tx.gas_limit(), true);
                     match EvmExecutionUtils::execute_tx(tx, &snapshot, true) {
-                        Ok(Some((effect, log))) => {
-                            let rw_set = executor.rw_set().expect("rw_set must be exist in simulation mode.");
-                            Some(SimulatedTransaction::new(tx.id(), Some(rw_set.to_owned()), effect, log))
+                        Ok(Some((effect, log, rw_set))) => {
+                            
+                            Some(SimulatedTransaction::new(tx.id(), Some(rw_set.unwrap()), effect, log))
                         },
                         _ => {
                             warn!("fail to execute a transaction {}", tx.id());

@@ -292,11 +292,11 @@ def LAN(ctx, debug=False):
         'nodes': [4],
         'workers': 1,
         'collocate': True,
-        'rate': [50_000, 100_000, 150_000],# 150_000, 200_000, 250_000],
+        'rate': [50_000, 100_000, 150_000, 200_000, 250_000],
         'tx_size': 270,
         'duration': 100,
         'runs': 1,
-        'concurrency_level': [1, 10, 20, 30],
+        'concurrency_level': [1, 5, 10, 15, 20, 25, 30],
     }
     node_params = {
         'header_num_of_batches_threshold': 32,

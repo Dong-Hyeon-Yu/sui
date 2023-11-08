@@ -10,12 +10,12 @@ use ethers_signers::{LocalWallet, Signer};
 use narwhal_types::{TransactionsClient, TransactionProto, Empty};
 use sha3::{Keccak256, Digest};
 use sui_network::tonic::{transport::Channel, self};
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::workloads::smallbank::contract::SmallBank;
 // use crate::SMALLBANK_BYTECODE;
 
-pub const DEPLOYED_BYTECODE: &str = include_str!("../../contracts/DeployedSmallBank.bin");
+
 pub const CONTRACT_BYTECODE: &str = include_str!("../../contracts/SmallBank.bin");
 pub const ADMIN_SECRET_KEY: &[u8] = &[95 as u8, 126, 251, 131, 73, 90, 235, 201, 21, 22, 203, 137, 149, 240, 205, 60, 221, 27, 81, 53, 2, 200, 90, 185, 25, 240, 166, 21, 177, 41, 49, 254];
 // pub const ADMIN_ADDRESS: &str = "0xe14de1592b52481b94b99df4e9653654e14fffb6";
@@ -64,6 +64,7 @@ impl SmallBankTransactionHandler {
     pub fn new(provider: Provider<Http>, narwhal_client: TransactionsClient<Channel>, chain_id: u64) -> SmallBankTransactionHandler {
         let nonce_gen = Uniform::new(u64::MIN, u64::MAX);
 
+        warn!("contract address: {}", H160::from_str(DEFAULT_CONTRACT_ADDRESS).unwrap());
         SmallBankTransactionHandler {
             op_gen: Uniform::new(0, 6),
             nonce_gen,
@@ -184,6 +185,7 @@ impl SmallBankTransactionHandler {
         };
 
         tx.set_from(self.admin_wallet.address())
+            .set_to(H160::from_str(DEFAULT_CONTRACT_ADDRESS).unwrap())
             .set_chain_id(self.chain_id)
             .set_nonce(self.get_random_nonce())
             .set_gas(u64::MAX)

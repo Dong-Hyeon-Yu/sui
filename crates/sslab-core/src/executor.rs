@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use evm::{ExitReason, backend::{Apply, Log}};
+use evm::{ExitReason, backend::{Apply, Log}, executor::stack::RwSet};
 use sui_types::error::SuiError;
 use tokio::sync::mpsc::Receiver;
 use tracing::{debug, warn, trace, info};
@@ -84,7 +84,7 @@ pub struct EvmExecutionUtils;
 
 #[allow(dead_code)]
 impl EvmExecutionUtils {
-    pub fn execute_tx(tx: &EthereumTransaction, snapshot: &MemoryStorage, simulate: bool) -> Result<Option<(Vec<Apply>, Vec<Log>)>, SuiError> {
+    pub fn execute_tx(tx: &EthereumTransaction, snapshot: &MemoryStorage, simulate: bool) -> Result<Option<(Vec<Apply>, Vec<Log>, Option<RwSet>)>, SuiError> {
         let mut executor = snapshot.executor(tx.gas_limit(), simulate);
 
         let mut effect: Vec<Apply> = vec![];
@@ -103,8 +103,15 @@ impl EvmExecutionUtils {
                         return Ok(None);
                     } else {
                         // debug!("success to execute a transaction {}", tx.id());
+                        let rw_set = match executor.rw_set() {
+                            Some(rw_set) => rw_set.to_owned(),
+                            None => {
+                                return Ok(None);
+                            }
+                        };
+                        // warn!("rw_set: {:?}", rw_set);
                         (effect, log) = executor.into_state().deconstruct();
-                        return Ok(Some((effect, log)));
+                        return Ok(Some((effect, log, Some(rw_set))));
                     }
                 },
                 Err(e) => return Err(e)
@@ -122,7 +129,7 @@ impl EvmExecutionUtils {
                         } else {
                             debug!("success to deploy a contract!");
                             (effect, log) = executor.into_state().deconstruct();
-                            return Ok(Some((effect, log)));
+                            return Ok(Some((effect, log, Some(RwSet::new()))));
                         }
                     },
                     Err(e) => return Err(e)
@@ -144,7 +151,7 @@ impl EvmExecutionUtils {
                     data: vec![],
                 });
                 // Self::_process_local_effect(store, effect, log, &mut effects, &mut logs);
-                return Ok(Some((effect, log)));
+                return Ok(Some((effect, log, Some(RwSet::new()))));
             }
         }
     }

@@ -187,10 +187,10 @@ impl Client {
 
         let provider = Provider::<Http>::connect(self.target.as_str()).await;
         let mut handler = SmallBankTransactionHandler::new(provider, client.clone(), DEFAULT_CHAIN_ID);
-        if let Err(e) = handler.init().await {
-            warn!("Failed to initialize workload handler: {e}");
-            return Err(e.into());
-        }
+        // if let Err(e) = handler.init().await {
+        //     warn!("Failed to initialize workload handler: {e}");
+        //     return Err(e.into());
+        // }
         let handler = Arc::new(handler);
 
 

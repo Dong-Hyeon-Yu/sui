@@ -296,7 +296,16 @@ async fn run(
 
             let (tx_consensus_certificate, rx_consensus_certificate) = tokio::sync::mpsc::channel(100);
 
-            let execution_store = Arc::new(RwLock::new(MemoryStorage::default(SpecId::ISTANBUL)));
+            cfg_if::cfg_if! {
+                if #[cfg(feature = "benchmark")] {
+                    use sslab_core::utils::smallbank_contract_benchmark::default_memory_storage;
+                    let memory_storage = default_memory_storage();
+                } else {
+                    let memory_storage = MemoryStorage::default(SpecId::ISTANBUL);
+                }
+            }
+
+            let execution_store = Arc::new(RwLock::new(memory_storage));
             let execution_model = Nezha::new(execution_store, concurrency_level);
             let executor = ParallelExecutor::new(
                 rx_consensus_certificate,

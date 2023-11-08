@@ -128,8 +128,12 @@ impl ExecutableConsensusOutput {
         &self.digest
     }
 
-    pub fn data(self) -> Vec<ExecutableEthereumBatch> {
+    pub fn take_data(self) -> Vec<ExecutableEthereumBatch> {
         self.data
+    }
+
+    pub fn data(&self) -> &Vec<ExecutableEthereumBatch> {
+        &self.data
     }
 
     pub fn timestamp(&self) -> &u64 {

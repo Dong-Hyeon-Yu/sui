@@ -74,8 +74,9 @@ class LogParser:
             chain(*request_vote_outbound_latencies))
         
         # execution metrics
-        commits = execution_results
+        commits, latencies = zip(*execution_results)
         self.commits = self._merge_results([x.items() for x in commits])
+        self.execution_latencies = self._merge_results([x.items() for x in latencies])
 
         # Parse the workers logs.
         try:
@@ -143,11 +144,15 @@ class LogParser:
         if search(r'(?:panicked)', log) is not None:
             raise ParseError('Primary(s) panicked')
 
-        tmp = findall(r'(.*?) .* Executed Batch -> ([^ ]+=)', log)
-        tmp = [(digest, self._to_posix(t)) for t, digest in tmp]
-        commits = self._merge_results([tmp])
+        tmp = findall(r'(.*?) .* Executed Batch \(took (\d+) ms\) -> ([^ ]+=)', log)
+        end = [(digest, self._to_posix(t)) for t, _, digest in tmp]
+        commits = self._merge_results([end])
 
-        return commits
+        latencies = [(digest, int(latency)) for _, latency, digest in tmp]
+
+        latencies = self._merge_results([latencies])
+
+        return commits, latencies
 
     def _parse_consensus(self, log):
         if search(r'(?:panicked)', log) is not None:
@@ -264,8 +269,8 @@ class LogParser:
         return tps, bps, duration
     
     def _execution_latency(self):
-        latency = [c - self.orders[d] for d, c in self.commits.items()]
-        return mean(latency) if latency else 0
+        latencies = self.execution_latencies.values()
+        return mean(latencies) if latencies else 0
 
 
     def _end_to_end_throughput(self):
@@ -302,7 +307,7 @@ class LogParser:
 
         consensus_latency = self._consensus_latency() * 1_000
         consensus_tps, consensus_bps, duration = self._consensus_throughput()
-        execution_latency = self._execution_latency() * 1_000
+        execution_latency = self._execution_latency()
         execution_tps, execution_bps, _ = self._execution_throughput()
         end_to_end_tps, end_to_end_bps, _ = self._end_to_end_throughput()
         end_to_end_latency = self._end_to_end_latency() * 1_000

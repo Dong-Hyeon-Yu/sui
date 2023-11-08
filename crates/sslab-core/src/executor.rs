@@ -39,18 +39,20 @@ impl<ExecutionModel: ParallelExecutable + Send + Sync> ExecutionComponent for Pa
         loop {
             tokio::select! {
                 Some(consensus_output) = self.rx_consensus_certificate.recv() => {
-                    info!(
+                    debug!(
                         "Received consensus output at leader round {}, subdag index {}, timestamp {} ",
                         consensus_output.round(),
                         consensus_output.sub_dag_index(),
                         consensus_output.timestamp(),
                     );
                     
-                    let digests = self.execute(consensus_output.data());
-                    
+                    let now = tokio::time::Instant::now();
+                    let digests = self.execution_model.execute(consensus_output.take_data());
+                    let execution_latency = now.elapsed().as_millis();
+
                     // NOTE: This log entry is used to compute performance.
                     digests.iter().for_each(|digest|
-                        info!("Executed Batch -> {:?}", digest)
+                        info!("Executed Batch (took {} ms) -> {:?}", execution_latency, digest)
                     );
                 }
 
@@ -74,10 +76,6 @@ impl<ExecutionModel: ParallelExecutable + Send + Sync> ParallelExecutor<Executio
             // rx_shutdown,
             execution_model
         }
-    }
-
-    fn execute(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> ExecutionResult {
-        self.execution_model.execute(consensus_output)
     }
 }
 

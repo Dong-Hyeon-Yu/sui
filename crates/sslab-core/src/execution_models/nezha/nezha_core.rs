@@ -2,6 +2,7 @@ use std::{sync::Arc, rc::Rc};
 use itertools::Itertools;
 use parking_lot::RwLock;
 use rayon::prelude::*;
+use tokio::time::Instant;
 use tracing::{info, debug, warn, error};
 
 use crate::{
@@ -22,20 +23,29 @@ pub struct Nezha {
 
 impl ParallelExecutable for Nezha {
     fn execute(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> ExecutionResult {
-        info!("Simulation started.");
-        let SimulationResult { digests, rw_sets } = self._simulate(consensus_output);
-        info!("Simulation finished.");
 
-        info!("Nezha started.");
+        let mut now = Instant::now();
+        let SimulationResult { digests, rw_sets } = self._simulate(consensus_output);
+        let mut time = now.elapsed().as_millis();
+        info!("Simulation took {} ms for {} transactions.", time, rw_sets.len());
+
+        now = Instant::now();
         let scheduled_info = AddressBasedConflictGraph::construct(rw_sets)
             .hierarchcial_sort()
             .reorder()
             .extract_schedule();
-        info!("Nezha finished.");
+        time = now.elapsed().as_millis();
+        info!("Scheduling took {} ms.", time);
 
-        info!("Concurrent commit started.");
+        let scheduled_tx_len = scheduled_info.scheduled_txs_len();
+        let aborted_tx_len =  scheduled_info.aborted_txs_len();
+
+        now = Instant::now();
         self._concurrent_commit(scheduled_info);
-        info!("Concurrent commit finished.");
+        time = now.elapsed().as_millis();
+
+        info!("Concurrent commit took {} ms for {} transactions.", time, scheduled_tx_len);
+        info!("{} transactions are aborted.", aborted_tx_len);
 
         ExecutionResult::new(digests)
     }
@@ -111,7 +121,6 @@ impl Nezha {
                 storage.apply_local_effect(effects, logs);
             });
 
-        info!("{} transactions are aborted.", scheduled_info.aborted_txs.len());
         // let (tx, rx) = std::sync::mpsc::channel::<Vec<SimulatedTransaction>>();
 
         // let thread = std::thread::spawn(move || {
@@ -170,6 +179,14 @@ impl ScheduledInfo {
         Rc::try_unwrap(tx).unwrap_or_else(|tx| 
             panic!("fail to unwrap transaction. (strong:{}, weak:{}", Rc::strong_count(&tx), Rc::weak_count(&tx))
         )
+    }
+
+    fn scheduled_txs_len(&self) -> usize {
+        self.scheduled_txs.iter().map(|vec| vec.len()).sum()
+    }
+
+    fn aborted_txs_len(&self) -> usize {
+        self.aborted_txs.len()
     }
 }
 

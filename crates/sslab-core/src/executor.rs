@@ -14,12 +14,12 @@ pub(crate) const DEFAULT_EVM_STACK_LIMIT:usize = 1024;
 pub(crate) const DEFAULT_EVM_MEMORY_LIMIT:usize = usize::MAX; 
 
 #[async_trait::async_trait]
-pub trait ParallelExecutable {
+pub trait Executable {
     async fn execute(&mut self, consensus_output: Vec<ExecutableEthereumBatch>, tx_execute_notification: &mut Sender<ExecutionResult>);
 }
 
 
-pub struct ParallelExecutor<ExecutionModel: ParallelExecutable + Send + Sync> { 
+pub struct ParallelExecutor<ExecutionModel: Executable + Send + Sync> { 
 
     rx_consensus_certificate: Receiver<ExecutableConsensusOutput>, 
 
@@ -34,7 +34,7 @@ pub trait ExecutionComponent {
 }
 
 #[async_trait::async_trait]
-impl<ExecutionModel: ParallelExecutable + Send + Sync> ExecutionComponent for ParallelExecutor<ExecutionModel> {
+impl<ExecutionModel: Executable + Send + Sync> ExecutionComponent for ParallelExecutor<ExecutionModel> {
     async fn run(&mut self) {
 
         let (mut tx_execute_notification, mut rx_execute_notification) = tokio::sync::mpsc::channel::<ExecutionResult>(100);
@@ -69,7 +69,7 @@ impl<ExecutionModel: ParallelExecutable + Send + Sync> ExecutionComponent for Pa
     }
 }
 
-impl<ExecutionModel: ParallelExecutable + Send + Sync> ParallelExecutor<ExecutionModel> {
+impl<ExecutionModel: Executable + Send + Sync> ParallelExecutor<ExecutionModel> {
     pub fn new(
         rx_consensus_certificate: Receiver<ExecutableConsensusOutput>, 
         // rx_shutdown: ConditionalBroadcastReceiver,
@@ -204,7 +204,7 @@ impl EvmExecutionUtils {
         }
     }
     
-    fn process_local_effect(store: &mut MemoryStorage, effect: Vec<Apply>, log: Vec<Log>, effects: &mut Vec<Apply>, logs: &mut Vec<Log>) {
+    pub fn process_local_effect(store: &mut MemoryStorage, effect: Vec<Apply>, log: Vec<Log>, effects: &mut Vec<Apply>, logs: &mut Vec<Log>) {
         trace!("process_local_effect: {effect:?}");
         effects.extend(effect.clone());
         logs.extend(log.clone());

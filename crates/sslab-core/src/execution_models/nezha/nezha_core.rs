@@ -8,7 +8,7 @@ use tracing::{info, debug, warn, error};
 
 use crate::{
     types::{ExecutableEthereumBatch, ExecutionResult}, 
-    executor::{EvmExecutionUtils, ParallelExecutable}, 
+    executor::{EvmExecutionUtils, Executable}, 
     execution_storage::{ExecutionBackend, MemoryStorage}, 
     execution_models::nezha::{
         address_based_conflict_graph::AddressBasedConflictGraph, 
@@ -23,7 +23,7 @@ pub struct Nezha {
 }
 
 #[async_trait::async_trait]
-impl ParallelExecutable for Nezha {
+impl Executable for Nezha {
     async fn execute(&mut self, consensus_output: Vec<ExecutableEthereumBatch>, tx_execute_notification: &mut Sender<ExecutionResult>) {
 
         match self.inner.prepare_execution(consensus_output) {

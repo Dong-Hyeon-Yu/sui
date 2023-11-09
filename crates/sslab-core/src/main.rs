@@ -21,6 +21,7 @@ use narwhal_network::client::{WorkerNetworkClient, PrimaryNetworkClient};
 use node::metrics::{primary_metrics_registry, start_prometheus_server, worker_metrics_registry};
 use parking_lot::RwLock;
 use prometheus::Registry;
+use sslab_core::execution_models::serial::SerialExecutor;
 use sslab_core::executor::ParallelExecutor;
 use sslab_core::execution_models::nezha::Nezha;
 use sslab_core::types::SpecId;
@@ -306,7 +307,13 @@ async fn run(
             }
 
             let execution_store = Arc::new(RwLock::new(memory_storage));
-            let execution_model = Nezha::new(execution_store, concurrency_level);
+
+
+            let execution_model = SerialExecutor::new(execution_store);
+
+            // let execution_model = Nezha::new(execution_store, concurrency_level);
+            
+            
             let executor = ParallelExecutor::new(
                 rx_consensus_certificate,
                 execution_model

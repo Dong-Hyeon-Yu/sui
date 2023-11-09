@@ -144,11 +144,14 @@ class LogParser:
         if search(r'(?:panicked)', log) is not None:
             raise ParseError('Primary(s) panicked')
 
-        tmp = findall(r'(.*?) .* Executed Batch \(took (\d+) ms\) -> ([^ ]+=)', log)
-        end = [(digest, self._to_posix(t)) for t, _, digest in tmp]
+        tmp = findall(r'(.*?) .* Received Batch -> ([^ ]+=)', log)
+        start = [(digest, self._to_posix(t)) for t, digest in tmp]
+
+        tmp = findall(r'(.*?) .* Executed Batch -> ([^ ]+=)', log)
+        end = [(digest, self._to_posix(t)) for t, digest in tmp]
         commits = self._merge_results([end])
 
-        latencies = [(digest, int(latency)) for _, latency, digest in tmp]
+        latencies = [(digest, e - s) for digest, s in start for d, e in end if digest == d]
 
         latencies = self._merge_results([latencies])
 
@@ -307,7 +310,7 @@ class LogParser:
 
         consensus_latency = self._consensus_latency() * 1_000
         consensus_tps, consensus_bps, duration = self._consensus_throughput()
-        execution_latency = self._execution_latency()
+        execution_latency = self._execution_latency() * 1_000
         execution_tps, execution_bps, _ = self._execution_throughput()
         end_to_end_tps, end_to_end_bps, _ = self._end_to_end_throughput()
         end_to_end_latency = self._end_to_end_latency() * 1_000

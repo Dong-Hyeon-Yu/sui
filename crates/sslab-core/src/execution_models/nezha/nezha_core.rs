@@ -3,7 +3,7 @@ use itertools::Itertools;
 use narwhal_types::BatchDigest;
 use parking_lot::RwLock;
 use rayon::prelude::*;
-use tokio::time::Instant;
+use tokio::{time::Instant, sync::mpsc::Sender};
 use tracing::{info, debug, warn, error};
 
 use crate::{
@@ -19,21 +19,26 @@ use crate::{
 use super::{types::SimulatedTransaction, address_based_conflict_graph::{Transaction, FastHashMap}};
 
 pub struct Nezha {
-    inner: ConcurrencyLevelManager
+    inner: ConcurrencyLevelManager,
 }
 
+#[async_trait::async_trait]
 impl ParallelExecutable for Nezha {
-    fn execute(&mut self, consensus_output: Vec<ExecutableEthereumBatch>) -> ExecutionResult {
+    async fn execute(&mut self, consensus_output: Vec<ExecutableEthereumBatch>, tx_execute_notification: &mut Sender<ExecutionResult>) {
 
-        // ExecutionResult::new(self.inner._execute(consensus_output))  // this is the original case w/o adjusting concurrency level.
-        self.inner.prepare_execution(consensus_output)
+        match self.inner.prepare_execution(consensus_output) {
+            Some(result) => {
+                let _ = tx_execute_notification.send(result).await;
+            },
+            None => {}
+        }
     }
 }
 
 impl Nezha {
     pub fn new(global_state: Arc<RwLock<MemoryStorage>>, concurrency_level: usize) -> Self {
         Self {
-            inner: ConcurrencyLevelManager::new(global_state, concurrency_level)
+            inner: ConcurrencyLevelManager::new(global_state, concurrency_level),
         }
     }
 }
@@ -54,29 +59,31 @@ impl ConcurrencyLevelManager {
         }
     }
 
-    fn prepare_execution(&mut self, consensus_output: Vec<ExecutableEthereumBatch>) -> ExecutionResult {
-        let mut result = vec![];
+    fn prepare_execution(&mut self, consensus_output: Vec<ExecutableEthereumBatch>) -> Option<ExecutionResult> {
+        
 
         if self.remaining_capacity() > consensus_output.len() {
             self.pending_batches.extend(consensus_output);
-        }
-        else {
-            let mut target = consensus_output;
 
-            while !target.is_empty() {
-                let split_idx = std::cmp::min(self.remaining_capacity(), target.len());
-                let remains: Vec<ExecutableEthereumBatch> = target.split_off(split_idx);
-                self.pending_batches.extend(target);
-                target = remains;
-
-                if self.is_full() {
-                    let to_be_executed = self.pending_batches.drain(..).collect_vec();
-                    result.extend(self._execute(to_be_executed));
-                }
-            } 
+            return None;
         }
 
-        ExecutionResult::new(result)
+        let mut result = vec![];
+        let mut target = consensus_output;
+    
+        while !target.is_empty() {
+            let split_idx = std::cmp::min(self.remaining_capacity(), target.len());
+            let remains: Vec<ExecutableEthereumBatch> = target.split_off(split_idx);
+            self.pending_batches.extend(target);
+            target = remains;
+
+            if self.is_full() {
+                let to_be_executed = self.pending_batches.drain(..).collect_vec();
+                result.extend(self._execute(to_be_executed));
+            }
+        } 
+        
+        Some(ExecutionResult::new(result))
     }
 
     fn _execute(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> Vec<BatchDigest> {

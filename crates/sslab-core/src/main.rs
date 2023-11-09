@@ -41,8 +41,6 @@ use tracing::subscriber::set_global_default;
 #[cfg(feature = "benchmark")]
 use tracing_subscriber::filter::{EnvFilter, LevelFilter};
 
-use sslab_core::execution_storage::MemoryStorage;
-
 #[tokio::main]
 async fn main() -> Result<(), eyre::Report> {
     let matches = App::new(crate_name!())
@@ -295,12 +293,14 @@ async fn run(
             let client = WorkerNetworkClient::new_from_keypair(&primary_network_keypair);
 
             let (tx_consensus_certificate, rx_consensus_certificate) = tokio::sync::mpsc::channel(100);
+            
 
             cfg_if::cfg_if! {
                 if #[cfg(feature = "benchmark")] {
                     use sslab_core::utils::smallbank_contract_benchmark::default_memory_storage;
                     let memory_storage = default_memory_storage();
                 } else {
+                    use sslab_core::execution_storage::MemoryStorage;
                     let memory_storage = MemoryStorage::default(SpecId::ISTANBUL);
                 }
             }

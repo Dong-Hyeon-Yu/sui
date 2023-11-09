@@ -1,7 +1,8 @@
 use std::collections::BTreeMap;
 use evm::{ExitReason, backend::{Apply, Log}, executor::stack::RwSet};
+use mysten_metrics::spawn_monitored_task;
 use sui_types::error::SuiError;
-use tokio::sync::mpsc::Receiver;
+use tokio::sync::mpsc::{Receiver, Sender};
 use tracing::{debug, warn, trace, info};
 
 use crate::{
@@ -12,9 +13,9 @@ use crate::{
 pub(crate) const DEFAULT_EVM_STACK_LIMIT:usize = 1024;
 pub(crate) const DEFAULT_EVM_MEMORY_LIMIT:usize = usize::MAX; 
 
-
+#[async_trait::async_trait]
 pub trait ParallelExecutable {
-    fn execute(&mut self, consensus_output: Vec<ExecutableEthereumBatch>) -> ExecutionResult;
+    async fn execute(&mut self, consensus_output: Vec<ExecutableEthereumBatch>, tx_execute_notification: &mut Sender<ExecutionResult>);
 }
 
 
@@ -34,34 +35,37 @@ pub trait ExecutionComponent {
 
 #[async_trait::async_trait]
 impl<ExecutionModel: ParallelExecutable + Send + Sync> ExecutionComponent for ParallelExecutor<ExecutionModel> {
-    async fn run(&mut self) 
-    {
-        loop {
-            tokio::select! {
-                Some(consensus_output) = self.rx_consensus_certificate.recv() => {
-                    debug!(
-                        "Received consensus output at leader round {}, subdag index {}, timestamp {} ",
-                        consensus_output.round(),
-                        consensus_output.sub_dag_index(),
-                        consensus_output.timestamp(),
-                    );
-                    
-                    let now = tokio::time::Instant::now();
-                    let digests = self.execution_model.execute(consensus_output.take_data());
-                    let execution_latency = now.elapsed().as_millis();
+    async fn run(&mut self) {
 
-                    // NOTE: This log entry is used to compute performance.
-                    digests.iter().for_each(|digest|
-                        info!("Executed Batch (took {} ms) -> {:?}", execution_latency, digest)
-                    );
-                }
+        let (mut tx_execute_notification, mut rx_execute_notification) = tokio::sync::mpsc::channel::<ExecutionResult>(100);
 
-                // _ = self.rx_shutdown.receiver.recv() => {
-                //     info!("Shutdown signal received. Exiting parallel simulator ...");
-                //     break;
-                // }
+        spawn_monitored_task!(async move {
+            while let Some(digests) = rx_execute_notification.recv().await {
+
+                // NOTE: This log entry is used to compute performance.
+                digests.iter().for_each(|batch_digest| 
+                    info!("Executed Batch -> {:?}", batch_digest)
+                );
             }
+        });
+
+        
+        while let Some(consensus_output) = self.rx_consensus_certificate.recv().await {
+            debug!(
+                "Received consensus output at leader round {}, subdag index {}, timestamp {} ",
+                consensus_output.round(),
+                consensus_output.sub_dag_index(),
+                consensus_output.timestamp(),
+            );
+
+            // NOTE: This log entry is used to compute performance.
+            consensus_output.data().iter().for_each(|batch_digest| 
+                info!("Received Batch -> {:?}", batch_digest.digest())
+            );
+            
+            self.execution_model.execute(consensus_output.take_data(), &mut tx_execute_notification).await;
         }
+        
     }
 }
 

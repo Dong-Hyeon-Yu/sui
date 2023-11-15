@@ -74,9 +74,10 @@ class LogParser:
             chain(*request_vote_outbound_latencies))
         
         # execution metrics
-        commits, latencies = zip(*execution_results)
+        commits, latencies, subdag_size = zip(*execution_results)
         self.commits = self._merge_results([x.items() for x in commits])
         self.execution_latencies = self._merge_results([x.items() for x in latencies])
+        self.subdag_size = self._merge_results([x.items() for x in subdag_size])
 
         # Parse the workers logs.
         try:
@@ -143,6 +144,10 @@ class LogParser:
     def _parse_executions(self, log):
         if search(r'(?:panicked)', log) is not None:
             raise ParseError('Primary(s) panicked')
+        
+        tmp = findall(r'.*? .* Received consensus_output has (\d+) batches at subdag_index (\d+).', log)
+        subdag_size = [(i, int(s)) for s, i in tmp]
+        subdag_size = self._merge_results([subdag_size])
 
         tmp = findall(r'(.*?) .* Received Batch -> ([^ ]+=)', log)
         start = [(digest, self._to_posix(t)) for t, digest in tmp]
@@ -155,7 +160,7 @@ class LogParser:
 
         latencies = self._merge_results([latencies])
 
-        return commits, latencies
+        return commits, latencies, subdag_size
 
     def _parse_consensus(self, log):
         if search(r'(?:panicked)', log) is not None:
@@ -361,6 +366,9 @@ class LogParser:
             f' Header to certificate avg latency: {round(header_to_cert_latency):,} ms\n'
             f' \tRequest vote outbound avg latency: {round(request_vote_outbound_latency):,} ms\n'
             f' Average Batch size: {round(mean(self.sizes.values())/1024)} KB\n'
+            f' Average Subdag size: {round(mean(self.subdag_size.values()))} \n'
+            f' \tMax Subdag size: {max(self.subdag_size.values())} \n'
+            f' \tMin Subdag size: {min(self.subdag_size.values())} \n'
             f' Average Transaction size: {round(sum(self.sizes.values()) / self.total_ordered_tx)} B\n'
             f' \tActual Sending Rate: {round(self.total_sending_tx / duration):,} tx/s\n'
             f' \tTotal Sending Transactions: {self.total_sending_tx} tx\n'

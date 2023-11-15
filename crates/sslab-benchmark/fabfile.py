@@ -22,9 +22,9 @@ def local(ctx, debug=False):
         'nodes': 4,
         'workers': 1,
         'rate': 250_000,
-        'duration': 20,
+        'duration': 60,
         'concurrency_level': 10,
-        'execution_model': ExecutionModel.SERIAL,
+        'execution_model': ExecutionModel.NEZHA,
     }
     node_params = {
         'header_num_of_batches_threshold': 32,

@@ -59,6 +59,9 @@ impl<ExecutionModel: Executable + Send + Sync> ExecutionComponent for ParallelEx
             );
 
             // NOTE: This log entry is used to compute performance.
+            info!("Received consensus_output has {} batches at subdag_index {}.", consensus_output.data().len(), consensus_output.sub_dag_index());
+
+            // NOTE: This log entry is used to compute performance.
             consensus_output.data().iter().for_each(|batch_digest| 
                 info!("Received Batch -> {:?}", batch_digest.digest())
             );

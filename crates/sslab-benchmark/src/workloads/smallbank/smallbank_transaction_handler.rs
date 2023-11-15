@@ -10,7 +10,7 @@ use ethers_signers::{LocalWallet, Signer};
 use narwhal_types::{TransactionsClient, TransactionProto, Empty};
 use sha3::{Keccak256, Digest};
 use sui_network::tonic::{transport::Channel, self};
-use tracing::{info, warn};
+use tracing::info;
 
 use crate::workloads::smallbank::contract::SmallBank;
 // use crate::SMALLBANK_BYTECODE;
@@ -64,7 +64,7 @@ impl SmallBankTransactionHandler {
     pub fn new(provider: Provider<Http>, narwhal_client: TransactionsClient<Channel>, chain_id: u64) -> SmallBankTransactionHandler {
         let nonce_gen = Uniform::new(u64::MIN, u64::MAX);
 
-        warn!("contract address: {}", H160::from_str(DEFAULT_CONTRACT_ADDRESS).unwrap());
+        info!("contract address: {}", H160::from_str(DEFAULT_CONTRACT_ADDRESS).unwrap());
         SmallBankTransactionHandler {
             op_gen: Uniform::new(0, 6),
             nonce_gen,

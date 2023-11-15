@@ -43,18 +43,18 @@ class LocalBench:
 
         # Kill any previous testbed.
         self._kill_nodes()
-
+            
         try:
             Print.info('Setting up testbed...')
             nodes, rate = self.nodes[0], self.rate[0]
-
+        
             # Cleanup all files.
             cmd = f'{CommandMaker.clean_logs()} ; {CommandMaker.cleanup()}'
             subprocess.run([cmd], shell=True, stderr=subprocess.DEVNULL)
             sleep(0.5)  # Removing the store may take time.
 
             # Recompile the latest narwhal-node code.
-            cmd = CommandMaker.compile(failpoints=failpoints, release=release)
+            cmd = CommandMaker.compile(failpoints=failpoints, release=release, execution_model=self.execution_model)
             Print.info(f"About to run {cmd} at {PathMaker.node_crate_path()}...")
             subprocess.run(cmd, check=True, cwd=PathMaker.node_crate_path())
 
@@ -110,6 +110,7 @@ class LocalBench:
 
             self.node_parameters.print(PathMaker.parameters_file())
 
+            
             for concurrency_level in self.concurrency_level:
                 # Run the clients (they will wait for the nodes to be ready).
                 workers_addresses = worker_cache.workers_addresses(self.faults)

@@ -1,7 +1,7 @@
 {
     "key": {
         "name": "ansible",
-        "path": "/home/ydh9516/.ssh/ansible",
+        "path": "/home/sslab/.ssh/ansible",
         "passphrase": ""
     },
     "user": "nezha",

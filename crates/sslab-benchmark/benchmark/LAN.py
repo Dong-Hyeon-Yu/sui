@@ -156,6 +156,7 @@ class LANBench:
             f'(cd {self.settings.repo_name}/crates/sslab-benchmark&& {compile_cmd})',  
         ]
         if include_execution:
+            compile_cmd = ' '.join(CommandMaker.compile(execution_model=bench_parameters.execution_model))
             cmd += [f'(cd {self.settings.repo_name}/crates/sslab-core && {compile_cmd})']
         else:
             cmd += [f'(cd {self.settings.repo_name}/narwhal/node && {compile_cmd})']
@@ -394,7 +395,7 @@ class LANBench:
 
         # Update nodes.
         try:
-            self._update(selected_hosts, bench_parameters, True)
+            self._update(selected_hosts, bench_parameters)
         except (GroupException, ExecutionError) as e:
             e = FabricError(e) if isinstance(e, GroupException) else e
             raise BenchError('Failed to update nodes', e)

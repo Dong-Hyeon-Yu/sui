@@ -186,7 +186,7 @@ impl Client {
         tokio::pin!(interval);
 
         let provider = Provider::<Http>::connect(self.target.as_str()).await;
-        let mut handler = SmallBankTransactionHandler::new(provider, client.clone(), DEFAULT_CHAIN_ID);
+        let handler = SmallBankTransactionHandler::new(provider, client.clone(), DEFAULT_CHAIN_ID);
         // if let Err(e) = handler.init().await {
         //     warn!("Failed to initialize workload handler: {e}");
         //     return Err(e.into());

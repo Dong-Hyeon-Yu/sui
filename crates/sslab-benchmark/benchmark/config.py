@@ -286,6 +286,8 @@ class BenchParameters:
             else:
                 self.failpoints = False
 
+            self.execution_model = json['execution_model']
+
             clevel = json['concurrency_level']
             clevel = clevel if isinstance(clevel, list) else [clevel]
             if not clevel or any(x < 1 for x in clevel):

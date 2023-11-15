@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 from os.path import join
 
-from benchmark.utils import PathMaker
+from benchmark.utils import ExecutionModel, PathMaker
 
 
 class CommandMaker:
@@ -23,8 +23,11 @@ class CommandMaker:
         return f'rm -r {PathMaker.logs_path()} ; mkdir -p {PathMaker.logs_path()}'
 
     @staticmethod
-    def compile(failpoints=True, release=True):
+    def compile(failpoints=True, release=True, execution_model=None):
         cmd = ["cargo", "build", "--quiet","--features", "benchmark"]
+
+        if execution_model:
+            cmd = cmd + [cmd.pop(-1) + f" {execution_model}"]
 
         # if failpoints:
         #     cmd = cmd + [cmd.pop(-1) + " fail/failpoints"]

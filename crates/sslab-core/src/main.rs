@@ -23,8 +23,6 @@ use parking_lot::RwLock;
 use prometheus::Registry;
 use sslab_core::execution_models::serial::SerialExecutor;
 use sslab_core::executor::ParallelExecutor;
-use sslab_core::execution_models::nezha::Nezha;
-use sslab_core::types::SpecId;
 use sslab_core::{consensus_handler::SimpleConsensusHandler, transaction_validator::EthereumTxValidator};
 use sui_simulator::telemetry_subscribers;
 use std::sync::Arc;
@@ -255,16 +253,6 @@ async fn run(
     let workers_file = matches.value_of("workers").unwrap();
     let parameters_file = matches.value_of("parameters");
     let store_path = matches.value_of("store").unwrap();
-    let concurrency_level = match matches.subcommand() {
-        ("primary", Some(sub_matches)) => {
-            sub_matches
-                .value_of("concurrency-level")
-                .unwrap()
-                .parse::<usize>()
-                .context("The concurrency level must be a positive integer")?
-        }
-        _ => 10,
-    };
 
     // Read the workers and node's keypair from file.
     let worker_cache =
@@ -301,6 +289,8 @@ async fn run(
                     use sslab_core::utils::smallbank_contract_benchmark::default_memory_storage;
                     let memory_storage = default_memory_storage();
                 } else {
+                    use sslab_core::types::SpecId;
+                    
                     use sslab_core::execution_storage::MemoryStorage;
                     let memory_storage = MemoryStorage::default(SpecId::ISTANBUL);
                 }
@@ -309,9 +299,27 @@ async fn run(
             let execution_store = Arc::new(RwLock::new(memory_storage));
 
 
-            let execution_model = SerialExecutor::new(execution_store);
+            cfg_if::cfg_if! {
+                if #[cfg(feature = "nezha")] {
+                    use sslab_core::execution_models::nezha::Nezha;
 
-            // let execution_model = Nezha::new(execution_store, concurrency_level);
+                    let concurrency_level = match matches.subcommand() {
+                        ("primary", Some(sub_matches)) => {
+                            sub_matches
+                                .value_of("concurrency-level")
+                                .unwrap()
+                                .parse::<usize>()
+                                .context("The concurrency level must be a positive integer")?
+                        }
+                        _ => 10,
+                    };
+
+                    let execution_model = Nezha::new(execution_store, concurrency_level);
+                }
+                else {
+                    let execution_model = SerialExecutor::new(execution_store);
+                }
+            }
             
             
             let executor = ParallelExecutor::new(

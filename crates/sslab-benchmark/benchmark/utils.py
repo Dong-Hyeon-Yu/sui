@@ -257,3 +257,8 @@ def multiaddr_to_url_data(addr: str):  # noqa: C901
     ).geturl()
 
     return base_url
+
+class ExecutionModel:
+    SERIAL = 'serial'
+    NEZHA = 'nezha'
+    

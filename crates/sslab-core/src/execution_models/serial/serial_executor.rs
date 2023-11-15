@@ -4,7 +4,7 @@ use parking_lot::RwLock;
 use tokio::sync::mpsc::Sender;
 use tracing::{warn, info, trace};
 
-use crate::{executor::{Executable, EvmExecutionUtils}, types::{ExecutionResult, ExecutableEthereumBatch}, execution_storage::MemoryStorage};
+use crate::{executor::{Executable, EvmExecutionUtils}, types::{ExecutionResult, ExecutableEthereumBatch}, execution_storage::{MemoryStorage, ExecutionBackend}};
 
 
 #[async_trait::async_trait]
@@ -33,15 +33,13 @@ impl SerialExecutor {
 
     pub fn _execute(&mut self, batch: ExecutableEthereumBatch) -> ExecutionResult {
 
-        let state = self.global_state.write();
-        let snapshot = &mut state.snapshot();
-        let effects = &mut vec![];
-        let logs = &mut vec![];
+        let mut state = self.global_state.write();
+        let snapshot = & state.snapshot();
 
         for tx in batch.data() {
             match EvmExecutionUtils::execute_tx(tx, snapshot, false) {
                 Ok(Some((effect, log, _))) 
-                    => EvmExecutionUtils::process_local_effect(snapshot, effect, log, effects, logs),
+                    => state.apply_local_effect(effect, log),
                 Ok(None) 
                     => trace!("{:?} may be reverted.", tx.id()),
                 Err(e) 

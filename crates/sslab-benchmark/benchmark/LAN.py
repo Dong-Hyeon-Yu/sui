@@ -150,7 +150,7 @@ class LANBench:
         compile_cmd = ' '.join(CommandMaker.compile())
         cmd = [
             f'(cd {self.settings.repo_name} && git fetch -f)',
-            f'(cd {self.settings.repo_name} && git checkout origin/{self.settings.branch} -f)',
+            f'(cd {self.settings.repo_name} && git pull origin {self.settings.branch} -f)',
             # f'(cd {self.settings.repo_name} && git pull -f)',
             'source $HOME/.cargo/env',
             f'(cd {self.settings.repo_name}/crates/sslab-benchmark&& {compile_cmd})',  

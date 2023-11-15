@@ -26,12 +26,8 @@ pub struct Nezha {
 impl Executable for Nezha {
     async fn execute(&mut self, consensus_output: Vec<ExecutableEthereumBatch>, tx_execute_notification: &mut Sender<ExecutionResult>) {
 
-        match self.inner.prepare_execution(consensus_output) {
-            Some(result) => {
-                let _ = tx_execute_notification.send(result).await;
-            },
-            None => {}
-        }
+        let result = self.inner.prepare_execution(consensus_output);
+        let _ = tx_execute_notification.send(result).await;
     }
 }
 
@@ -45,7 +41,6 @@ impl Nezha {
 
 struct ConcurrencyLevelManager {
     concurrency_level: usize,
-    pending_batches: Vec<ExecutableEthereumBatch>,
     global_state: Arc<RwLock<MemoryStorage>>
 }
 
@@ -54,36 +49,25 @@ impl ConcurrencyLevelManager {
     fn new(global_state: Arc<RwLock<MemoryStorage>>, concurrency_level: usize) -> Self {
         Self {
             concurrency_level,
-            pending_batches: Vec::with_capacity(concurrency_level),
             global_state
         }
     }
 
-    fn prepare_execution(&mut self, consensus_output: Vec<ExecutableEthereumBatch>) -> Option<ExecutionResult> {
-        
-
-        if self.remaining_capacity() > consensus_output.len() {
-            self.pending_batches.extend(consensus_output);
-
-            return None;
-        }
+    fn prepare_execution(&mut self, consensus_output: Vec<ExecutableEthereumBatch>) -> ExecutionResult {
 
         let mut result = vec![];
         let mut target = consensus_output;
     
         while !target.is_empty() {
-            let split_idx = std::cmp::min(self.remaining_capacity(), target.len());
+            let split_idx = std::cmp::min(self.concurrency_level, target.len());
             let remains: Vec<ExecutableEthereumBatch> = target.split_off(split_idx);
-            self.pending_batches.extend(target);
-            target = remains;
 
-            if self.is_full() {
-                let to_be_executed = self.pending_batches.drain(..).collect_vec();
-                result.extend(self._execute(to_be_executed));
-            }
+            result.extend(self._execute(target));
+
+            target = remains;
         } 
         
-        Some(ExecutionResult::new(result))
+        ExecutionResult::new(result)
     }
 
     fn _execute(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> Vec<BatchDigest> {
@@ -188,14 +172,6 @@ impl ConcurrencyLevelManager {
         //         })
         //     }
         // });
-    }
-
-    fn remaining_capacity(&self) -> usize {
-        self.concurrency_level - self.pending_batches.len()
-    }
-
-    fn is_full(&self) -> bool {
-        self.pending_batches.len() >= self.concurrency_level
     }
 }
 

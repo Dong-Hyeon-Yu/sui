@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use parking_lot::RwLock;
 use tokio::sync::mpsc::Sender;
-use tracing::warn;
+use tracing::{warn, info, trace};
 
 use crate::{executor::{Executable, EvmExecutionUtils}, types::{ExecutionResult, ExecutableEthereumBatch}, execution_storage::MemoryStorage};
 
@@ -25,6 +25,7 @@ pub struct SerialExecutor {
 
 impl SerialExecutor {
     pub fn new(global_state: Arc<RwLock<MemoryStorage>>) -> Self {
+        info!("Execution mode: 'serial'");
         Self {
             global_state
         }
@@ -39,12 +40,12 @@ impl SerialExecutor {
 
         for tx in batch.data() {
             match EvmExecutionUtils::execute_tx(tx, snapshot, false) {
-                Ok(Some((effect, log, _))) => {
-                    EvmExecutionUtils::process_local_effect(snapshot, effect, log, effects, logs);
-                },
-                _ => {
-                    warn!("fail to execute a transaction {}", tx.id());
-                },
+                Ok(Some((effect, log, _))) 
+                    => EvmExecutionUtils::process_local_effect(snapshot, effect, log, effects, logs),
+                Ok(None) 
+                    => trace!("{:?} may be reverted.", tx.id()),
+                Err(e) 
+                    => warn!("fail to execute a transaction {:?}", e)
             }
         }
 

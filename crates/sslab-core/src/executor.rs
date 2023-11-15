@@ -86,7 +86,6 @@ impl<ExecutionModel: Executable + Send + Sync> ParallelExecutor<ExecutionModel> 
 
 pub struct EvmExecutionUtils;
 
-#[allow(dead_code)]
 impl EvmExecutionUtils {
     pub fn execute_tx(tx: &EthereumTransaction, snapshot: &MemoryStorage, simulate: bool) -> Result<Option<(Vec<Apply>, Vec<Log>, Option<RwSet>)>, SuiError> {
         let mut executor = snapshot.executor(tx.gas_limit(), simulate);
@@ -96,7 +95,7 @@ impl EvmExecutionUtils {
     
         if let Some(to_addr) = tx.to_addr() {
     
-            let (reason, _) = executor.transact_call(
+            let (reason, _) = & executor.transact_call(
                 tx.caller(), *to_addr, tx.value(), tx.data().unwrap().to_owned().to_vec(), 
                 tx.gas_limit(), tx.access_list()
             );
@@ -107,15 +106,9 @@ impl EvmExecutionUtils {
                         return Ok(None);
                     } else {
                         // debug!("success to execute a transaction {}", tx.id());
-                        let rw_set = match executor.rw_set() {
-                            Some(rw_set) => rw_set.to_owned(),
-                            None => {
-                                return Ok(None);
-                            }
-                        };
-                        // warn!("rw_set: {:?}", rw_set);
+                        let rw_set = executor.rw_set().cloned();
                         (effect, log) = executor.into_state().deconstruct();
-                        return Ok(Some((effect, log, Some(rw_set))));
+                        return Ok(Some((effect, log, rw_set)));
                     }
                 },
                 Err(e) => return Err(e)
@@ -124,16 +117,17 @@ impl EvmExecutionUtils {
             if let Some(data) = tx.data() {
                  // create EOA
                 let init_code = data.to_vec();
-                let (e, _) = executor.transact_create(tx.caller(), tx.value(), init_code.clone(), tx.gas_limit(), tx.access_list());
+                let (reason, _) = &executor.transact_create(tx.caller(), tx.value(), init_code.clone(), tx.gas_limit(), tx.access_list());
     
-                match Self::process_transact_create_result(e) {
+                match Self::process_transact_create_result(reason) {
                     Ok(fail) => {
                         if fail {
                             return Ok(None);
                         } else {
                             debug!("success to deploy a contract!");
+                            let rw_set = executor.rw_set().cloned();
                             (effect, log) = executor.into_state().deconstruct();
-                            return Ok(Some((effect, log, Some(RwSet::new()))));
+                            return Ok(Some((effect, log, rw_set)));
                         }
                     },
                     Err(e) => return Err(e)
@@ -160,14 +154,14 @@ impl EvmExecutionUtils {
         }
     }
     
-    fn process_transact_call_result(reason: ExitReason) -> Result<bool, SuiError> {
+    fn process_transact_call_result(reason: &ExitReason) -> Result<bool, SuiError> {
         match reason {
             ExitReason::Succeed(_) => {
                 Ok(false)
             }
             ExitReason::Revert(e) => {
                 // do nothing: explicit revert is not an error
-                trace!("tx execution revert: {:?}", e);
+                debug!("tx execution revert: {:?}", e);
                 Ok(true)
             }
             ExitReason::Error(e) => {
@@ -182,7 +176,7 @@ impl EvmExecutionUtils {
         }
     }
     
-    fn process_transact_create_result(reason: ExitReason) -> Result<bool, SuiError> {
+    fn process_transact_create_result(reason: &ExitReason) -> Result<bool, SuiError> {
         match reason {
             ExitReason::Succeed(_) => {
                 Ok(false)

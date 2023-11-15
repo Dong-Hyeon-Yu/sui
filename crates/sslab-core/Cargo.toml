@@ -104,7 +104,7 @@ nezha = []
 serial = []
 
 [[bin]]
-name = "narwhal-node"
+name = "sslab-narwhal-node"
 path = "src/main.rs"
 
 # [build]

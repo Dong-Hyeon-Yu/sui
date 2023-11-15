@@ -23,11 +23,15 @@ class CommandMaker:
         return f'rm -r {PathMaker.logs_path()} ; mkdir -p {PathMaker.logs_path()}'
 
     @staticmethod
-    def compile(failpoints=True, release=True, execution_model=None):
+    def compile(failpoints=True, release=True, execution_model=None, LAN=False):
         cmd = ["cargo", "build", "--quiet","--features", "benchmark"]
 
         if execution_model:
-            cmd = cmd + [cmd.pop(-1) + f" {execution_model}"]
+            if LAN:
+                cmd.pop(-1)
+                cmd = cmd + [f"\'benchmark {execution_model}\'"]
+            else:
+                cmd = cmd + [cmd.pop(-1) + f" {execution_model}"]
 
         # if failpoints:
         #     cmd = cmd + [cmd.pop(-1) + " fail/failpoints"]
@@ -108,8 +112,11 @@ class CommandMaker:
         return 'tmux kill-server'
 
     @staticmethod
-    def alias_binaries(origin):
+    def alias_binaries(origin, include_execution=True):
         assert isinstance(origin, str)
+        
+        node_binary = "sslab-narwhal-node" if include_execution else "narwhal-node"
+        
         node, client = join(
-            origin, 'narwhal-node'), join(origin, 'sslab-benchmark-client')
-        return f'rm -f narwhal-node ; rm -f sslab-benchmark-client ; ln -s {node} . ; ln -s {client} .'
+            origin, node_binary), join(origin, 'sslab-benchmark-client')
+        return f'rm -f ./narwhal-node && rm -f ./sslab-benchmark-client && cp {node} narwhal-node && cp {client} .'

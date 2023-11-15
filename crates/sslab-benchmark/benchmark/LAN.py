@@ -150,25 +150,26 @@ class LANBench:
         compile_cmd = ' '.join(CommandMaker.compile())
         cmd = [
             f'(cd {self.settings.repo_name} && git fetch -f)',
-            f'(cd {self.settings.repo_name} && git pull origin {self.settings.branch} -f)',
+            f'(cd {self.settings.repo_name} && git checkout {self.settings.branch})',
+            f'(cd {self.settings.repo_name} && git reset --hard origin/{self.settings.branch})',
             # f'(cd {self.settings.repo_name} && git pull -f)',
             'source $HOME/.cargo/env',
-            f'(cd {self.settings.repo_name}/crates/sslab-benchmark&& {compile_cmd})',  
+            f'(cd {self.settings.repo_name}/crates/sslab-benchmark && {compile_cmd})',  
         ]
         if include_execution:
-            compile_cmd = ' '.join(CommandMaker.compile(execution_model=bench_parameters.execution_model))
+            compile_cmd = ' '.join(CommandMaker.compile(execution_model=bench_parameters.execution_model, LAN=True))
             cmd += [f'(cd {self.settings.repo_name}/crates/sslab-core && {compile_cmd})']
         else:
             cmd += [f'(cd {self.settings.repo_name}/narwhal/node && {compile_cmd})']
 
         cmd += [CommandMaker.alias_binaries(
-            f'./{self.settings.repo_name}/target/release/'
+            f'./{self.settings.repo_name}/target/release/', include_execution
         )]
         
         g = Group(*ips, user=self.settings.user, connect_kwargs=self.connect)
         g.run(' && '.join(cmd), hide=True)
 
-    def _config(self, hosts, node_parameters, bench_parameters):
+    def _config(self, hosts, node_parameters, bench_parameters, include_execution=True):
         Print.info('Generating configuration files...')
 
         # Cleanup all local configuration files.
@@ -176,18 +177,8 @@ class LANBench:
         subprocess.run([cmd], shell=True, stderr=subprocess.DEVNULL)
         sleep(0.5)  # Removing the store may take time.
 
-        # Recompile the latest code.
-        cmd = CommandMaker.compile()
-        Print.info(f"About to run {cmd}...")
-        subprocess.run(cmd, check=True, cwd=PathMaker.node_crate_path())
-
-        # Recompile the latest client code.
-        cmd = CommandMaker.compile()
-        Print.info(f"About to run {cmd} at {PathMaker.client_crate_path()}...")
-        subprocess.run(cmd, check=True, cwd=PathMaker.client_crate_path())
-
         # Create alias for the client and nodes binary.
-        cmd = CommandMaker.alias_binaries(PathMaker.binary_path())
+        cmd = CommandMaker.alias_binaries(PathMaker.binary_path(), include_execution)
         subprocess.run([cmd], shell=True)
 
         # Generate configuration files.

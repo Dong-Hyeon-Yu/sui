@@ -297,8 +297,8 @@ def LAN(ctx, debug=False):
         'tx_size': 270,
         'duration': 100,
         'runs': 1,
-        'execution_model': ExecutionModel.SERIAL,
-        'concurrency_level': [1, 5, 10, 15, 20, 25, 30], #TODO
+        'execution_model': ExecutionModel.NEZHA,
+        'concurrency_level': [1, 5, 10, 15, 20, 25, 30], # only for nezha
     }
     node_params = {
         'header_num_of_batches_threshold': 32,

@@ -297,8 +297,8 @@ def LAN(ctx, debug=False):
         'tx_size': 270,
         'duration': 100,
         'runs': 1,
-        'execution_model': ExecutionModel.NEZHA,
-        'concurrency_level': [1, 5, 10, 15, 20, 25, 30],
+        'execution_model': ExecutionModel.SERIAL,
+        'concurrency_level': [1, 5, 10, 15, 20, 25, 30], #TODO
     }
     node_params = {
         'header_num_of_batches_threshold': 32,
@@ -332,7 +332,7 @@ def LAN(ctx, debug=False):
         },
     }
     try:
-        LANBench(ctx).run(bench_params, node_params, debug)
+        LANBench(ctx).run(bench_params, node_params, debug, True)
     except BenchError as e:
         Print.error(e)
 

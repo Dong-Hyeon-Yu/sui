@@ -13,7 +13,7 @@ from copy import deepcopy
 import subprocess
 
 from benchmark.config import Committee, NodeParameters, WorkerCache, BenchParameters, ConfigError
-from benchmark.utils import BenchError, Print, PathMaker, progress_bar
+from benchmark.utils import BenchError, ExecutionModel, Print, PathMaker, progress_bar
 from benchmark.commands import CommandMaker
 from benchmark.logs import LogParser, ParseError
 from benchmark.local_instance import InstanceManager
@@ -138,7 +138,7 @@ class LANBench:
         output = c.run(cmd, hide=True)
         self._check_stderr(output)
 
-    def _update(self, hosts, bench_parameters, include_execution=False):
+    def _update(self, hosts, bench_parameters, include_execution=True):
         if bench_parameters.collocate:
             ips = list(set(hosts))
         else:
@@ -378,7 +378,7 @@ class LANBench:
         Print.info('Parsing logs and computing performance...')
         return LogParser.process(PathMaker.logs_path(), faults=faults)
 
-    def run(self, bench_parameters_dict, node_parameters_dict, debug=False):
+    def run(self, bench_parameters_dict, node_parameters_dict, debug=False, include_execution=True):
         assert isinstance(debug, bool)
         Print.heading('Starting remote benchmark')
         try:
@@ -395,7 +395,7 @@ class LANBench:
 
         # Update nodes.
         try:
-            self._update(selected_hosts, bench_parameters)
+            self._update(selected_hosts, bench_parameters, include_execution)
         except (GroupException, ExecutionError) as e:
             e = FabricError(e) if isinstance(e, GroupException) else e
             raise BenchError('Failed to update nodes', e)
@@ -409,6 +409,9 @@ class LANBench:
             e = FabricError(e) if isinstance(e, GroupException) else e
             raise BenchError('Failed to configure nodes', e)
 
+        if bench_parameters.execution_model != ExecutionModel.NEZHA:
+            bench_parameters.concurrency_level = [1]
+            
         # Run benchmarks.
         for n in bench_parameters.nodes:
             committee_copy = deepcopy(committee)

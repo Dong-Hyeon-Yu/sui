@@ -3,11 +3,11 @@ use evm::{ExitReason, backend::{Apply, Log}, executor::stack::RwSet};
 use mysten_metrics::spawn_monitored_task;
 use sui_types::error::SuiError;
 use tokio::sync::mpsc::{Receiver, Sender};
-use tracing::{debug, warn, trace, info};
+use tracing::{debug, warn, info};
 
 use crate::{
     types::{ExecutableEthereumBatch, EthereumTransaction, ExecutableConsensusOutput, ExecutionResult}, 
-    execution_storage::{ExecutionBackend, MemoryStorage}
+    execution_storage::MemoryStorage
 }; 
 
 pub(crate) const DEFAULT_EVM_STACK_LIMIT:usize = 1024;
@@ -262,13 +262,6 @@ impl EvmExecutionUtils {
                 Err(SuiError::ExecutionError(String::from("Fatal error occurred on EVM!")))
             }
         }
-    }
-    
-    pub fn process_local_effect(store: &mut MemoryStorage, effect: Vec<Apply>, log: Vec<Log>, effects: &mut Vec<Apply>, logs: &mut Vec<Log>) {
-        trace!("process_local_effect: {effect:?}");
-        effects.extend(effect.clone());
-        logs.extend(log.clone());
-        store.apply_local_effect(effect, log);
     }
 }
 

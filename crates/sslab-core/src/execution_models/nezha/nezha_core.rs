@@ -123,10 +123,10 @@ impl ConcurrencyLevelManager {
             let result : Vec<SimulatedTransaction> = tx_list
                 .par_iter()
                 .filter_map(|tx| {
-                    match EvmExecutionUtils::execute_tx(tx, &snapshot, true) {
+                    match EvmExecutionUtils::simulate_tx(tx, &snapshot) {
                         Ok(Some((effect, log, rw_set))) => {
                             
-                            Some(SimulatedTransaction::new(tx.id(), Some(rw_set.unwrap()), effect, log))
+                            Some(SimulatedTransaction::new(tx.id(), Some(rw_set), effect, log))
                         },
                         _ => {
                             warn!("fail to execute a transaction {}", tx.id());

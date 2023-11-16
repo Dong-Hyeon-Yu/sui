@@ -37,8 +37,8 @@ impl SerialExecutor {
         let snapshot = & state.snapshot();
 
         for tx in batch.data() {
-            match EvmExecutionUtils::execute_tx(tx, snapshot, false) {
-                Ok(Some((effect, log, _))) 
+            match EvmExecutionUtils::execute_tx(tx, snapshot) {
+                Ok(Some((effect, log))) 
                     => state.apply_local_effect(effect, log),
                 Ok(None) 
                     => trace!("{:?} may be reverted.", tx.id()),

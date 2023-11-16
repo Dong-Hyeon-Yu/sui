@@ -26,7 +26,7 @@ def default_major_formatter(x, pos):
 def sec_major_formatter(x, pos):
     if pos is None:
         return
-    return f'{float(x)/1000:.1f}'
+    return f'{float(x)/1000:.2f}'
 
 
 @tick.FuncFormatter
@@ -138,6 +138,13 @@ class Ploter:
         f = search(r'Faults: (\d+)', data).group(1)
         faults = f'({f} faulty)' if f != '0' else ''
         return f'Max latency: {float(x) / 1000:,.1f} s {faults}'
+        
+    @staticmethod
+    def send_rates(data):
+        x = search(r'Input rate: (\d+)', data).group(1)
+        f = search(r'Faults: (\d+)', data).group(1)
+        faults = f'({f} faulty)' if f != '0' else ''
+        return f'Input rate: {int(x)} tx/s {faults}'
 
     @classmethod
     def plot_latency(cls, files, scalability):
@@ -158,6 +165,19 @@ class Ploter:
         y_label = ['Throughput (tx/s)', 'Throughput (MB/s)']
         ploter = cls(files)
         ploter._plot(x_label, y_label, ploter._tps, z_axis, 'tps')
+        
+    @classmethod
+    def plot_concurrency(cls, files, tps=False, latency=False):
+        assert tps != latency
+        assert isinstance(files, list)
+        assert all(isinstance(x, str) for x in files)
+        z_axis = cls.send_rates
+        x_label = 'Concurrency level'
+        y_label = ['Throughput (tx/s)' if tps else 'Latency (s)']
+        ploter = cls(files)
+        output_filename = f"concurrency-{'tps' if tps else 'latency'}"
+        ploter._plot(x_label, y_label, ploter._tps if tps else ploter._latency, z_axis, output_filename)
+        
 
     @classmethod
     def plot(cls, params_dict):
@@ -171,7 +191,7 @@ class Ploter:
 
         # Make the latency, tps, and robustness graphs.
         iterator = params.workers if params.scalability() else params.nodes
-        latency_files, tps_files = [], []
+        latency_files, tps_files, concurrency_files = [], [], []
         for f in params.faults:
             for x in iterator:
                 latency_files += glob(
@@ -199,6 +219,21 @@ class Ploter:
                         max_latency=latency
                     )
                 )
-
-        cls.plot_latency(latency_files, params.scalability())
-        cls.plot_tps(tps_files, params.scalability())
+            
+            for rate in params.rate:
+                concurrency_files += glob(
+                    PathMaker.agg_file(
+                        'concurrency',
+                        f,
+                        params.nodes[0],
+                        params.workers[0],
+                        params.collocate,
+                        rate,
+                        'any',
+                    )
+                )
+                
+        # cls.plot_latency(latency_files, params.scalability())
+        # cls.plot_tps(tps_files, params.scalability())
+        cls.plot_concurrency(concurrency_files, tps=True)
+        cls.plot_concurrency(concurrency_files, latency=True)

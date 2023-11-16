@@ -1,0 +1,53 @@
+
+-----------------------------------------
+ RESULTS:
+-----------------------------------------
+ Faults: 0
+ Committee size: 4
+ Workers per node: 1
+ Collocate primary and workers: True
+ Input rate: 250000 tx/s
+ Transaction size: 270 B
+ Max latency: any ms
+ Concurrency level: any
+
+ Variable value: X=1
+ TPS: 9143 +/- 43 tx/s
+ Latency: 182 +/- 28 ms
+
+ Variable value: X=2
+ TPS: 9171 +/- 18 tx/s
+ Latency: 257 +/- 103 ms
+
+ Variable value: X=3
+ TPS: 9158 +/- 36 tx/s
+ Latency: 154 +/- 11 ms
+
+ Variable value: X=4
+ TPS: 9062 +/- 163 tx/s
+ Latency: 138 +/- 34 ms
+
+ Variable value: X=5
+ TPS: 9176 +/- 62 tx/s
+ Latency: 171 +/- 25 ms
+
+ Variable value: X=6
+ TPS: 9023 +/- 289 tx/s
+ Latency: 134 +/- 28 ms
+
+ Variable value: X=8
+ TPS: 8896 +/- 406 tx/s
+ Latency: 145 +/- 16 ms
+
+ Variable value: X=10
+ TPS: 9148 +/- 88 tx/s
+ Latency: 149 +/- 42 ms
+
+ Variable value: X=12
+ TPS: 9188 +/- 10 tx/s
+ Latency: 122 +/- 21 ms
+
+ Variable value: X=14
+ TPS: 9166 +/- 78 tx/s
+ Latency: 149 +/- 16 ms
+-----------------------------------------

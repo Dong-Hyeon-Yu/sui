@@ -330,6 +330,18 @@ class PlotParameters:
                 self.collocate = True
 
             self.tx_size = int(json['tx_size'])
+            
+            concurrency_level = json['concurrency_level']
+            concurrency_level = concurrency_level if isinstance(concurrency_level, list) else [concurrency_level]
+            if not concurrency_level:
+                raise ConfigError('Missing number of concurrency level')
+            self.concurrency_level = [int(x) for x in concurrency_level]
+            
+            rate = json['rate']
+            rate = rate if isinstance(rate, list) else [rate]
+            if not rate:
+                raise ConfigError('Missing input rate')
+            self.rate = [int(x) for x in rate]
 
             max_lat = json['max_latency']
             max_lat = max_lat if isinstance(max_lat, list) else [max_lat]

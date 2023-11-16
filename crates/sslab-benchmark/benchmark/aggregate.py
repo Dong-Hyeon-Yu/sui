@@ -13,13 +13,14 @@ from benchmark.utils import PathMaker
 
 
 class Setup:
-    def __init__(self, faults, nodes, workers, collocate, rate, tx_size):
+    def __init__(self, faults, nodes, workers, collocate, rate, tx_size, concurrency_level):
         self.nodes = nodes
         self.workers = workers
         self.collocate = collocate
         self.rate = rate
         self.tx_size = tx_size
         self.faults = faults
+        self.concurrency_level = concurrency_level
         self.max_latency = 'any'
 
     def __str__(self):
@@ -31,6 +32,7 @@ class Setup:
             f' Input rate: {self.rate} tx/s\n'
             f' Transaction size: {self.tx_size} B\n'
             f' Max latency: {self.max_latency} ms\n'
+            f' Concurrency level: {self.concurrency_level}\n'
         )
 
     def __eq__(self, other):
@@ -48,8 +50,9 @@ class Setup:
             r'Collocate primary and workers: (True|False)', raw
         ).group(1)
         rate = int(search(r'Input rate: (\d+)', raw).group(1))
-        tx_size = int(search(r'Transaction size: (\d+)', raw).group(1))
-        return cls(faults, nodes, workers, collocate, rate, tx_size)
+        tx_size = int(search(r'Average Transaction size: (\d+)', raw).group(1))
+        concurrency_level = int(search(r'Concurrency level: (\d+)', raw).group(1))
+        return cls(faults, nodes, workers, collocate, rate, tx_size, concurrency_level)
 
 
 class Result:
@@ -67,8 +70,8 @@ class Result:
 
     @classmethod
     def from_str(cls, raw):
-        tps = int(search(r'End-to-end TPS: (\d+)', raw).group(1))
-        latency = int(search(r'End-to-end latency: (\d+)', raw).group(1))
+        tps = int(search(r'Execution TPS: (\d+)', raw).group(1))
+        latency = int(search(r'Execution latency: (\d+)', raw).group(1))
         return cls(tps, latency)
 
     @classmethod
@@ -107,9 +110,10 @@ class LogAggregator:
             os.makedirs(PathMaker.plots_path())
 
         results = [
-            self._print_latency(),
-            self._print_tps(scalability=False),
-            self._print_tps(scalability=True),
+            # self._print_latency(),
+            self._print_concurrency(),
+            # self._print_tps(scalability=False),
+            # self._print_tps(scalability=True),
         ]
         for name, records in results:
             for setup, values in records.items():
@@ -135,7 +139,7 @@ class LogAggregator:
                     setup.workers,
                     setup.collocate,
                     setup.rate,
-                    setup.tx_size,
+                    setup.concurrency_level,
                     max_latency=None if max_lat == 'any' else max_lat,
                 )
                 with open(filename, 'w') as f:
@@ -154,6 +158,20 @@ class LogAggregator:
             organized[setup] = [(x, y) for x, y, _ in results]
 
         return 'latency', organized
+
+    def _print_concurrency(self):
+        records = deepcopy(self.records)
+        organized = defaultdict(list)
+        for setup, result in records.items():
+            clevel = setup.concurrency_level
+            setup.concurrency_level = 'any'
+            organized[setup] += [(clevel, result)]
+            
+        for setup, results in list(organized.items()):
+            results.sort(key=lambda x: x[0])
+            organized[setup] = [(x, y) for x, y in results]
+            
+        return 'concurrency', organized
 
     def _print_tps(self, scalability):
         records = deepcopy(self.records)

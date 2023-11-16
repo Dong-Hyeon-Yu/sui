@@ -86,6 +86,9 @@ impl ExecutionState for SimpleConsensusHandler {
             timestamp.clone(),
         );
 
+        // NOTE: This log entry is used to compute performance.
+        info!("Received consensus_output has {} batches at subdag_index {}.", consensus_output.sub_dag.num_batches(), consensus_output.sub_dag.sub_dag_index);
+
         for (cert, batches) in consensus_output
             .sub_dag
             .certificates

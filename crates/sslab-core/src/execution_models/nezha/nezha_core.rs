@@ -76,6 +76,10 @@ impl ConcurrencyLevelManager {
         let mut time = now.elapsed().as_millis();
         info!("Simulation took {} ms for {} transactions.", time, rw_sets.len());
 
+        // rw_sets.clone().iter().for_each(|rw_set| {
+        //     println!("rw_set: {:?}\n", rw_set);
+        // });
+        
         now = Instant::now();
         let scheduled_info = AddressBasedConflictGraph::construct(rw_sets)
             .hierarchcial_sort()
@@ -93,6 +97,8 @@ impl ConcurrencyLevelManager {
 
         info!("Concurrent commit took {} ms for {} transactions.", time, scheduled_tx_len);
         info!("{} transactions are aborted.", aborted_tx_len);
+
+        // println!("{} transactions are aborted.", aborted_tx_len);
 
         digests
     }

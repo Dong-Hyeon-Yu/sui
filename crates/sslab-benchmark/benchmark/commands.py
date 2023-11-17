@@ -119,4 +119,4 @@ class CommandMaker:
         
         node, client = join(
             origin, node_binary), join(origin, 'sslab-benchmark-client')
-        return f'rm -f ./narwhal-node && rm -f ./sslab-benchmark-client && cp {node} narwhal-node && cp {client} .'
+        return f'rm -f ./narwhal-node && rm -f ./sslab-benchmark-client && ln -s {node} narwhal-node && ln -s {client} .'

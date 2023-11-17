@@ -147,7 +147,7 @@ impl SmallBankTransactionHandler {
     fn create_request(&self, ops: SmallBankTransactionType) -> bytes::Bytes {
         let mut tx = match ops {
             SmallBankTransactionType::AMALGAMATE => {
-                self.contract.as_ref().unwrap().almagate(
+                self.contract.as_ref().unwrap().amalgamate(
                     self.get_random_account_id(),
                     self.get_random_account_id(),
                 ).tx
@@ -165,7 +165,7 @@ impl SmallBankTransactionHandler {
                 ).tx
             },
             SmallBankTransactionType::UpdateBalance => {
-                self.contract.as_ref().unwrap().update_balance(
+                self.contract.as_ref().unwrap().deposit_checking(
                     self.get_random_account_id(),
                     self.get_random_balance()
                 ).tx

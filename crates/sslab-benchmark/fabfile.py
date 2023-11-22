@@ -419,6 +419,6 @@ def kill(ctx):
 def logs(ctx):
     ''' Print a summary of the logs '''
     try:
-        print(LogParser.process('./logs', faults='?').result())
+        print(LogParser.process('./logs', ExecutionModel.NEZHA, faults='?', concurrency_level=10).result())
     except ParseError as e:
         Print.error(BenchError('Failed to parse logs', e))

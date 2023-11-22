@@ -1,5 +1,5 @@
 use std::{cell::{Cell, RefCell, Ref}, rc::Rc, collections::{BTreeMap, HashMap}};
-use ethers_core::types::{H160, H256};
+use ethers_core::types::{H256, H160};
 use evm::backend::{Apply, Log};
 use itertools::Itertools;
 
@@ -10,7 +10,7 @@ pub(crate) type FastHashMap<K, V> = hashbrown::HashMap<K, V, nohash_hasher::Buil
 pub(crate) type FastHashSet<K> = hashbrown::HashSet<K, nohash_hasher::BuildNoHashHasher<K>>;
 
 pub(crate) struct AddressBasedConflictGraph {
-    addresses: hashbrown::HashMap<H160, Address>,
+    addresses: hashbrown::HashMap<H256, Address>,
     tx_list: FastHashMap<u64, Rc<Transaction>>, // tx_id -> transaction
     aborted_txs: Vec<Rc<Transaction>>, // optimization for reordering.
 }
@@ -109,7 +109,7 @@ impl AddressBasedConflictGraph {
 
 
     /* (Algorithm1) */
-    fn _address_rank(&self) -> Vec<H160> {
+    fn _address_rank(&self) -> Vec<H256> {
         let mut addresses = self.addresses.values().collect_vec();
         addresses.sort_by(|a, b| {
 
@@ -158,9 +158,20 @@ impl AddressBasedConflictGraph {
     fn _convert_to_units(tx: &Rc<Transaction>, unit_type: UnitType, read_or_write_set: BTreeMap<H160, HashMap<H256, H256>>) -> Vec<Rc<Unit>> {
         read_or_write_set
             .into_iter()
-            .map(|(address, _)| 
-                Rc::new(Unit::new(Rc::clone(tx), unit_type.clone(), address))
-            )
+            .map(|(_, state_items)| {
+
+                state_items.into_iter()
+                    .map(|(key, _)| {
+                        /* mitigation for the across-contract calls: hash(contract addr + key) */
+                        // let mut hasher = Sha256::new();
+                        // hasher.update(address.as_bytes());
+                        // hasher.update(key.as_bytes());
+                        // let key = H256::from_slice(hasher.finalize().as_ref())
+                        Rc::new(Unit::new(Rc::clone(tx), unit_type.clone(), key))
+                    })
+                    .collect_vec()
+            })
+            .flatten()
             .collect_vec()
     }
 
@@ -275,13 +286,13 @@ enum UnitType {
 struct Unit {
     tx: Rc<Transaction>,
     unit_type: UnitType,
-    address: H160,
+    address: H256,
     wr_dependencies: Cell<u32>, // Vec<Rc<Unit>> is not necessary, but the degree is only used for sorting.  
     co_located: Cell<bool>,  // True if the read unit and write unit are in the same address.
 }
 
 impl Unit {
-    fn new(tx: Rc<Transaction>, unit_type: UnitType, address: H160) -> Self {
+    fn new(tx: Rc<Transaction>, unit_type: UnitType, address: H256) -> Self {
         Self { tx, unit_type, address, wr_dependencies: Cell::new(0), co_located: Cell::new(false) }
     }
 
@@ -289,7 +300,7 @@ impl Unit {
         &self.unit_type
     }
 
-    fn address(&self) -> &H160 {
+    fn address(&self) -> &H256 {
         &self.address
     }
 
@@ -451,7 +462,7 @@ impl WriteUnits {
 
 #[derive(Clone, Debug)]
 struct Address {
-    address: H160,
+    address: H256,
     in_degree: u32,
     out_degree: u32,
     read_units: ReadUnits,
@@ -459,7 +470,7 @@ struct Address {
 }
 
 impl Address {
-    fn new(address: H160) -> Self {
+    fn new(address: H256) -> Self {
         Self {
             address,
             in_degree: 0,
@@ -477,7 +488,7 @@ impl Address {
         &self.out_degree
     }
 
-    fn address(&self) -> &H160 {
+    fn address(&self) -> &H256 {
         &self.address
     }
 

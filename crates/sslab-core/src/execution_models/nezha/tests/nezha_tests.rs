@@ -3,16 +3,17 @@ use evm::executor::stack::{RwSet, Simulatable};
 
 use super::{types::SimulatedTransaction, address_based_conflict_graph::AddressBasedConflictGraph};
 
+const CONTRACT_ADDR: u64 = 0x1;
 
 fn transaction_with_rw(tx_id: u64, read_addr: u64, write_addr: u64) -> SimulatedTransaction {
     let mut set = RwSet::new();
     set.record_read_key(
-        H160::from_low_u64_be(read_addr), 
-        H256::from_low_u64_be(1), 
+        H160::from_low_u64_be(CONTRACT_ADDR), 
+        H256::from_low_u64_be(read_addr), 
         H256::from_low_u64_be(1));
     set.record_write_key(
-        H160::from_low_u64_be(write_addr), 
-        H256::from_low_u64_be(1), 
+        H160::from_low_u64_be(CONTRACT_ADDR), 
+        H256::from_low_u64_be(write_addr), 
         H256::from_low_u64_be(1));
     SimulatedTransaction::new(tx_id, Some(set), Vec::new(), Vec::new())
 }
@@ -21,14 +22,14 @@ fn transaction_with_multiple_rw(tx_id: u64, read_addr: Vec<u64>, write_addr: Vec
     let mut set = RwSet::new();
     read_addr.iter().for_each(|addr| {
         set.record_read_key(
-            H160::from_low_u64_be(*addr), 
-            H256::from_low_u64_be(1), 
+            H160::from_low_u64_be(CONTRACT_ADDR), 
+            H256::from_low_u64_be(*addr), 
             H256::from_low_u64_be(1));
     });
     write_addr.iter().for_each(|addr| {
         set.record_write_key(
-            H160::from_low_u64_be(*addr), 
-            H256::from_low_u64_be(1), 
+            H160::from_low_u64_be(CONTRACT_ADDR), 
+            H256::from_low_u64_be(*addr), 
             H256::from_low_u64_be(1));
     });
     SimulatedTransaction::new(tx_id, Some(set), Vec::new(), Vec::new())
@@ -175,5 +176,5 @@ fn test_reordering() {
         vec![1],
     ];
     
-    nezha_test(txs, answer, true);
+    nezha_test(txs, answer, false);
 }

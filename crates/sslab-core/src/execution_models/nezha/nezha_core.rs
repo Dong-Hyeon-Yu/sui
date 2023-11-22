@@ -96,7 +96,7 @@ impl ConcurrencyLevelManager {
         time = now.elapsed().as_millis();
 
         info!("Concurrent commit took {} ms for {} transactions.", time, scheduled_tx_len);
-        info!("{} transactions are aborted.", aborted_tx_len);
+        info!("Abort rate: {:.2} ({}/{} aborted)", (aborted_tx_len as f64) * 100.0 / (scheduled_tx_len+aborted_tx_len) as f64, aborted_tx_len, scheduled_tx_len+aborted_tx_len);
 
         // println!("{} transactions are aborted.", aborted_tx_len);
 

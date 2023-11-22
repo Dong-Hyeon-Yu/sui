@@ -80,10 +80,11 @@ class LogParser:
             chain(*request_vote_outbound_latencies))
         
         # execution metrics
-        commits, latencies, subdag_size = zip(*execution_results)
+        commits, latencies, subdag_size, average_abort_rates = zip(*execution_results)
         self.commits = self._merge_results([x.items() for x in commits])
         self.execution_latencies = self._merge_results([x.items() for x in latencies])
         self.subdag_size = self._merge_results([x.items() for x in subdag_size])
+        self.average_abort_rate = mean([v for abort_rate in average_abort_rates for _, v in abort_rate.items()])
 
         # Parse the workers logs.
         try:
@@ -156,17 +157,21 @@ class LogParser:
         subdag_size = self._merge_results([subdag_size])
 
         tmp = findall(r'(.*?) .* Received Batch -> ([^ ]+=)', log)
-        start = [(digest, self._to_posix(t)) for t, digest in tmp]
+        tmp = [(digest, self._to_posix(t)) for t, digest in tmp]
+        starts = self._merge_results([tmp])
 
         tmp = findall(r'(.*?) .* Executed Batch -> ([^ ]+=)', log)
-        end = [(digest, self._to_posix(t)) for t, digest in tmp]
-        commits = self._merge_results([end])
+        tmp = [(digest, self._to_posix(t)) for t, digest in tmp]
+        commits = self._merge_results([tmp])
 
-        latencies = [(digest, e - s) for digest, s in start for d, e in end if digest == d]
-
+        latencies = [(digest, e - starts[digest]) for digest, e in commits.items()]
         latencies = self._merge_results([latencies])
+        
+        tmp = findall(r'Abort rate: (\d+)', log)
+        average_abort_rate = {"abort_rate": mean([float(r) for r in tmp])} if tmp else {"abort_rate": 0.0}
+        
 
-        return commits, latencies, subdag_size
+        return commits, latencies, subdag_size, average_abort_rate
 
     def _parse_consensus(self, log):
         if search(r'(?:panicked)', log) is not None:
@@ -392,6 +397,7 @@ class LogParser:
             f' Execution TPS: {round(execution_tps):,} tx/s\n'
             f' Execution BPS: {round(execution_bps):,} B/s\n'
             f' Execution latency: {round(execution_latency):,} ms\n'
+            f' \tAverage Abort Rate: {self.average_abort_rate:.2} % \n'
             '\n'
             f' End-to-end TPS: {round(end_to_end_tps):,} tx/s\n'
             f' End-to-end BPS: {round(end_to_end_bps):,} B/s\n'
@@ -405,7 +411,7 @@ class LogParser:
             f.write(self.result())
 
     @classmethod
-    def process(cls, directory, execution_model, faults=0, concurrency_level=0):
+    def process(cls, directory, execution_model, faults=0, concurrency_level=1):
         assert isinstance(directory, str)
 
         clients = []

@@ -35,6 +35,7 @@ async fn main() -> Result<(), eyre::Report> {
         .args_from_usage("<ADDR> 'The network address of the node where to send txs. A url format is expected ex http://127.0.0.1:7000'")
         .args_from_usage("--rate=<INT> 'The rate (txs/s) at which to send the transactions'")
         .args_from_usage("--nodes=[ADDR]... 'Network addresses, comma separated, that must be reachable before starting the benchmark.'")
+        .args_from_usage("--skewness=<FLOAT> 'Skewness of the distribution of the transactions'")
         .setting(AppSettings::ArgRequiredElseHelp)
         .get_matches();
 
@@ -71,13 +72,20 @@ async fn main() -> Result<(), eyre::Report> {
         .map(|x| x.parse::<Url>())
         .collect::<Result<Vec<_>, _>>()
         .with_context(|| format!("Invalid url format {target_str}"))?;
+    let skewness = matches
+        .value_of("skewness")
+        .unwrap()
+        .parse::<f32>()
+        .context("The skewness of the distribution must be a float")?;
 
     info!("Node address: {target}");
 
     // NOTE: This log entry is used to compute performance.
     info!("Transactions rate: {rate} tx/s");
 
-    let client = MultipleClient::new(target, rate, nodes);
+    info!("Workload skewness: {skewness:.1}");
+
+    let client = MultipleClient::new(target, rate, skewness, nodes);
     // let client = Client {
     //     target,
     //     rate,
@@ -99,7 +107,7 @@ impl MultipleClient {
 
     const MAX_RATE_PER_CLIENT: u64 = 1000;
 
-    pub fn new (target: Url, rate: u64, nodes: Vec<Url>) -> MultipleClient {
+    pub fn new (target: Url, rate: u64, skewness: f32, nodes: Vec<Url>) -> MultipleClient {
         let num_of_clients = std::cmp::max((rate + Self::MAX_RATE_PER_CLIENT - 1) / Self::MAX_RATE_PER_CLIENT, 1);
 
         info!("Number of clients: {num_of_clients}");
@@ -110,6 +118,7 @@ impl MultipleClient {
             let client = Client {
                 target: target.clone(),
                 rate: rate / num_of_clients,
+                skewness,
                 nodes: nodes.clone(),
             };
             clients.push(Arc::new(client));
@@ -152,6 +161,7 @@ impl MultipleClient {
 struct Client {
     target: Url,
     rate: u64,
+    skewness: f32,
     nodes: Vec<Url>,
 }
 
@@ -186,7 +196,7 @@ impl Client {
         tokio::pin!(interval);
 
         let provider = Provider::<Http>::connect(self.target.as_str()).await;
-        let handler = SmallBankTransactionHandler::new(provider, client.clone(), DEFAULT_CHAIN_ID);
+        let handler = SmallBankTransactionHandler::new(provider, client.clone(), DEFAULT_CHAIN_ID, self.skewness);
         // if let Err(e) = handler.init().await {
         //     warn!("Failed to initialize workload handler: {e}");
         //     return Err(e.into());

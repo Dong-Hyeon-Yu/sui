@@ -2,12 +2,13 @@ use std::{sync::Arc, str::FromStr};
 
 use ethers_core::{
     types::{TransactionRequest, Signature, Address, H256, U256, transaction::eip2718::TypedTransaction, H160}, 
-    rand::{distributions::Uniform, self, prelude::Distribution}, 
+    rand::{distributions::Uniform, self, prelude::Distribution, prelude::*}, 
     utils::{rlp, hex}
 };
 use ethers_providers::{Provider, Http};
 use ethers_signers::{LocalWallet, Signer};
 use narwhal_types::{TransactionsClient, TransactionProto, Empty};
+use rand_distr::Zipf;
 use sha3::{Keccak256, Digest};
 use sui_network::tonic::{transport::Channel, self};
 use tracing::info;
@@ -51,7 +52,7 @@ impl SmallBankTransactionType {
 pub struct SmallBankTransactionHandler {
     op_gen: Uniform<u32>,
     nonce_gen: Uniform<u64>,
-    uniform_acc_gen: Uniform<u32>,
+    zipfian_acc_gen: Zipf<f32>,
     uniform_bal_gen: Uniform<u32>,
     admin_wallet: LocalWallet,
     provider: Provider<Http>,
@@ -61,14 +62,14 @@ pub struct SmallBankTransactionHandler {
 }
 
 impl SmallBankTransactionHandler {
-    pub fn new(provider: Provider<Http>, narwhal_client: TransactionsClient<Channel>, chain_id: u64) -> SmallBankTransactionHandler {
+    pub fn new(provider: Provider<Http>, narwhal_client: TransactionsClient<Channel>, chain_id: u64, skewness: f32) -> SmallBankTransactionHandler {
         let nonce_gen = Uniform::new(u64::MIN, u64::MAX);
 
         info!("contract address: {}", H160::from_str(DEFAULT_CONTRACT_ADDRESS).unwrap());
         SmallBankTransactionHandler {
             op_gen: Uniform::new(0, 6),
             nonce_gen,
-            uniform_acc_gen: Uniform::new(1, 100000),
+            zipfian_acc_gen: Zipf::new(100_000, skewness).unwrap(),
             uniform_bal_gen: Uniform::new(1, 10),
             admin_wallet: LocalWallet::from_bytes(ADMIN_SECRET_KEY.try_into().unwrap()).unwrap().with_chain_id(chain_id),
             provider: provider.clone(),
@@ -199,7 +200,7 @@ impl SmallBankTransactionHandler {
     }
 
     fn get_random_account_id(&self) -> String {
-        self.uniform_acc_gen.sample(&mut rand::thread_rng()).to_string()
+        rand::thread_rng().sample(self.zipfian_acc_gen).to_string()
     }
 
     fn get_random_balance(&self) -> U256 {

@@ -1,4 +1,5 @@
-pragma solidity ^0.4.0;
+// SPDX-License-Identifier: MIT 
+pragma solidity >=0.4.0 <0.7.0;
 
 contract SmallBank {
     
@@ -11,12 +12,12 @@ contract SmallBank {
     mapping(string=>uint) savingStore;
     mapping(string=>uint) checkingStore;
 
-    function createAccount(string acc, uint initCheck, uint initSave) public {
+    function createAccount(string memory acc, uint initCheck, uint initSave) public {
         savingStore[acc] = initSave;
         checkingStore[acc] = initCheck;
     }
 
-    function amalgamate(string dest, string src) public {
+    function amalgamate(string memory dest, string memory src) public {
        uint bal1 = savingStore[dest];
        uint bal2 = checkingStore[src];
        
@@ -24,7 +25,7 @@ contract SmallBank {
        checkingStore[src] = bal1 + bal2;
     }
 
-    function getBalance(string acc) public constant returns (uint balance) {
+    function getBalance(string memory acc) public view returns (uint balance) {
         uint bal1 = savingStore[acc];
         uint bal2 = checkingStore[acc];
         
@@ -32,19 +33,19 @@ contract SmallBank {
         return balance;
     }
     
-    function depositChecking(string acc, uint amount) public {
+    function depositChecking(string memory acc, uint amount) public {
         uint bal1 = checkingStore[acc];
         
         checkingStore[acc] = bal1 + amount;
     }
     
-    function updateSaving(string acc, uint amount) public {
+    function updateSaving(string memory acc, uint amount) public {
         uint bal1 = savingStore[acc];
         
         savingStore[acc] = bal1 + amount;
     }
     
-    function sendPayment(string dest, string src, uint amount) public {
+    function sendPayment(string memory dest, string memory src, uint amount) public {
         uint bal1 = checkingStore[dest];
         uint bal2 = checkingStore[src];
         
@@ -55,7 +56,7 @@ contract SmallBank {
         checkingStore[src] = bal2;
     }
     
-    function writeCheck(string acc, uint amount) public {
+    function writeCheck(string memory acc, uint amount) public {
         uint bal1 = checkingStore[acc];
 
         checkingStore[acc] = bal1 - amount;

@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 from json import dump, load
 from collections import OrderedDict
-from benchmark.utils import multiaddr_to_url_data
+from benchmark.utils import ExecutionModel, multiaddr_to_url_data
 
 
 class ConfigError(Exception):
@@ -288,11 +288,14 @@ class BenchParameters:
 
             self.execution_model = json['execution_model']
 
-            clevel = json['concurrency_level']
-            clevel = clevel if isinstance(clevel, list) else [clevel]
-            if not clevel or any(x < 1 for x in clevel):
-                raise ConfigError('Missing or invalid number of concurrency level')
-            self.concurrency_level = [int(x) for x in clevel]
+            if self.execution_model == ExecutionModel.NEZHA:
+                clevel = json['concurrency_level']
+                clevel = clevel if isinstance(clevel, list) else [clevel]
+                if not clevel or any(x < 1 for x in clevel):
+                    raise ConfigError('Missing or invalid number of concurrency level')
+                self.concurrency_level = [int(x) for x in clevel]
+            else:
+                self.concurrency_level = [1]
 
             self.runs = int(json['runs']) if 'runs' in json else 1
         except KeyError as e:
@@ -330,6 +333,12 @@ class PlotParameters:
                 self.collocate = True
 
             self.tx_size = int(json['tx_size'])
+            
+            execution_model = json['execution_model']
+            execution_model = execution_model if isinstance(execution_model, list) else [execution_model]
+            if not execution_model:
+                raise ConfigError('Missing execution model')
+            self.execution_model = execution_model
             
             concurrency_level = json['concurrency_level']
             concurrency_level = concurrency_level if isinstance(concurrency_level, list) else [concurrency_level]

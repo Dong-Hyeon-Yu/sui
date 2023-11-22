@@ -13,13 +13,14 @@ from benchmark.utils import PathMaker
 
 
 class Setup:
-    def __init__(self, faults, nodes, workers, collocate, rate, tx_size, concurrency_level):
+    def __init__(self, faults, nodes, workers, collocate, rate, tx_size, execution_model, concurrency_level):
         self.nodes = nodes
         self.workers = workers
         self.collocate = collocate
         self.rate = rate
         self.tx_size = tx_size
         self.faults = faults
+        self.execution_model = execution_model
         self.concurrency_level = concurrency_level
         self.max_latency = 'any'
 
@@ -30,8 +31,8 @@ class Setup:
             f' Workers per node: {self.workers}\n'
             f' Collocate primary and workers: {self.collocate}\n'
             f' Input rate: {self.rate} tx/s\n'
-            f' Transaction size: {self.tx_size} B\n'
             f' Max latency: {self.max_latency} ms\n'
+            f' Execution Model: {self.execution_model}\n'
             f' Concurrency level: {self.concurrency_level}\n'
         )
 
@@ -43,22 +44,30 @@ class Setup:
 
     @classmethod
     def from_str(cls, raw):
-        faults = int(search(r'Faults: (\d+)', raw).group(1))
-        nodes = int(search(r'Committee size: (\d+)', raw).group(1))
-        workers = int(search(r'Worker\(s\) per node: (\d+)', raw).group(1))
-        collocate = 'True' == search(
-            r'Collocate primary and workers: (True|False)', raw
-        ).group(1)
-        rate = int(search(r'Input rate: (\d+)', raw).group(1))
-        tx_size = int(search(r'Average Transaction size: (\d+)', raw).group(1))
-        concurrency_level = int(search(r'Concurrency level: (\d+)', raw).group(1))
-        return cls(faults, nodes, workers, collocate, rate, tx_size, concurrency_level)
+        try:
+            faults = int(search(r'Faults: (\d+)', raw).group(1))
+            nodes = int(search(r'Committee size: (\d+)', raw).group(1))
+            workers = int(search(r'Worker\(s\) per node: (\d+)', raw).group(1))
+            collocate = 'True' == search(
+                r'Collocate primary and workers: (True|False)', raw
+            ).group(1)
+            rate = int(search(r'Input rate: (\d+)', raw).group(1))
+            tx_size = int(search(r'Average Transaction size: (\d+)', raw).group(1))
+            execution_model = search(r'Execution mode: (\w+)', raw).group(1)
+            concurrency_level = int(search(r'Concurrency level: (\d+)', raw).group(1))
+        except AttributeError as e:
+            print(raw)
+            raise e 
+        
+        return cls(faults, nodes, workers, collocate, rate, tx_size, execution_model, concurrency_level)
 
 
 class Result:
-    def __init__(self, mean_tps, mean_latency, std_tps=0, std_latency=0):
+    def __init__(self, mean_tps, mean_latency, mean_send_rate, mean_batch_size, std_tps=0, std_latency=0):
         self.mean_tps = mean_tps
         self.mean_latency = mean_latency
+        self.mean_send_rate = mean_send_rate
+        self.mean_batch_size = mean_batch_size
         self.std_tps = std_tps
         self.std_latency = std_latency
 
@@ -66,13 +75,17 @@ class Result:
         return (
             f' TPS: {self.mean_tps} +/- {self.std_tps} tx/s\n'
             f' Latency: {self.mean_latency} +/- {self.std_latency} ms\n'
+            f' Actual Sending Rate: {self.mean_send_rate} tx/s\n'
+            f' Average Batch size: {self.mean_batch_size} KB\n'
         )
 
     @classmethod
     def from_str(cls, raw):
         tps = int(search(r'Execution TPS: (\d+)', raw).group(1))
         latency = int(search(r'Execution latency: (\d+)', raw).group(1))
-        return cls(tps, latency)
+        send_rate = int(search(r'Actual Sending Rate: (\d+)', raw).group(1))
+        batch_size = int(search(r'Average Batch size: (\d+)', raw).group(1))
+        return cls(tps, latency, send_rate, batch_size)
 
     @classmethod
     def aggregate(cls, results):
@@ -81,9 +94,11 @@ class Result:
 
         mean_tps = round(mean([x.mean_tps for x in results]))
         mean_latency = round(mean([x.mean_latency for x in results]))
+        mean_send_rate = round(mean([x.mean_send_rate for x in results]))
+        mean_batch_size = round(mean([x.mean_batch_size for x in results]))
         std_tps = round(stdev([x.mean_tps for x in results]))
         std_latency = round(stdev([x.mean_latency for x in results]))
-        return cls(mean_tps, mean_latency, std_tps, std_latency)
+        return cls(mean_tps, mean_latency, mean_send_rate, mean_batch_size, std_tps, std_latency)
 
 
 class LogAggregator:
@@ -110,10 +125,9 @@ class LogAggregator:
             os.makedirs(PathMaker.plots_path())
 
         results = [
-            # self._print_latency(),
+
             self._print_concurrency(),
-            # self._print_tps(scalability=False),
-            # self._print_tps(scalability=True),
+            self._print_execution(),
         ]
         for name, records in results:
             for setup, values in records.items():
@@ -139,6 +153,7 @@ class LogAggregator:
                     setup.workers,
                     setup.collocate,
                     setup.rate,
+                    setup.execution_model,
                     setup.concurrency_level,
                     max_latency=None if max_lat == 'any' else max_lat,
                 )
@@ -172,6 +187,20 @@ class LogAggregator:
             organized[setup] = [(x, y) for x, y in results]
             
         return 'concurrency', organized
+    
+    def _print_execution(self):
+        records = deepcopy(self.records)
+        organized = defaultdict(list)
+        for setup, result in records.items():
+            rate = setup.rate
+            setup.rate = 'any'
+            organized[setup] += [(result.mean_tps, result, rate)]
+
+        for setup, results in list(organized.items()):
+            results.sort(key=lambda x: x[2])
+            organized[setup] = [(x, y) for x, y, _ in results]
+
+        return 'execution', organized
 
     def _print_tps(self, scalability):
         records = deepcopy(self.records)

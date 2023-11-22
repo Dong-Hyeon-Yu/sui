@@ -7,7 +7,7 @@ import matplotlib.ticker as tick
 from glob import glob
 from itertools import cycle
 
-from benchmark.utils import PathMaker
+from benchmark.utils import ExecutionModel, PathMaker
 from benchmark.config import PlotParameters
 from benchmark.aggregate import LogAggregator
 
@@ -141,10 +141,17 @@ class Ploter:
         
     @staticmethod
     def send_rates(data):
-        x = search(r'Input rate: (\d+)', data).group(1)
+        x = search(r'Actual Sending Rate: (\d+)', data).group(1)
+        b = search(r'Average Batch size: (\d+)', data).group(1)
         f = search(r'Faults: (\d+)', data).group(1)
         faults = f'({f} faulty)' if f != '0' else ''
-        return f'Input rate: {int(x)} tx/s {faults}'
+        return f'Send rate: {int(x)} tx/s ({b} KB) {faults}'
+        
+    @staticmethod
+    def execution_model(data):
+        x = search(r'Execution Model: (\w+)', data).group(1)
+        c = search(r'Concurrency level: (\d+)', data).group(1)
+        return f'{x} ({c})'
 
     @classmethod
     def plot_latency(cls, files, scalability):
@@ -178,6 +185,16 @@ class Ploter:
         output_filename = f"concurrency-{'tps' if tps else 'latency'}"
         ploter._plot(x_label, y_label, ploter._tps if tps else ploter._latency, z_axis, output_filename)
         
+    @classmethod
+    def plot_execution(cls, files):
+        assert isinstance(files, list)
+        assert all(isinstance(x, str) for x in files)
+        z_axis = cls.execution_model
+        x_label = 'Throughput (tx/s)'
+        y_label = ['Latency (s)']
+        ploter = cls(files)
+        ploter._plot(x_label, y_label, ploter._latency, z_axis, 'execution-scalability')
+
 
     @classmethod
     def plot(cls, params_dict):
@@ -190,36 +207,9 @@ class Ploter:
         LogAggregator(params.max_latency).print()
 
         # Make the latency, tps, and robustness graphs.
-        iterator = params.workers if params.scalability() else params.nodes
-        latency_files, tps_files, concurrency_files = [], [], []
+        execution_files, concurrency_files = [], []
         for f in params.faults:
-            for x in iterator:
-                latency_files += glob(
-                    PathMaker.agg_file(
-                        'latency',
-                        f,
-                        x if not params.scalability() else params.nodes[0],
-                        x if params.scalability() else params.workers[0],
-                        params.collocate,
-                        'any',
-                        params.tx_size,
-                    )
-                )
 
-            for latency in params.max_latency:
-                tps_files += glob(
-                    PathMaker.agg_file(
-                        'tps',
-                        f,
-                        'x' if not params.scalability() else params.nodes[0],
-                        'x' if params.scalability() else params.workers[0],
-                        params.collocate,
-                        'any',
-                        params.tx_size,
-                        max_latency=latency
-                    )
-                )
-            
             for rate in params.rate:
                 concurrency_files += glob(
                     PathMaker.agg_file(
@@ -229,11 +219,26 @@ class Ploter:
                         params.workers[0],
                         params.collocate,
                         rate,
+                        ExecutionModel.NEZHA,
                         'any',
                     )
                 )
                 
-        # cls.plot_latency(latency_files, params.scalability())
-        # cls.plot_tps(tps_files, params.scalability())
+            for execution_model in params.execution_model:
+                clevels = params.concurrency_level if execution_model == ExecutionModel.NEZHA else [1]
+                for clevel in clevels:
+                    execution_files += glob(
+                        PathMaker.agg_file(
+                            'execution',
+                            f,
+                            params.nodes[0],
+                            params.workers[0],
+                            params.collocate,
+                            'any',
+                            execution_model,
+                            clevel,
+                        )
+                    )
         cls.plot_concurrency(concurrency_files, tps=True)
         cls.plot_concurrency(concurrency_files, latency=True)
+        cls.plot_execution(execution_files)

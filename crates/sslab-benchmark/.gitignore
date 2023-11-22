@@ -1,6 +1,8 @@
 logs/
 results/
 data/
+plots/*.txt
+plots/*.pdf
 .db-*
 .committee.json
 .parameters.json

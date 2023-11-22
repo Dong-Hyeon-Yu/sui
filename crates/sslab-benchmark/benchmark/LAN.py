@@ -331,7 +331,7 @@ class LANBench:
             sleep(ceil(duration / 20))
         self.kill(hosts=hosts, delete_logs=False)
 
-    def _logs(self, committee, worker_cache, faults,  concurrency_level):
+    def _logs(self, committee, worker_cache, faults, execution_model, concurrency_level):
         # Delete local logs (if any).
         cmd = CommandMaker.clean_logs()
         subprocess.run([cmd], shell=True, stderr=subprocess.DEVNULL)
@@ -367,7 +367,7 @@ class LANBench:
 
         # Parse logs and return the parser.
         Print.info('Parsing logs and computing performance...')
-        return LogParser.process(PathMaker.logs_path(), faults=faults, concurrency_level=concurrency_level)
+        return LogParser.process(PathMaker.logs_path(), execution_model, faults=faults, concurrency_level=concurrency_level)
 
     def run(self, bench_parameters_dict, node_parameters_dict, debug=False, include_execution=True):
         assert isinstance(debug, bool)
@@ -425,13 +425,14 @@ class LANBench:
 
                             faults = bench_parameters.faults
                             logger = self._logs(
-                                committee_copy, worker_cache_copy, faults, concurrency_level)
+                                committee_copy, worker_cache_copy, faults, bench_parameters.execution_model, concurrency_level)
                             logger.print(PathMaker.result_file(
                                 faults,
                                 n,
                                 bench_parameters.workers,
                                 bench_parameters.collocate,
                                 r,
+                                bench_parameters.execution_model,
                                 concurrency_level,
                             ))
                         except (subprocess.SubprocessError, GroupException, ParseError) as e:

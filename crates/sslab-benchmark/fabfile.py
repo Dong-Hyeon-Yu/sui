@@ -293,12 +293,12 @@ def LAN(ctx, debug=False):
         'nodes': [4],
         'workers': 1,
         'collocate': True,
-        'rate': [250_000], #[50_000, 100_000, 150_000, 200_000, 250_000],
+        'rate': [5_000, 10_000, 30_000, 50_000, 70_000, 100_000, 150_000, 200_000, 250_000],
         'tx_size': 270,
         'duration': 100,
-        'runs': 2,
-        'execution_model': ExecutionModel.NEZHA,
-        'concurrency_level': [1, 2, 3, 4, 5, 6, 8, 10, 12, 14], # only for nezha
+        'runs': 3,
+        'execution_model': ExecutionModel.SERIAL,
+        'concurrency_level': [2, 3, 4, 5, 6, 8, 10, 12, 14], # only for nezha
     }
     node_params = {
         'header_num_of_batches_threshold': 32,
@@ -307,7 +307,7 @@ def LAN(ctx, debug=False):
         'gc_depth': 50,  # rounds
         'sync_retry_delay': '10_000ms',  # ms
         'sync_retry_nodes': 3,  # number of nodes
-        'batch_size': 301 * 1024, # 301 KB   #500_000,  # bytes
+        'batch_size': 500_000,  # bytes
         'max_batch_delay': '200ms',  # ms,
         'block_synchronizer': {
             'range_synchronize_timeout': '30_000ms',
@@ -394,8 +394,9 @@ def plot(ctx):
         'nodes': [4],
         'workers': [1],
         'collocate': True,
-        'concurrency_level': [1, 2, 3, 4, 5, 6, 8, 10, 12, 14],
-        'rate': [250_000],
+        'execution_model': [ExecutionModel.NEZHA, ExecutionModel.SERIAL],
+        'concurrency_level': 10, #[1, 2, 3, 4, 5, 6, 8, 10, 12, 14],
+        'rate': [5_000, 10_000, 30_000, 50_000, 70_000, 100_000, 150_000, 200_000, 250_000],
         'tx_size': 270,
         'max_latency': [1_000]
     }

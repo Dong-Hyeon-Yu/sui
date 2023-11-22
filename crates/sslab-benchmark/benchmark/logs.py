@@ -12,7 +12,7 @@ from re import findall, search
 from statistics import mean
 
 
-from benchmark.utils import Print
+from benchmark.utils import ExecutionModel, Print
 
 
 class ParseError(Exception):
@@ -20,13 +20,17 @@ class ParseError(Exception):
 
 
 class LogParser:
-    def __init__(self, clients, primaries, workers, faults=0, concurrency_level=0):
+    def __init__(self, clients, primaries, workers, execution_model, faults=0, concurrency_level=0):
         inputs = [clients, primaries, workers]
         assert all(isinstance(x, list) for x in inputs)
         assert all(isinstance(x, str) for y in inputs for x in y)
         assert all(x for x in inputs)
 
-        self.concurrency_level =concurrency_level
+        self.execution_model = execution_model
+        
+        self.concurrency_level = concurrency_level if execution_model == ExecutionModel.NEZHA else 1
+        
+        
 
         self.faults = faults
         if isinstance(faults, int):
@@ -350,6 +354,7 @@ class LogParser:
             f' Input rate: {sum(self.rate):,} tx/s\n'
             # f' Transaction size (avg.): {(sum(self.sizes.values()) / len(self.sent_samples)):,} B\n'
             f' Execution time: {round(duration):,} s\n'
+            f' Execution mode: {self.execution_model} \n'
             f' Concurrency level: {self.concurrency_level} \n'
             '\n'
             f' Header number of batches threshold: {header_num_of_batches_threshold:,} digests\n'
@@ -400,7 +405,7 @@ class LogParser:
             f.write(self.result())
 
     @classmethod
-    def process(cls, directory, faults=0, concurrency_level=0):
+    def process(cls, directory, execution_model, faults=0, concurrency_level=0):
         assert isinstance(directory, str)
 
         clients = []
@@ -416,7 +421,7 @@ class LogParser:
             with open(filename, 'r') as f:
                 workers += [f.read()]
 
-        return cls(clients, primaries, workers, faults=faults, concurrency_level=concurrency_level)
+        return cls(clients, primaries, workers, execution_model, faults=faults, concurrency_level=concurrency_level)
 
 
 class LogGrpcParser:

@@ -34,10 +34,9 @@ impl SerialExecutor {
     pub fn _execute(&mut self, batch: ExecutableEthereumBatch) -> ExecutionResult {
 
         let mut state = self.global_state.write();
-        let snapshot = & state.snapshot();
 
         for tx in batch.data() {
-            match EvmExecutionUtils::execute_tx(tx, snapshot) {
+            match EvmExecutionUtils::execute_tx(tx, &state.snapshot()) {
                 Ok(Some((effect, log))) 
                     => state.apply_local_effect(effect, log),
                 Ok(None) 

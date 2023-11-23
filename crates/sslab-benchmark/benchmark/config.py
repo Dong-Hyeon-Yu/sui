@@ -271,6 +271,12 @@ class BenchParameters:
             if not rate:
                 raise ConfigError('Missing input rate')
             self.rate = [int(x) for x in rate]
+            
+            skewness = json['skewness']
+            skewness = skewness if isinstance(skewness, list) else [skewness]
+            if not skewness:
+                raise ConfigError('Missing skewness')
+            self.skewness = [float(x) for x in skewness]
 
             self.workers = int(json['workers'])
 

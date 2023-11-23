@@ -22,9 +22,10 @@ def local(ctx, debug=False):
         'nodes': 4,
         'workers': 1,
         'rate': 250_000,
+        'skewness': 0.0,
         'duration': 60,
         'concurrency_level': 10,
-        'execution_model': ExecutionModel.NEZHA,
+        'execution_model': ExecutionModel.SERIAL,
     }
     node_params = {
         'header_num_of_batches_threshold': 32,
@@ -293,12 +294,13 @@ def LAN(ctx, debug=False):
         'nodes': [4],
         'workers': 1,
         'collocate': True,
-        'rate': [5_000, 10_000, 30_000, 50_000, 70_000, 100_000, 150_000, 200_000, 250_000],
+        'rate': 250_000, #[5_000, 10_000, 30_000, 50_000, 70_000, 100_000, 150_000, 200_000, 250_000],
+        'skewness': [0.0, 0.5, 1.0],
         'tx_size': 270,
         'duration': 100,
-        'runs': 3,
-        'execution_model': ExecutionModel.SERIAL,
-        'concurrency_level': [2, 3, 4, 5, 6, 8, 10, 12, 14], # only for nezha
+        'runs': 1,
+        'execution_model': ExecutionModel.NEZHA,
+        'concurrency_level': 10, #[2, 3, 4, 5, 6, 8, 10, 12, 14], # only for nezha
     }
     node_params = {
         'header_num_of_batches_threshold': 32,

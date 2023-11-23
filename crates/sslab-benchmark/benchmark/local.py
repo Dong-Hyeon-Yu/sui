@@ -110,62 +110,63 @@ class LocalBench:
 
             self.node_parameters.print(PathMaker.parameters_file())
 
-            
-            for concurrency_level in self.concurrency_level:
-                # Run the clients (they will wait for the nodes to be ready).
-                workers_addresses = worker_cache.workers_addresses(self.faults)
-                rate_share = ceil(rate / worker_cache.workers())
-                for i, addresses in enumerate(workers_addresses):
-                    for (id, address) in addresses:
-                        cmd = CommandMaker.run_client(
-                            address,
-                            rate_share,
-                            [x for y in workers_addresses for _, x in y]
-                        )
-                        log_file = PathMaker.client_log_file(i, id)
-                        self._background_run(cmd, log_file)
+            for skewness in self.skewness:
+                for concurrency_level in self.concurrency_level:
+                    # Run the clients (they will wait for the nodes to be ready).
+                    workers_addresses = worker_cache.workers_addresses(self.faults)
+                    rate_share = ceil(rate / worker_cache.workers())
+                    for i, addresses in enumerate(workers_addresses):
+                        for (id, address) in addresses:
+                            cmd = CommandMaker.run_client(
+                                address,
+                                rate_share,
+                                skewness,
+                                [x for y in workers_addresses for _, x in y]
+                            )
+                            log_file = PathMaker.client_log_file(i, id)
+                            self._background_run(cmd, log_file)
 
-                # Run the primaries (except the faulty ones).
-                for i, address in enumerate(committee.primary_addresses(self.faults)):
-                    cmd = CommandMaker.run_primary(
-                        PathMaker.primary_key_file(i),
-                        PathMaker.primary_network_key_file(i),
-                        PathMaker.worker_key_file(0),
-                        PathMaker.committee_file(),
-                        PathMaker.workers_file(),
-                        PathMaker.db_path(i),
-                        PathMaker.parameters_file(),
-                        concurrency_level=concurrency_level,
-                        debug=debug
-                    )
-                    log_file = PathMaker.primary_log_file(i)
-                    self._background_run(cmd, log_file)
-
-                # Run the workers (except the faulty ones).
-                for i, addresses in enumerate(workers_addresses):
-                    for (id, address) in addresses:
-                        cmd = CommandMaker.run_worker(
+                    # Run the primaries (except the faulty ones).
+                    for i, address in enumerate(committee.primary_addresses(self.faults)):
+                        cmd = CommandMaker.run_primary(
                             PathMaker.primary_key_file(i),
                             PathMaker.primary_network_key_file(i),
-                            PathMaker.worker_key_file(i*self.workers + id),
+                            PathMaker.worker_key_file(0),
                             PathMaker.committee_file(),
                             PathMaker.workers_file(),
-                            PathMaker.db_path(i, id),
+                            PathMaker.db_path(i),
                             PathMaker.parameters_file(),
-                            id,  # The worker's id.
+                            concurrency_level=concurrency_level,
                             debug=debug
                         )
-                        log_file = PathMaker.worker_log_file(i, id)
+                        log_file = PathMaker.primary_log_file(i)
                         self._background_run(cmd, log_file)
 
-                # Wait for all transactions to be processed.
-                Print.info(f'Running benchmark ({self.duration} sec)...')
-                sleep(self.duration)
-                self._kill_nodes()
+                    # Run the workers (except the faulty ones).
+                    for i, addresses in enumerate(workers_addresses):
+                        for (id, address) in addresses:
+                            cmd = CommandMaker.run_worker(
+                                PathMaker.primary_key_file(i),
+                                PathMaker.primary_network_key_file(i),
+                                PathMaker.worker_key_file(i*self.workers + id),
+                                PathMaker.committee_file(),
+                                PathMaker.workers_file(),
+                                PathMaker.db_path(i, id),
+                                PathMaker.parameters_file(),
+                                id,  # The worker's id.
+                                debug=debug
+                            )
+                            log_file = PathMaker.worker_log_file(i, id)
+                            self._background_run(cmd, log_file)
 
-                # Parse logs and return the parser.
-                Print.info('Parsing logs...')
-                return LogParser.process(PathMaker.logs_path(), self.execution_model, faults=self.faults, concurrency_level=self.concurrency_level)
+                    # Wait for all transactions to be processed.
+                    Print.info(f'Running benchmark ({self.duration} sec)...')
+                    sleep(self.duration)
+                    self._kill_nodes()
+
+                    # Parse logs and return the parser.
+                    Print.info('Parsing logs...')
+                    return LogParser.process(PathMaker.logs_path(), self.execution_model, faults=self.faults, concurrency_level=self.concurrency_level)
 
         except (subprocess.SubprocessError, ParseError) as e:
             self._kill_nodes()

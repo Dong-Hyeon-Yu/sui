@@ -264,7 +264,7 @@ class LANBench:
 
         return (committee, worker_cache)
 
-    def _run_single(self, rate, committee, worker_cache, bench_parameters, concurrency_level=10, debug=False):
+    def _run_single(self, rate, skewness, committee, worker_cache, bench_parameters, concurrency_level=10, debug=False):
         faults = bench_parameters.faults
 
         # Kill any potentially unfinished run and delete logs.
@@ -283,6 +283,7 @@ class LANBench:
                 cmd = CommandMaker.run_client(
                     address,
                     rate_share,
+                    skewness,
                     [x for y in workers_addresses for _, x in y]
                 )
                 log_file = PathMaker.client_log_file(i, id)
@@ -413,31 +414,33 @@ class LANBench:
 
             for r in bench_parameters.rate:
                 for concurrency_level in bench_parameters.concurrency_level:
-                    Print.heading(f'\nRunning {n} nodes (input rate: {r:,} tx/s, concurrency level: {concurrency_level})')
+                    for skewness in bench_parameters.skewness:
+                        
+                        Print.heading(f'\nRunning {n} nodes (input rate: {r:,} tx/s, concurrency level: {concurrency_level})')
 
-                    # Run the benchmark.
-                    for i in range(bench_parameters.runs):
-                        Print.heading(f'Run {i+1}/{bench_parameters.runs}')
-                        try:
-                            self._run_single(
-                                r, committee_copy, worker_cache_copy, bench_parameters, concurrency_level, debug
-                            )
+                        # Run the benchmark.
+                        for i in range(bench_parameters.runs):
+                            Print.heading(f'Run {i+1}/{bench_parameters.runs}')
+                            try:
+                                self._run_single(
+                                    r, skewness, committee_copy, worker_cache_copy, bench_parameters, concurrency_level, debug
+                                )
 
-                            faults = bench_parameters.faults
-                            logger = self._logs(
-                                committee_copy, worker_cache_copy, faults, bench_parameters.execution_model, concurrency_level)
-                            logger.print(PathMaker.result_file(
-                                faults,
-                                n,
-                                bench_parameters.workers,
-                                bench_parameters.collocate,
-                                r,
-                                bench_parameters.execution_model,
-                                concurrency_level,
-                            ))
-                        except (subprocess.SubprocessError, GroupException, ParseError) as e:
-                            self.kill(hosts=selected_hosts)
-                            if isinstance(e, GroupException):
-                                e = FabricError(e)
-                            Print.error(BenchError('Benchmark failed', e))
-                            continue
+                                faults = bench_parameters.faults
+                                logger = self._logs(
+                                    committee_copy, worker_cache_copy, faults, bench_parameters.execution_model, concurrency_level)
+                                logger.print(PathMaker.result_file(
+                                    faults,
+                                    n,
+                                    bench_parameters.workers,
+                                    bench_parameters.collocate,
+                                    r,
+                                    bench_parameters.execution_model,
+                                    concurrency_level,
+                                ))
+                            except (subprocess.SubprocessError, GroupException, ParseError) as e:
+                                self.kill(hosts=selected_hosts)
+                                if isinstance(e, GroupException):
+                                    e = FabricError(e)
+                                Print.error(BenchError('Benchmark failed', e))
+                                continue

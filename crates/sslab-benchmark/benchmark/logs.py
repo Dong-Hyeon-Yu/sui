@@ -47,9 +47,10 @@ class LogParser:
         except (ValueError, IndexError, AttributeError) as e:
             exception(e)
             raise ParseError(f'Failed to parse clients\' logs: {e}')
-        self.rate, self.start, misses, self.sent_samples \
+        self.rate, self.start, misses, self.sent_samples, skewness \
             = zip(*results)
         self.misses = sum(misses)
+        self.skewness = skewness[0]
 
         # Parse the primaries logs.
         try:
@@ -145,8 +146,10 @@ class LogParser:
 
         tmp = findall(r'(.*?) .* sample transaction (\d+)', log)
         samples = {int(tx_id): self._to_posix(t) for t, tx_id in tmp}
+        
+        skewness = float(search(r'Workload skewness: (\d+\.\d+)', log).group(1))
 
-        return rate, start, misses, samples 
+        return rate, start, misses, samples, skewness
     
     def _parse_executions(self, log):
         if search(r'(?:panicked)', log) is not None:
@@ -357,6 +360,7 @@ class LogParser:
             f' Worker(s) per node: {self.workers} worker(s)\n'
             f' Collocate primary and workers: {self.collocate}\n'
             f' Input rate: {sum(self.rate):,} tx/s\n'
+            f' Input skewness: {self.skewness:.1f} \n'
             # f' Transaction size (avg.): {(sum(self.sizes.values()) / len(self.sent_samples)):,} B\n'
             f' Execution time: {round(duration):,} s\n'
             f' Execution mode: {self.execution_model} \n'
@@ -397,7 +401,7 @@ class LogParser:
             f' Execution TPS: {round(execution_tps):,} tx/s\n'
             f' Execution BPS: {round(execution_bps):,} B/s\n'
             f' Execution latency: {round(execution_latency):,} ms\n'
-            f' \tAverage Abort Rate: {self.average_abort_rate:.2} % \n'
+            f' \tAverage Abort Rate: {self.average_abort_rate:.2f} % \n'
             '\n'
             f' End-to-end TPS: {round(end_to_end_tps):,} tx/s\n'
             f' End-to-end BPS: {round(end_to_end_bps):,} B/s\n'

@@ -7,18 +7,17 @@ use narwhal_types::BatchDigest;
 use parking_lot::RwLock;
 
 pub use small_bank::*;
-use crate::{utils::smallbank_contract_benchmark::default_memory_storage, executor::Executable, types::{ExecutableEthereumBatch, EthereumTransaction, ExecutionResult}};
+use crate::{utils::smallbank_contract_benchmark::default_memory_storage, executor::Executable, types::{ExecutableEthereumBatch, EthereumTransaction}};
 use super::Nezha;
 
 
 /* this test is for debuging nezha algorithm under a smallbank workload */
-#[tokio::test]
-async fn test_smallbank() {
+#[test]
+fn test_smallbank() {
     let memory_storage = Arc::new(RwLock::new(default_memory_storage()));
-    let mut nezha_excutor = Nezha::new(memory_storage,  10);
+    let nezha_excutor = Nezha::new(memory_storage,  10);
     let provider = Provider::<MockProvider>::new(MockProvider::default());
     let handler = SmallBankTransactionHandler::new(provider, DEFAULT_CHAIN_ID);
-    let (tx_execute_notification, rx_execute_notification) = &mut tokio::sync::mpsc::channel::<ExecutionResult>(10);
 
     //given
     let acc1_creation_tx = handler.create_account("acc1".to_string(), U256::from(100), U256::from(99));
@@ -26,11 +25,7 @@ async fn test_smallbank() {
     let consensus_output = vec![ExecutableEthereumBatch::new(vec![acc1_creation_tx, acc2_creation_tx], BatchDigest::default())];
 
     //when
-    nezha_excutor.execute(consensus_output, tx_execute_notification).await;
-
-    //then
-    let result = rx_execute_notification.recv().await.unwrap();
-    assert_eq!(result.iter().count(), 1);
+    nezha_excutor.execute(consensus_output);
 }
 
 

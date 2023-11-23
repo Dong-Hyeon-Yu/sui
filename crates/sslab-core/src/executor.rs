@@ -13,9 +13,8 @@ use crate::{
 pub(crate) const DEFAULT_EVM_STACK_LIMIT:usize = 1024;
 pub(crate) const DEFAULT_EVM_MEMORY_LIMIT:usize = usize::MAX; 
 
-#[async_trait::async_trait]
 pub trait Executable {
-    async fn execute(&mut self, consensus_output: Vec<ExecutableEthereumBatch>, tx_execute_notification: &mut Sender<ExecutionResult>);
+    fn execute(&self, consensus_output: Vec<ExecutableEthereumBatch>);
 }
 
 
@@ -36,20 +35,6 @@ pub trait ExecutionComponent {
 #[async_trait::async_trait]
 impl<ExecutionModel: Executable + Send + Sync> ExecutionComponent for ParallelExecutor<ExecutionModel> {
     async fn run(&mut self) {
-
-        let (mut tx_execute_notification, mut rx_execute_notification) = tokio::sync::mpsc::channel::<ExecutionResult>(100);
-
-        spawn_monitored_task!(async move {
-            while let Some(digests) = rx_execute_notification.recv().await {
-
-                // NOTE: This log entry is used to compute performance.
-                digests.iter().for_each(|batch_digest| 
-                    info!("Executed Batch -> {:?}", batch_digest)
-                );
-            }
-        });
-
-        
         while let Some(consensus_output) = self.rx_consensus_certificate.recv().await {
             debug!(
                 "Received consensus output at leader round {}, subdag index {}, timestamp {} ",
@@ -57,15 +42,24 @@ impl<ExecutionModel: Executable + Send + Sync> ExecutionComponent for ParallelEx
                 consensus_output.sub_dag_index(),
                 consensus_output.timestamp(),
             );
-
-            // NOTE: This log entry is used to compute performance.
-            consensus_output.data().iter().for_each(|batch_digest| 
-                info!("Received Batch -> {:?}", batch_digest.digest())
-            );
-            
-            self.execution_model.execute(consensus_output.take_data(), &mut tx_execute_notification).await;
+            cfg_if::cfg_if! {
+                if #[cfg(feature = "benchmark")] {
+                    // NOTE: This log entry is used to compute performance.
+                    consensus_output.data().iter().for_each(|batch_digest|
+                        info!("Received Batch -> {:?}", batch_digest.digest())
+                    );
+                }
+            }
+            self.execution_model.execute(consensus_output.data().to_owned());
+            cfg_if::cfg_if! {
+                if #[cfg(feature = "benchmark")] {
+                    // NOTE: This log entry is used to compute performance.
+                    consensus_output.data().iter().for_each(|batch_digest|
+                        info!("Executed Batch -> {:?}", batch_digest.digest())
+                    );
+                }
+            }
         }
-        
     }
 }
 

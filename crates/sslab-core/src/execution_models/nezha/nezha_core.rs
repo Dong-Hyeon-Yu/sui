@@ -3,7 +3,7 @@ use itertools::Itertools;
 use narwhal_types::BatchDigest;
 use parking_lot::RwLock;
 use rayon::prelude::*;
-use tokio::{time::Instant, sync::mpsc::Sender};
+use tokio::time::Instant;
 use tracing::{info, debug, warn, error};
 
 use crate::{
@@ -22,12 +22,10 @@ pub struct Nezha {
     inner: ConcurrencyLevelManager,
 }
 
-#[async_trait::async_trait]
 impl Executable for Nezha {
-    async fn execute(&mut self, consensus_output: Vec<ExecutableEthereumBatch>, tx_execute_notification: &mut Sender<ExecutionResult>) {
+    fn execute(&self, consensus_output: Vec<ExecutableEthereumBatch>) {
 
-        let result = self.inner.prepare_execution(consensus_output);
-        let _ = tx_execute_notification.send(result).await;
+        let _ = self.inner.prepare_execution(consensus_output);
     }
 }
 
@@ -53,7 +51,7 @@ impl ConcurrencyLevelManager {
         }
     }
 
-    fn prepare_execution(&mut self, consensus_output: Vec<ExecutableEthereumBatch>) -> ExecutionResult {
+    fn prepare_execution(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> ExecutionResult {
 
         let mut result = vec![];
         let mut target = consensus_output;

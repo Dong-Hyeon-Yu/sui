@@ -30,7 +30,7 @@ impl SimpleConsensusHandler {
 
         handles.push(
             spawn_logged_monitored_task!(
-                executor.run(),
+                async move{ executor.run().await; },
                 "executor.run()"
             )
         );

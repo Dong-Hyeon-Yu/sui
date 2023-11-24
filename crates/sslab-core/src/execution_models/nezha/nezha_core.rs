@@ -37,14 +37,14 @@ impl Nezha {
     }
 }
 
-struct ConcurrencyLevelManager {
+pub(crate) struct ConcurrencyLevelManager {
     concurrency_level: usize,
     global_state: Arc<RwLock<MemoryStorage>>
 }
 
 impl ConcurrencyLevelManager {
     
-    fn new(global_state: Arc<RwLock<MemoryStorage>>, concurrency_level: usize) -> Self {
+    pub(crate) fn new(global_state: Arc<RwLock<MemoryStorage>>, concurrency_level: usize) -> Self {
         Self {
             concurrency_level,
             global_state
@@ -102,7 +102,7 @@ impl ConcurrencyLevelManager {
     }
     
     //TODO: create Simulator having a thread pool for cpu-bound jobs.
-    fn _simulate(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> SimulationResult {
+    pub(crate) fn _simulate(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> SimulationResult {
         let local_state = self.global_state.read();
 
         let snapshot = local_state.snapshot();
@@ -154,7 +154,7 @@ impl ConcurrencyLevelManager {
         }
     }
 
-    fn _concurrent_commit(&self, scheduled_info: ScheduledInfo) {
+    pub(crate) fn _concurrent_commit(&self, scheduled_info: ScheduledInfo) {
         let mut storage = self.global_state.write();
 
         scheduled_info.scheduled_txs.into_iter()
@@ -226,11 +226,11 @@ impl ScheduledInfo {
         )
     }
 
-    fn scheduled_txs_len(&self) -> usize {
+    pub fn scheduled_txs_len(&self) -> usize {
         self.scheduled_txs.iter().map(|vec| vec.len()).sum()
     }
 
-    fn aborted_txs_len(&self) -> usize {
+    pub fn aborted_txs_len(&self) -> usize {
         self.aborted_txs.len()
     }
 }

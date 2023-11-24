@@ -5,27 +5,74 @@ use ethers_providers::{Provider, MockProvider};
 use ethers_signers::{LocalWallet, Signer};
 use narwhal_types::BatchDigest;
 use parking_lot::RwLock;
+use rand::Rng as _;
+use rand_distr::{Zipf, Uniform, Distribution};
+use tokio::time::Instant;
 
-pub use small_bank::*;
-use crate::{utils::smallbank_contract_benchmark::default_memory_storage, executor::Executable, types::{ExecutableEthereumBatch, EthereumTransaction}};
-use super::Nezha;
+use crate::{
+    utils::smallbank_contract_benchmark::default_memory_storage, 
+    types::{ExecutableEthereumBatch, EthereumTransaction}, 
+    execution_models::nezha::{address_based_conflict_graph::AddressBasedConflictGraph, types::SimulationResult}
+};
+use self::small_bank::SmallBank;
 
+use super::nezha_core::ConcurrencyLevelManager;
+
+fn get_smallbank_handler() -> SmallBankTransactionHandler {
+    let provider = Provider::<MockProvider>::new(MockProvider::default());
+    SmallBankTransactionHandler::new(provider, DEFAULT_CHAIN_ID)
+}
+
+fn get_nezha_executor() -> ConcurrencyLevelManager {
+    let memory_storage = Arc::new(RwLock::new(default_memory_storage()));
+    ConcurrencyLevelManager::new(memory_storage,  12)
+}
 
 /* this test is for debuging nezha algorithm under a smallbank workload */
 #[test]
 fn test_smallbank() {
-    let memory_storage = Arc::new(RwLock::new(default_memory_storage()));
-    let nezha_excutor = Nezha::new(memory_storage,  10);
-    let provider = Provider::<MockProvider>::new(MockProvider::default());
-    let handler = SmallBankTransactionHandler::new(provider, DEFAULT_CHAIN_ID);
+    let nezha = get_nezha_executor();
+    let handler = get_smallbank_handler();
 
     //given
-    let acc1_creation_tx = handler.create_account("acc1".to_string(), U256::from(100), U256::from(99));
-    let acc2_creation_tx = handler.create_account("acc2".to_string(), U256::from(10), U256::from(9));
-    let consensus_output = vec![ExecutableEthereumBatch::new(vec![acc1_creation_tx, acc2_creation_tx], BatchDigest::default())];
+    let skewness = 0.6;
+    let batch_size = 200;
+    let block_concurrency = 12;
+    let mut consensus_output = Vec::new();
+    for _ in 0..block_concurrency {
+        let mut tmp = Vec::new();
+        for _ in 0..batch_size {
+            tmp.push(handler.random_operation(skewness, 10_000))
+        }
+        consensus_output.push(ExecutableEthereumBatch::new(tmp, BatchDigest::default()));
+    }
 
     //when
-    nezha_excutor.execute(consensus_output);
+    let total = Instant::now();
+    let mut now = Instant::now();
+    let SimulationResult { rw_sets, .. } = nezha._simulate(consensus_output);
+    let mut time = now.elapsed().as_millis();
+    println!("Simulation took {} ms for {} transactions.", time, rw_sets.len());
+
+
+    now = Instant::now();
+    let scheduled_info = AddressBasedConflictGraph::construct(rw_sets)
+        .hierarchcial_sort()
+        .reorder()
+        .extract_schedule();
+    time = now.elapsed().as_millis();
+    println!("Scheduling took {} ms.", time);
+
+    let scheduled_tx_len = scheduled_info.scheduled_txs_len();
+    let aborted_tx_len =  scheduled_info.aborted_txs_len();
+
+    now = Instant::now();
+    nezha._concurrent_commit(scheduled_info);
+    time = now.elapsed().as_millis();
+
+    println!("Concurrent commit took {} ms for {} transactions.", time, scheduled_tx_len);
+    println!("Abort rate: {:.2} ({}/{} aborted)", (aborted_tx_len as f64) * 100.0 / (scheduled_tx_len+aborted_tx_len) as f64, aborted_tx_len, scheduled_tx_len+aborted_tx_len);
+    println!("Total time: {} ms", total.elapsed().as_millis());
 }
 
 
@@ -39,6 +86,7 @@ pub struct SmallBankTransactionHandler {
     admin_wallet: LocalWallet,
     chain_id: u64,
     contract: Option<SmallBank<Provider<MockProvider>>>,
+    random_op_gen: Uniform<u8>,
 }
 
 #[allow(dead_code)]
@@ -48,6 +96,26 @@ impl SmallBankTransactionHandler {
             admin_wallet: LocalWallet::from_bytes(ADMIN_SECRET_KEY.try_into().unwrap()).unwrap().with_chain_id(chain_id),
             chain_id,
             contract: Some(SmallBank::new(H160::from_str(DEFAULT_CONTRACT_ADDRESS).unwrap(), Arc::new(provider))),
+            random_op_gen: Uniform::new(1, 7),
+        }
+    }
+
+    fn random_operation(&self, zipfian_coef: f32, account_num: u64) -> EthereumTransaction {
+
+        let acc_gen = Zipf::new(account_num, zipfian_coef).unwrap();
+        let acc1 = rand::thread_rng().sample(acc_gen).to_string();
+        let acc2 = rand::thread_rng().sample(acc_gen).to_string();
+
+        let op = self.random_op_gen.sample(&mut rand::thread_rng());
+        match op {
+            0 => self.create_account(acc1, U256::from(100), U256::from(99)),
+            1 => self.amalgamate(acc1, acc2),
+            2 => self.get_balance(acc1),
+            3 => self.send_payment(acc1, acc2, U256::from(10)),
+            4 => self.update_balance(acc1, U256::from(10)),
+            5 => self.update_saving(acc1, U256::from(10)),
+            6 => self.write_check(acc1, U256::from(10)),
+            _ => panic!("invalid operation"),
         }
     }
 

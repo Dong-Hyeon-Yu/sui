@@ -138,7 +138,7 @@ class LANBench:
         output = c.run(cmd, hide=True)
         self._check_stderr(output)
 
-    def _update(self, hosts, bench_parameters, include_execution=True):
+    def _update(self, hosts, bench_parameters, execution_model, include_execution=True):
         if bench_parameters.collocate:
             ips = list(set(hosts))
         else:
@@ -157,7 +157,7 @@ class LANBench:
             f'(cd {self.settings.repo_name}/crates/sslab-benchmark && {compile_cmd})',  
         ]
         if include_execution:
-            compile_cmd = ' '.join(CommandMaker.compile(execution_model=bench_parameters.execution_model, LAN=True))
+            compile_cmd = ' '.join(CommandMaker.compile(execution_model=execution_model, LAN=True))
             cmd += [f'(cd {self.settings.repo_name}/crates/sslab-core && {compile_cmd})']
         else:
             cmd += [f'(cd {self.settings.repo_name}/narwhal/node && {compile_cmd})']
@@ -385,62 +385,66 @@ class LANBench:
             Print.warn('There are not enough instances available')
             return
 
-        # Update nodes.
-        try:
-            self._update(selected_hosts, bench_parameters, include_execution)
-        except (GroupException, ExecutionError) as e:
-            e = FabricError(e) if isinstance(e, GroupException) else e
-            raise BenchError('Failed to update nodes', e)
+        for execution_model in bench_parameters.execution_model:
 
-        # Upload all configuration files.
-        try:
-            committee, worker_cache = self._config(
-                selected_hosts, node_parameters, bench_parameters
-            )
-        except (subprocess.SubprocessError, GroupException) as e:
-            e = FabricError(e) if isinstance(e, GroupException) else e
-            raise BenchError('Failed to configure nodes', e)
+            # Update nodes.
+            try:
+                self._update(selected_hosts, bench_parameters, execution_model, include_execution)
+            except (GroupException, ExecutionError) as e:
+                e = FabricError(e) if isinstance(e, GroupException) else e
+                raise BenchError('Failed to update nodes', e)
 
-        if bench_parameters.execution_model != ExecutionModel.NEZHA:
-            bench_parameters.concurrency_level = [1]
+            # Upload all configuration files.
+            try:
+                committee, worker_cache = self._config(
+                    selected_hosts, node_parameters, bench_parameters
+                )
+            except (subprocess.SubprocessError, GroupException) as e:
+                e = FabricError(e) if isinstance(e, GroupException) else e
+                raise BenchError('Failed to configure nodes', e)
+                
+            # Run benchmarks.
+            for n in bench_parameters.nodes:
+                committee_copy = deepcopy(committee)
+                committee_copy.remove_nodes(committee.size() - n)
+
+                worker_cache_copy = deepcopy(worker_cache)
+                worker_cache_copy.remove_nodes(worker_cache.size() - n)
+
             
-        # Run benchmarks.
-        for n in bench_parameters.nodes:
-            committee_copy = deepcopy(committee)
-            committee_copy.remove_nodes(committee.size() - n)
-
-            worker_cache_copy = deepcopy(worker_cache)
-            worker_cache_copy.remove_nodes(worker_cache.size() - n)
-
-            for r in bench_parameters.rate:
-                for concurrency_level in bench_parameters.concurrency_level:
-                    for skewness in bench_parameters.skewness:
+                for r in bench_parameters.rate:
+                    for concurrency_level in bench_parameters.concurrency_level:
                         
-                        Print.heading(f'\nRunning {n} nodes (input rate: {r:,} tx/s, concurrency level: {concurrency_level})')
+                        if execution_model != ExecutionModel.NEZHA:
+                            concurrency_level = 1
+                        
+                        for skewness in bench_parameters.skewness:
+                            
+                            Print.heading(f'\nRunning {n} nodes (input rate: {r:,} tx/s, concurrency level: {concurrency_level})')
 
-                        # Run the benchmark.
-                        for i in range(bench_parameters.runs):
-                            Print.heading(f'Run {i+1}/{bench_parameters.runs}')
-                            try:
-                                self._run_single(
-                                    r, skewness, committee_copy, worker_cache_copy, bench_parameters, concurrency_level, debug
-                                )
+                            # Run the benchmark.
+                            for i in range(bench_parameters.runs):
+                                Print.heading(f'Run {i+1}/{bench_parameters.runs}')
+                                try:
+                                    self._run_single(
+                                        r, skewness, committee_copy, worker_cache_copy, bench_parameters, concurrency_level, debug
+                                    )
 
-                                faults = bench_parameters.faults
-                                logger = self._logs(
-                                    committee_copy, worker_cache_copy, faults, bench_parameters.execution_model, concurrency_level)
-                                logger.print(PathMaker.result_file(
-                                    faults,
-                                    n,
-                                    bench_parameters.workers,
-                                    bench_parameters.collocate,
-                                    r,
-                                    bench_parameters.execution_model,
-                                    concurrency_level,
-                                ))
-                            except (subprocess.SubprocessError, GroupException, ParseError) as e:
-                                self.kill(hosts=selected_hosts)
-                                if isinstance(e, GroupException):
-                                    e = FabricError(e)
-                                Print.error(BenchError('Benchmark failed', e))
-                                continue
+                                    faults = bench_parameters.faults
+                                    logger = self._logs(
+                                        committee_copy, worker_cache_copy, faults, execution_model, concurrency_level)
+                                    logger.print(PathMaker.result_file(
+                                        faults,
+                                        n,
+                                        bench_parameters.workers,
+                                        bench_parameters.collocate,
+                                        r,
+                                        execution_model,
+                                        concurrency_level,
+                                    ))
+                                except (subprocess.SubprocessError, GroupException, ParseError) as e:
+                                    self.kill(hosts=selected_hosts)
+                                    if isinstance(e, GroupException):
+                                        e = FabricError(e)
+                                    Print.error(BenchError('Benchmark failed', e))
+                                    continue

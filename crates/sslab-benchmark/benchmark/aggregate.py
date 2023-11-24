@@ -13,7 +13,7 @@ from benchmark.utils import PathMaker
 
 
 class Setup:
-    def __init__(self, faults, nodes, workers, collocate, rate, tx_size, execution_model, concurrency_level):
+    def __init__(self, faults, nodes, workers, collocate, rate, tx_size, execution_model, concurrency_level, skewness):
         self.nodes = nodes
         self.workers = workers
         self.collocate = collocate
@@ -22,6 +22,7 @@ class Setup:
         self.faults = faults
         self.execution_model = execution_model
         self.concurrency_level = concurrency_level
+        self.skewness = skewness
         self.max_latency = 'any'
 
     def __str__(self):
@@ -31,6 +32,7 @@ class Setup:
             f' Workers per node: {self.workers}\n'
             f' Collocate primary and workers: {self.collocate}\n'
             f' Input rate: {self.rate} tx/s\n'
+            f' Skewness: {self.skewness}\n'
             f' Max latency: {self.max_latency} ms\n'
             f' Execution Model: {self.execution_model}\n'
             f' Concurrency level: {self.concurrency_level}\n'
@@ -55,21 +57,25 @@ class Setup:
             tx_size = int(search(r'Average Transaction size: (\d+)', raw).group(1))
             execution_model = search(r'Execution mode: (\w+)', raw).group(1)
             concurrency_level = int(search(r'Concurrency level: (\d+)', raw).group(1))
+            skewness = float(search(r'skewness: (\d+\.\d+)', raw).group(1))
         except AttributeError as e:
             print(raw)
             raise e 
         
-        return cls(faults, nodes, workers, collocate, rate, tx_size, execution_model, concurrency_level)
+        return cls(faults, nodes, workers, collocate, rate, tx_size, execution_model, concurrency_level, skewness)
 
 
 class Result:
-    def __init__(self, mean_tps, mean_latency, mean_send_rate, mean_batch_size, std_tps=0, std_latency=0):
+    def __init__(self, mean_tps, mean_latency, mean_send_rate, mean_batch_size, abort_rate, 
+                 std_tps=0, std_latency=0, std_abort_rate=0):
         self.mean_tps = mean_tps
         self.mean_latency = mean_latency
         self.mean_send_rate = mean_send_rate
         self.mean_batch_size = mean_batch_size
+        self.mean_abort_rate = abort_rate
         self.std_tps = std_tps
         self.std_latency = std_latency
+        self.std_abort_rate = std_abort_rate
 
     def __str__(self):
         return (
@@ -77,6 +83,7 @@ class Result:
             f' Latency: {self.mean_latency} +/- {self.std_latency} ms\n'
             f' Actual Sending Rate: {self.mean_send_rate} tx/s\n'
             f' Average Batch size: {self.mean_batch_size} KB\n'
+            f' Abort Rate: {self.mean_abort_rate} +/- {self.std_abort_rate} %\n'
         )
 
     @classmethod
@@ -85,7 +92,8 @@ class Result:
         latency = int(search(r'Execution latency: (\d+)', raw).group(1))
         send_rate = int(search(r'Actual Sending Rate: (\d+)', raw).group(1))
         batch_size = int(search(r'Average Batch size: (\d+)', raw).group(1))
-        return cls(tps, latency, send_rate, batch_size)
+        abort_rate = float(search(r'Abort Rate: (\d+\.\d+)', raw).group(1))
+        return cls(tps, latency, send_rate, batch_size, abort_rate)
 
     @classmethod
     def aggregate(cls, results):
@@ -96,9 +104,12 @@ class Result:
         mean_latency = round(mean([x.mean_latency for x in results]))
         mean_send_rate = round(mean([x.mean_send_rate for x in results]))
         mean_batch_size = round(mean([x.mean_batch_size for x in results]))
+        mean_abort_rate = round(mean([x.mean_abort_rate for x in results]), 2)
         std_tps = round(stdev([x.mean_tps for x in results]))
         std_latency = round(stdev([x.mean_latency for x in results]))
-        return cls(mean_tps, mean_latency, mean_send_rate, mean_batch_size, std_tps, std_latency)
+        std_abort_rate = round(stdev([x.mean_abort_rate for x in results]), 2)
+        return cls(mean_tps, mean_latency, mean_send_rate, mean_batch_size, mean_abort_rate, 
+                   std_tps, std_latency, std_abort_rate)
 
 
 class LogAggregator:
@@ -125,7 +136,7 @@ class LogAggregator:
             os.makedirs(PathMaker.plots_path())
 
         results = [
-
+            self._print_skewness(),
             self._print_concurrency(),
             self._print_execution(),
         ]
@@ -145,7 +156,6 @@ class LogAggregator:
                     '-----------------------------------------\n'
                 )
 
-                max_lat = setup.max_latency
                 filename = PathMaker.agg_file(
                     name,
                     setup.faults,
@@ -155,7 +165,7 @@ class LogAggregator:
                     setup.rate,
                     setup.execution_model,
                     setup.concurrency_level,
-                    max_latency=None if max_lat == 'any' else max_lat,
+                    setup.skewness,
                 )
                 with open(filename, 'w') as f:
                     f.write(string)
@@ -173,6 +183,20 @@ class LogAggregator:
             organized[setup] = [(x, y) for x, y, _ in results]
 
         return 'latency', organized
+    
+    def _print_skewness(self):
+        records = deepcopy(self.records)
+        organized = defaultdict(list)
+        for setup, result in records.items():
+            skewness = setup.skewness
+            setup.skewness = 'any'
+            organized[setup] += [(skewness, result)]
+
+        for setup, results in list(organized.items()):
+            results.sort(key=lambda x: x[0])
+            organized[setup] = [(x, y) for x, y in results]
+
+        return 'skewness', organized
 
     def _print_concurrency(self):
         records = deepcopy(self.records)

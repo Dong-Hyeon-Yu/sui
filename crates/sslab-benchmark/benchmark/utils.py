@@ -113,11 +113,10 @@ class PathMaker:
         return 'plots'
 
     @staticmethod
-    def agg_file(type, faults, nodes, workers, collocate, rate, execution_model, concurrency_level, max_latency=None):
-        if max_latency is None:
-            name = f'{type}-bench-{faults}-{nodes}-{workers}-{collocate}-{rate}-{execution_model}-{concurrency_level}.txt'
-        else:
-            name = f'{type}-{max_latency}-bench-{faults}-{nodes}-{workers}-{collocate}-{rate}-{execution_model}-{concurrency_level}.txt'
+    def agg_file(type, faults, nodes, workers, collocate, rate, execution_model, concurrency_level, skewness):
+
+        name = f'{type}-bench-{faults}-{nodes}-{workers}-{collocate}-{rate}-{execution_model}-{concurrency_level}-{skewness}.txt'
+
         return join(PathMaker.plots_path(), name)
 
     @staticmethod

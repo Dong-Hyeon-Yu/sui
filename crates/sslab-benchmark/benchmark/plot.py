@@ -16,10 +16,10 @@ from benchmark.aggregate import LogAggregator
 def default_major_formatter(x, pos):
     if pos is None:
         return
-    if x >= 1_000:
-        return f'{x/1000:.0f}k'
-    else:
-        return f'{x:.0f}'
+    # if x >= 1_000:
+    #     return f'{x/1000:.0f}k'
+    # else:
+    return f'{x:.0f}'
 
 
 @tick.FuncFormatter
@@ -66,9 +66,17 @@ class Ploter:
         values = findall(r' Latency: (\d+) \+/- (\d+)', data)
         values = [(float(x)/scale, float(y)/scale) for x, y in values]
         return list(zip(*values))
+    
+    def _abort_rate(self, data):
+        values = findall(r'Abort Rate: (\d+\.\d+) \+/- (\d+\.\d+)', data)
+        values = [(float(x), float(y)) for x, y in values]
+        return list(zip(*values))
 
-    def _variable(self, data):
-        return [int(x) for x in findall(r'Variable value: X=(\d+)', data)]
+    def _variable(self, data, isFloat=False):
+        if isFloat:
+            return [float(x) for x in findall(r'Variable value: X=(\d+\.\d+)', data)]
+        else:
+            return [int(x) for x in findall(r'Variable value: X=(\d+)', data)]
 
     def _tps2bps(self, x):
         data = self.results[0]
@@ -86,7 +94,7 @@ class Ploter:
         self.results.sort(key=self._natural_keys, reverse=(type == 'tps'))
         for result in self.results:
             y_values, y_err = y_axis(result)
-            x_values = self._variable(result)
+            x_values = self._variable(result, isFloat=True) if 'skewness' in type else self._variable(result, isFloat=False)
             if len(y_values) != len(y_err) or len(y_err) != len(x_values):
                 raise PlotError('Unequal number of x, y, and y_err values')
 
@@ -108,6 +116,8 @@ class Ploter:
         ax.yaxis.set_major_formatter(default_major_formatter)
         if 'latency' in type:
             ax.yaxis.set_major_formatter(sec_major_formatter)
+        if 'skewness' in type:
+            ax.xaxis.set_major_formatter(tick.StrMethodFormatter('{x:.1f}'))
         if len(y_label) > 1:
             secaxy = ax.secondary_yaxis(
                 'right', functions=(self._tps2bps, self._bps2tps)
@@ -117,6 +127,8 @@ class Ploter:
 
         for x in ['pdf', 'png']:
             plt.savefig(PathMaker.plot_file(type, x), bbox_inches='tight')
+            
+        plt.cla()
 
     @staticmethod
     def nodes(data):
@@ -174,7 +186,7 @@ class Ploter:
         ploter._plot(x_label, y_label, ploter._tps, z_axis, 'tps')
         
     @classmethod
-    def plot_concurrency(cls, files, tps=False, latency=False):
+    def plot_concurrency(cls, files, skewness, tps=False, latency=False):
         assert tps != latency
         assert isinstance(files, list)
         assert all(isinstance(x, str) for x in files)
@@ -182,18 +194,30 @@ class Ploter:
         x_label = 'Concurrency level'
         y_label = ['Throughput (tx/s)' if tps else 'Latency (s)']
         ploter = cls(files)
-        output_filename = f"concurrency-{'tps' if tps else 'latency'}"
+        output_filename = f"concurrency-{'tps' if tps else 'latency'}-{skewness}"
         ploter._plot(x_label, y_label, ploter._tps if tps else ploter._latency, z_axis, output_filename)
         
     @classmethod
-    def plot_execution(cls, files):
+    def plot_skewness(cls, files, tps=False, latency=False, abort_rate=False):
+        assert tps + latency + abort_rate == 1
+        assert isinstance(files, list)
+        assert all(isinstance(x, str) for x in files)
+        z_axis = cls.send_rates
+        x_label = 'Skewness'
+        y_label = ['Throughput (tx/s)' if tps else 'Latency (s)' if latency else 'Abort rate (%)']
+        ploter = cls(files)
+        output_filename = f"skewness-{'tps' if tps else 'latency' if latency else 'abort_rate'}"
+        ploter._plot(x_label, y_label, ploter._tps if tps else ploter._latency if latency else ploter._abort_rate, z_axis, output_filename)
+        
+    @classmethod
+    def plot_execution(cls, files, skewness):
         assert isinstance(files, list)
         assert all(isinstance(x, str) for x in files)
         z_axis = cls.execution_model
         x_label = 'Throughput (tx/s)'
-        y_label = ['Latency (s)']
+        y_label = ['Latency (ms)']
         ploter = cls(files)
-        ploter._plot(x_label, y_label, ploter._latency, z_axis, 'execution-scalability')
+        ploter._plot(x_label, y_label, ploter._latency, z_axis, f'execution-scalability-{skewness}')
 
 
     @classmethod
@@ -207,38 +231,64 @@ class Ploter:
         LogAggregator(params.max_latency).print()
 
         # Make the latency, tps, and robustness graphs.
-        execution_files, concurrency_files = [], []
-        for f in params.faults:
-
-            for rate in params.rate:
-                concurrency_files += glob(
-                    PathMaker.agg_file(
-                        'concurrency',
-                        f,
-                        params.nodes[0],
-                        params.workers[0],
-                        params.collocate,
-                        rate,
-                        ExecutionModel.NEZHA,
-                        'any',
-                    )
-                )
+        for skewness in params.skewness:
+            execution_files, concurrency_files = [], [],
+            for f in params.faults:
+                for rate in params.rate:
                 
-            for execution_model in params.execution_model:
-                clevels = params.concurrency_level if execution_model == ExecutionModel.NEZHA else [1]
-                for clevel in clevels:
-                    execution_files += glob(
+                    concurrency_files += glob(
                         PathMaker.agg_file(
-                            'execution',
+                            'concurrency',
                             f,
                             params.nodes[0],
                             params.workers[0],
                             params.collocate,
+                            rate,
+                            ExecutionModel.NEZHA,
                             'any',
-                            execution_model,
-                            clevel,
+                            skewness
                         )
                     )
-        cls.plot_concurrency(concurrency_files, tps=True)
-        cls.plot_concurrency(concurrency_files, latency=True)
-        cls.plot_execution(execution_files)
+                
+                for execution_model in params.execution_model:
+                    clevels = params.concurrency_level if execution_model == ExecutionModel.NEZHA else [1]
+                    for clevel in clevels:
+                            execution_files += glob(
+                                PathMaker.agg_file(
+                                    'execution',
+                                    f,
+                                    params.nodes[0],
+                                    params.workers[0],
+                                    params.collocate,
+                                    'any',
+                                    execution_model,
+                                    clevel,
+                                    skewness
+                                )
+                            )
+                            
+            cls.plot_concurrency(concurrency_files, skewness, tps=True)
+            cls.plot_concurrency(concurrency_files, skewness, latency=True)
+            cls.plot_execution(execution_files, skewness)
+            
+        skewness_files = []
+        for f in params.faults:
+            for rate in params.rate:
+                for clevel in params.concurrency_level:
+                    skewness_files += glob(
+                        PathMaker.agg_file(
+                            'skewness',
+                            f,
+                            params.nodes[0],
+                            params.workers[0],
+                            params.collocate,
+                            rate,
+                            ExecutionModel.NEZHA,
+                            clevel,
+                            'any',
+                        )
+                    )
+
+        cls.plot_skewness(skewness_files, tps=True)
+        cls.plot_skewness(skewness_files, latency=True)
+        cls.plot_skewness(skewness_files, abort_rate=True)

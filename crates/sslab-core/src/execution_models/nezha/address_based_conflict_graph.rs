@@ -9,7 +9,7 @@ use super::{types::SimulatedTransaction, nezha_core::ScheduledInfo};
 pub(crate) type FastHashMap<K, V> = hashbrown::HashMap<K, V, nohash_hasher::BuildNoHashHasher<K>>;
 pub(crate) type FastHashSet<K> = hashbrown::HashSet<K, nohash_hasher::BuildNoHashHasher<K>>;
 
-pub(crate) struct AddressBasedConflictGraph {
+pub struct AddressBasedConflictGraph {
     addresses: hashbrown::HashMap<H256, Address>,
     tx_list: FastHashMap<u64, Rc<Transaction>>, // tx_id -> transaction
     aborted_txs: Vec<Rc<Transaction>>, // optimization for reordering.
@@ -211,7 +211,7 @@ impl AddressBasedConflictGraph {
 
 
 #[derive(Clone, Debug)]
-pub(crate) struct Transaction {
+pub struct Transaction {
     tx_id: u64, 
     sequence: Cell<u64>,  // 0 represents that this transaction havn't been ordered yet.
     aborted: Cell<bool>,

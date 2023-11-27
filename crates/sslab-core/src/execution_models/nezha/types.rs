@@ -3,13 +3,13 @@ use narwhal_types::BatchDigest;
 
 // SimulcationResult includes the batch digests and rw sets of each transctions in a ConsensusOutput.
 #[derive(Clone, Debug, Default)]
-pub(crate) struct SimulationResult {
+pub struct SimulationResult {
     pub digests: Vec<BatchDigest>,
     pub rw_sets: Vec<SimulatedTransaction>,
 }
 
 #[derive(Clone, Debug, Default)]
-pub(crate) struct SimulatedTransaction {
+pub struct SimulatedTransaction {
     tx_id: u64,
     rw_set: Option<RwSet>,
     effects: Vec<Apply>,

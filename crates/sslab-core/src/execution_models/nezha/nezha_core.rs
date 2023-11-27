@@ -1,6 +1,5 @@
 use std::{sync::Arc, rc::Rc};
 use itertools::Itertools;
-use narwhal_types::BatchDigest;
 use parking_lot::RwLock;
 use rayon::prelude::*;
 use tokio::time::Instant;
@@ -18,57 +17,27 @@ use crate::{
 
 use super::{types::SimulatedTransaction, address_based_conflict_graph::{Transaction, FastHashMap}};
 
-pub struct Nezha {
-    inner: ConcurrencyLevelManager,
-}
 
 impl Executable for Nezha {
     fn execute(&self, consensus_output: Vec<ExecutableEthereumBatch>) {
 
-        let _ = self.inner.prepare_execution(consensus_output);
+        let _ = self._execute(consensus_output);
     }
 }
 
-impl Nezha {
-    pub fn new(global_state: Arc<RwLock<MemoryStorage>>, concurrency_level: usize) -> Self {
-        Self {
-            inner: ConcurrencyLevelManager::new(global_state, concurrency_level),
-        }
-    }
-}
-
-pub(crate) struct ConcurrencyLevelManager {
-    concurrency_level: usize,
+pub struct Nezha {
     global_state: Arc<RwLock<MemoryStorage>>
 }
 
-impl ConcurrencyLevelManager {
+impl Nezha {
     
-    pub(crate) fn new(global_state: Arc<RwLock<MemoryStorage>>, concurrency_level: usize) -> Self {
+    pub fn new(global_state: Arc<RwLock<MemoryStorage>>) -> Self {
         Self {
-            concurrency_level,
             global_state
         }
     }
 
-    fn prepare_execution(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> ExecutionResult {
-
-        let mut result = vec![];
-        let mut target = consensus_output;
-    
-        while !target.is_empty() {
-            let split_idx = std::cmp::min(self.concurrency_level, target.len());
-            let remains: Vec<ExecutableEthereumBatch> = target.split_off(split_idx);
-
-            result.extend(self._execute(target));
-
-            target = remains;
-        } 
-        
-        ExecutionResult::new(result)
-    }
-
-    fn _execute(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> Vec<BatchDigest> {
+    fn _execute(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> ExecutionResult {
         let mut now = Instant::now();
         let SimulationResult { digests, rw_sets } = self._simulate(consensus_output);
         let mut time = now.elapsed().as_millis();
@@ -98,11 +67,11 @@ impl ConcurrencyLevelManager {
 
         // println!("{} transactions are aborted.", aborted_tx_len);
 
-        digests
+        ExecutionResult {digests}
     }
     
     //TODO: create Simulator having a thread pool for cpu-bound jobs.
-    pub(crate) fn _simulate(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> SimulationResult {
+    pub fn _simulate(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> SimulationResult {
         let local_state = self.global_state.read();
 
         let snapshot = local_state.snapshot();
@@ -154,7 +123,7 @@ impl ConcurrencyLevelManager {
         }
     }
 
-    pub(crate) fn _concurrent_commit(&self, scheduled_info: ScheduledInfo) {
+    pub fn _concurrent_commit(&self, scheduled_info: ScheduledInfo) {
         let mut storage = self.global_state.write();
 
         scheduled_info.scheduled_txs.into_iter()
@@ -181,7 +150,7 @@ impl ConcurrencyLevelManager {
 
 
 
-pub(crate) struct ScheduledInfo {
+pub struct ScheduledInfo {
     pub scheduled_txs: Vec<Vec<SimulatedTransaction>>,  
     pub aborted_txs: Vec<u64>
 }

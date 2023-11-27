@@ -83,6 +83,10 @@ nohash-hasher = "0.2.0"
 hashbrown = "0.14.2"
 # console-subscriber = "^0.1.0"
 
+ethers = "^2.0.0"
+ethers-signers = { version = "^2.0.0" }
+rand_distr = "0.4.3"
+
 [dev-dependencies]
 criterion.workspace = true
 expect-test.workspace = true
@@ -96,10 +100,8 @@ narwhal-test-utils.workspace = true
 sui-test-transaction-builder.workspace = true
 sui-types = { workspace = true, features = ["test-utils"] }
 
-ethers = "^2.0.0"
-ethers-signers = { version = "^2.0.0" }
+gnuplot = "0.0.39"
 
-rand_distr = "0.4.3"
 
 [features]
 benchmark = ["narwhal-node/benchmark"]
@@ -111,6 +113,11 @@ serial = []
 [[bin]]
 name = "sslab-narwhal-node"
 path = "src/main.rs"
+
+[[bench]]
+name = "nezha"
+path = "./benches/nezha.rs"
+harness = false
 
 # [build]
 # rustflags = ["--cfg", "tokio_unstable"]

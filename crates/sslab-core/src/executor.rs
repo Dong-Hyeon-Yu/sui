@@ -1,12 +1,11 @@
 use std::collections::BTreeMap;
 use evm::{ExitReason, backend::{Apply, Log}, executor::stack::RwSet};
-use mysten_metrics::spawn_monitored_task;
 use sui_types::error::SuiError;
-use tokio::sync::mpsc::{Receiver, Sender};
-use tracing::{debug, warn, info};
+use tokio::sync::mpsc::Receiver;
+use tracing::{debug, warn};
 
 use crate::{
-    types::{ExecutableEthereumBatch, EthereumTransaction, ExecutableConsensusOutput, ExecutionResult}, 
+    types::{ExecutableEthereumBatch, EthereumTransaction, ExecutableConsensusOutput}, 
     execution_storage::MemoryStorage
 }; 
 
@@ -44,6 +43,7 @@ impl<ExecutionModel: Executable + Send + Sync> ExecutionComponent for ParallelEx
             );
             cfg_if::cfg_if! {
                 if #[cfg(feature = "benchmark")] {
+                    use tracing::info;
                     // NOTE: This log entry is used to compute performance.
                     consensus_output.data().iter().for_each(|batch_digest|
                         info!("Received Batch -> {:?}", batch_digest.digest())
@@ -53,6 +53,7 @@ impl<ExecutionModel: Executable + Send + Sync> ExecutionComponent for ParallelEx
             self.execution_model.execute(consensus_output.data().to_owned());
             cfg_if::cfg_if! {
                 if #[cfg(feature = "benchmark")] {
+                    use tracing::info;
                     // NOTE: This log entry is used to compute performance.
                     consensus_output.data().iter().for_each(|batch_digest|
                         info!("Executed Batch -> {:?}", batch_digest.digest())

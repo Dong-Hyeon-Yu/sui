@@ -82,7 +82,12 @@ rayon = "1.8.0"
 nohash-hasher = "0.2.0"
 hashbrown = "0.14.2"
 # console-subscriber = "^0.1.0"
+flurry = "0.4.0"
+# sharded = { version = "0.2.1", features = ["fxhash", "parking_lot"] }
+# leapfrog = { version = "0.3.0", features = ["stable_alloc"] }
 
+
+# dev-dependencies used in criterion
 ethers = "^2.0.0"
 ethers-signers = { version = "^2.0.0" }
 rand_distr = "0.4.3"

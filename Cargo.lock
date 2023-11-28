@@ -3947,6 +3947,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "flurry"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3e0afc943ef18eebf6bc3335daeb8d338202093d18444a1784ea7f57fe7680f8"
+dependencies = [
+ "ahash 0.7.6",
+ "num_cpus",
+ "parking_lot 0.12.1",
+ "seize",
+]
+
+[[package]]
 name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9698,6 +9710,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "seize"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e5739de653b129b0a59da381599cf17caf24bc586f6a797c52d3d6147c5b85a"
+dependencies = [
+ "num_cpus",
+ "once_cell",
+]
+
+[[package]]
 name = "semver"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10357,6 +10379,7 @@ dependencies = [
  "expect-test",
  "eyre",
  "fastcrypto",
+ "flurry",
  "fs_extra",
  "futures",
  "gnuplot",

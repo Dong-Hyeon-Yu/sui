@@ -7,7 +7,7 @@ use parking_lot::RwLock;
 
 use sslab_core::{
     types::ExecutableEthereumBatch,
-    utils::smallbank_contract_benchmark::default_memory_storage,
+    utils::smallbank_contract_benchmark::concurrent_evm_storage,
     execution_models::nezha::{
         AddressBasedConflictGraph,
         Nezha,
@@ -26,7 +26,7 @@ fn _get_smallbank_handler() -> SmallBankTransactionHandler {
 }
 
 fn _get_nezha_executor() -> Nezha {
-    let memory_storage = Arc::new(RwLock::new(default_memory_storage()));
+    let memory_storage = Arc::new(concurrent_evm_storage());
     Nezha::new(memory_storage)
 }
 

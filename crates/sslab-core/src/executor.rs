@@ -53,7 +53,6 @@ impl<ExecutionModel: Executable + Send + Sync> ExecutionComponent for ParallelEx
             self.execution_model.execute(consensus_output.data().to_owned());
             cfg_if::cfg_if! {
                 if #[cfg(feature = "benchmark")] {
-                    use tracing::info;
                     // NOTE: This log entry is used to compute performance.
                     consensus_output.data().iter().for_each(|batch_digest|
                         info!("Executed Batch -> {:?}", batch_digest.digest())

@@ -81,11 +81,12 @@ class LogParser:
             chain(*request_vote_outbound_latencies))
         
         # execution metrics
-        commits, latencies, subdag_size, average_abort_rates = zip(*execution_results)
+        commits, latencies, subdag_size, aborted, total = zip(*execution_results)
         self.commits = self._merge_results([x.items() for x in commits])
         self.execution_latencies = self._merge_results([x.items() for x in latencies])
         self.subdag_size = self._merge_results([x.items() for x in subdag_size])
-        self.average_abort_rate = mean([v for abort_rate in average_abort_rates for _, v in abort_rate.items()])
+        self.aborted = sum([int(x) for single_list in aborted for x in single_list])
+        self.total = sum([int(x) for single_list in total for x in single_list])
 
         # Parse the workers logs.
         try:
@@ -170,11 +171,11 @@ class LogParser:
         latencies = [(digest, e - starts[digest]) for digest, e in commits.items()]
         latencies = self._merge_results([latencies])
         
-        tmp = findall(r'Abort rate: (\d+)', log)
-        average_abort_rate = {"abort_rate": mean([float(r) for r in tmp])} if tmp else {"abort_rate": 0.0}
+        tmp = findall(r'Abort rate: \d+.\d+ \((\d+)/(\d+) aborted\)', log)
+        aborted, total = zip(*tmp)
         
 
-        return commits, latencies, subdag_size, average_abort_rate
+        return commits, latencies, subdag_size, aborted, total
 
     def _parse_consensus(self, log):
         if search(r'(?:panicked)', log) is not None:
@@ -330,7 +331,11 @@ class LogParser:
         consensus_latency = self._consensus_latency() * 1_000
         consensus_tps, consensus_bps, duration = self._consensus_throughput()
         execution_latency = self._execution_latency() * 1_000
-        execution_tps, execution_bps, _ = self._execution_throughput()
+        execution_tps, execution_bps, excution_duration = self._execution_throughput()
+        
+        effective_tps = (self.total_committed_tx - self.aborted) / excution_duration if self.aborted else execution_tps
+        abort_rate = 100 * self.aborted / self.total if self.aborted else 0.0
+        
         end_to_end_tps, end_to_end_bps, _ = self._end_to_end_throughput()
         end_to_end_latency = self._end_to_end_latency() * 1_000
 
@@ -401,7 +406,8 @@ class LogParser:
             f' Execution TPS: {round(execution_tps):,} tx/s\n'
             f' Execution BPS: {round(execution_bps):,} B/s\n'
             f' Execution latency: {round(execution_latency):,} ms\n'
-            f' \tAverage Abort Rate: {self.average_abort_rate:.2f} % \n'
+            f' \tAverage Abort Rate: {abort_rate:.2f} % \n'
+            f' \tEffective TPS: {round(effective_tps):,} tx/s\n'
             '\n'
             f' End-to-end TPS: {round(end_to_end_tps):,} tx/s\n'
             f' End-to-end BPS: {round(end_to_end_bps):,} B/s\n'

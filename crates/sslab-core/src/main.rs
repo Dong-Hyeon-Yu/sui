@@ -294,8 +294,6 @@ async fn run(
                 }
             }
 
-            let execution_store = Arc::new(memory_storage);
-
 
             cfg_if::cfg_if! {
                 if #[cfg(feature = "nezha")] {
@@ -312,12 +310,12 @@ async fn run(
                         _ => 10,
                     };
 
-                    let execution_model = Nezha::new(execution_store, concurrency_level);
+                    let execution_model = Nezha::new(memory_storage, concurrency_level);
                 }
                 else {
                     use sslab_core::execution_models::serial::SerialExecutor;
 
-                    let execution_model = SerialExecutor::new(execution_store);
+                    let execution_model = SerialExecutor::new(Arc::new(memory_storage));
                 }
             }
             

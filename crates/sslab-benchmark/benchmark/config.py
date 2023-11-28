@@ -292,11 +292,7 @@ class BenchParameters:
             else:
                 self.failpoints = False
 
-            execution_model = json['execution_model']
-            execution_model = execution_model if isinstance(execution_model, list) else [execution_model]
-            if not execution_model:
-                raise ConfigError('Missing execution model')
-            self.execution_model = execution_model
+            self.execution_model = json['execution_model']
             
             concurrency_level = json['concurrency_level']
             concurrency_level = concurrency_level if isinstance(concurrency_level, list) else [concurrency_level]

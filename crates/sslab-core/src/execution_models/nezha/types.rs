@@ -25,6 +25,10 @@ impl SimulatedTransaction {
         (self.tx_id, self.rw_set, self.effects, self.logs)
     }
 
+    pub fn extract(&self) -> Vec<Apply> {
+        self.effects.clone()
+    }
+
     #[allow(dead_code)] // this function is used in unit tests.
     pub(crate) fn id(&self) -> &u64 {
         &self.tx_id

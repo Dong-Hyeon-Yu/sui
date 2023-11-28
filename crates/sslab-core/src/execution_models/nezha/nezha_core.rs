@@ -1,6 +1,5 @@
 use std::{sync::Arc, rc::Rc};
 use itertools::Itertools;
-use parking_lot::RwLock;
 use rayon::prelude::*;
 use tokio::time::Instant;
 use tracing::{info, debug, warn, error};
@@ -8,10 +7,12 @@ use tracing::{info, debug, warn, error};
 use crate::{
     types::{ExecutableEthereumBatch, ExecutionResult}, 
     executor::{EvmExecutionUtils, Executable}, 
-    execution_storage::{ExecutionBackend, MemoryStorage}, 
-    execution_models::nezha::{
+    execution_models::{
+        nezha::{
         address_based_conflict_graph::AddressBasedConflictGraph, 
         types::SimulationResult
+        }, 
+        execution_storage::{ConcurrentEVMStorage, backend::ExecutionBackend as _}
     }
 };
 
@@ -26,12 +27,12 @@ impl Executable for Nezha {
 }
 
 pub struct Nezha {
-    global_state: Arc<RwLock<MemoryStorage>>
+    global_state: Arc<ConcurrentEVMStorage>
 }
 
 impl Nezha {
     
-    pub fn new(global_state: Arc<RwLock<MemoryStorage>>) -> Self {
+    pub fn new(global_state: Arc<ConcurrentEVMStorage>) -> Self {
         Self {
             global_state
         }
@@ -72,9 +73,7 @@ impl Nezha {
     
     //TODO: create Simulator having a thread pool for cpu-bound jobs.
     pub fn _simulate(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> SimulationResult {
-        let local_state = self.global_state.read();
-
-        let snapshot = local_state.snapshot();
+        let snapshot = self.global_state.snapshot();
         
         let (digests, batches): (Vec<_>, Vec<_>) = consensus_output
             .iter()
@@ -124,28 +123,29 @@ impl Nezha {
     }
 
     pub fn _concurrent_commit(&self, scheduled_info: ScheduledInfo) {
-        let mut storage = self.global_state.write();
+        let storage = self.global_state.clone();
+        // let _storage = &storage;
+        let scheduled_txs = scheduled_info.scheduled_txs;
 
-        scheduled_info.scheduled_txs.into_iter()
-            .flatten()
-            .for_each(|tx| {
-                let (_, _, effects, logs) = tx.deconstruct();
-                storage.apply_local_effect(effects, logs);
-            });
+        // Parallel simulation requires heavy cpu usages. 
+        // CPU-bound jobs would make the I/O-bound tokio threads starve.
+        // To this end, a separated thread pool need to be used for cpu-bound jobs.
+        // a new thread is created, and a new thread pool is created on the thread. (specifically, rayon's thread pool is created)
+        std::thread::spawn(move || {
+            let _storage = &storage;
+            for txs_to_commit in scheduled_txs {
+                txs_to_commit
+                    .par_iter()
+                    .for_each(|tx| {
+                        let effect = tx.extract();
+                        _storage.apply_local_effect(effect)
+                    })
+            }
+        }).join().expect("fail to commit concurrently.");
 
-        // let (tx, rx) = std::sync::mpsc::channel::<Vec<SimulatedTransaction>>();
-
-        // let thread = std::thread::spawn(move || {
-        //     for target_txs in scheduled_info.scheduled_txs.iter() {
-
-        //         target_txs.par_iter()
-        //             .for_each(|tx| {
-        //                 let (_, _, effects, logs) = tx.deconstruct();
-        //                 self.global_state.write().apply_local_effect(effects, logs);  // TODO: address를 key로 하는 concurrent map을 사용해야함.
-        //         })
-        //     }
-        // });
+        // self.global_state.update_from(storage);
     }
+    
 }
 
 

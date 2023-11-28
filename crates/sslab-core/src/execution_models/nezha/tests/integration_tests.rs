@@ -2,11 +2,10 @@ use std::sync::Arc;
 
 use ethers_providers::{Provider, MockProvider};
 use narwhal_types::BatchDigest;
-use parking_lot::RwLock;
 use tokio::time::Instant;
 
 use crate::{
-    utils::smallbank_contract_benchmark::default_memory_storage, 
+    utils::smallbank_contract_benchmark::concurrent_evm_storage, 
     types::ExecutableEthereumBatch, 
     execution_models::nezha::{
         address_based_conflict_graph::AddressBasedConflictGraph, 
@@ -24,14 +23,14 @@ fn get_smallbank_handler() -> SmallBankTransactionHandler {
 }
 
 fn get_nezha_executor() -> Nezha {
-    let memory_storage = Arc::new(RwLock::new(default_memory_storage()));
+    let memory_storage = Arc::new(concurrent_evm_storage());
     Nezha::new(memory_storage)
 }
 
 /* this test is for debuging nezha algorithm under a smallbank workload */
 #[test]
 fn test_smallbank() {
-    let nezha = get_nezha_executor();
+    let nezha = Box::pin(get_nezha_executor());
     let handler = get_smallbank_handler();
 
     //given

@@ -1,12 +1,12 @@
 use std::collections::BTreeMap;
-use evm::{ExitReason, backend::{Apply, Log}, executor::stack::RwSet};
+use evm::{ExitReason, backend::{Apply, Log, Backend}, executor::stack::RwSet};
 use sui_types::error::SuiError;
 use tokio::sync::mpsc::Receiver;
 use tracing::{debug, warn};
 
 use crate::{
     types::{ExecutableEthereumBatch, EthereumTransaction, ExecutableConsensusOutput}, 
-    execution_storage::MemoryStorage
+    execution_models::execution_storage::{backend::ApplyBackend, EvmStorage}
 }; 
 
 pub(crate) const DEFAULT_EVM_STACK_LIMIT:usize = 1024;
@@ -82,7 +82,13 @@ impl<ExecutionModel: Executable + Send + Sync> ParallelExecutor<ExecutionModel> 
 pub struct EvmExecutionUtils;
 
 impl EvmExecutionUtils {
-    pub fn execute_tx(tx: &EthereumTransaction, snapshot: &MemoryStorage) -> Result<Option<(Vec<Apply>, Vec<Log>)>, SuiError> {
+    pub fn execute_tx<B>(
+        tx: &EthereumTransaction, 
+        snapshot: &EvmStorage<B>
+    ) -> Result<Option<(Vec<Apply>, Vec<Log>)>, SuiError> 
+    where
+        B: Backend + ApplyBackend + Default + Clone
+    {
         let mut executor = snapshot.executor(tx.gas_limit(), false);
 
         let mut effect: Vec<Apply> = vec![];
@@ -148,7 +154,13 @@ impl EvmExecutionUtils {
         }
     }
 
-    pub fn simulate_tx(tx: &EthereumTransaction, snapshot: &MemoryStorage) -> Result<Option<(Vec<Apply>, Vec<Log>, RwSet)>, SuiError> {
+    pub fn simulate_tx<B>(
+        tx: &EthereumTransaction, 
+        snapshot: &EvmStorage<B>
+    ) -> Result<Option<(Vec<Apply>, Vec<Log>, RwSet)>, SuiError> 
+    where
+        B: Backend + ApplyBackend + Default + Clone
+    {
         let mut executor = snapshot.executor(tx.gas_limit(), true);
 
         let mut effect: Vec<Apply> = vec![];

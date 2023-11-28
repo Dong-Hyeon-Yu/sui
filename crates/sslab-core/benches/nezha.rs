@@ -10,7 +10,7 @@ use sslab_core::{
     utils::smallbank_contract_benchmark::{concurrent_evm_storage, default_memory_storage},
     execution_models::nezha::{
         AddressBasedConflictGraph,
-        Nezha,
+        ConcurrencyLevelManager,
         SimulationResult,
         tests::utils::{SmallBankTransactionHandler, DEFAULT_CHAIN_ID}
     },
@@ -25,9 +25,8 @@ fn _get_smallbank_handler() -> SmallBankTransactionHandler {
     SmallBankTransactionHandler::new(provider, DEFAULT_CHAIN_ID)
 }
 
-fn _get_nezha_executor() -> Nezha {
-    let memory_storage = Arc::new(concurrent_evm_storage());
-    Nezha::new(memory_storage)
+fn _get_nezha_executor() -> ConcurrencyLevelManager {
+    ConcurrencyLevelManager::new(concurrent_evm_storage(), 20)
 }
 
 fn _get_serial_executor() -> SerialExecutor {

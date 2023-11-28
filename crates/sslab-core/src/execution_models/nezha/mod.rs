@@ -12,7 +12,7 @@ mod nezha_tests;
 mod unit_tests;
 
 pub use {
-    nezha_core::Nezha,
+    nezha_core::{Nezha, ConcurrencyLevelManager},
     address_based_conflict_graph::AddressBasedConflictGraph,
     types::{SimulationResult, SimulatedTransaction},
 };

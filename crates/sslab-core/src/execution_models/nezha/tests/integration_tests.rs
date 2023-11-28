@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use ethers_providers::{Provider, MockProvider};
 use narwhal_types::BatchDigest;
 use tokio::time::Instant;
@@ -15,16 +13,15 @@ use crate::{
 };
 
 
-use super::nezha_core::Nezha;
+use super::nezha_core::ConcurrencyLevelManager;
 
 fn get_smallbank_handler() -> SmallBankTransactionHandler {
     let provider = Provider::<MockProvider>::new(MockProvider::default());
     SmallBankTransactionHandler::new(provider, DEFAULT_CHAIN_ID)
 }
 
-fn get_nezha_executor() -> Nezha {
-    let memory_storage = Arc::new(concurrent_evm_storage());
-    Nezha::new(memory_storage)
+fn get_nezha_executor() -> ConcurrencyLevelManager {
+    ConcurrencyLevelManager::new(concurrent_evm_storage(), 10)
 }
 
 /* this test is for debuging nezha algorithm under a smallbank workload */

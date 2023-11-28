@@ -1,5 +1,6 @@
 use std::{sync::Arc, rc::Rc};
 use itertools::Itertools;
+use narwhal_types::BatchDigest;
 use rayon::prelude::*;
 use tokio::time::Instant;
 use tracing::{info, debug, warn, error};
@@ -22,23 +23,57 @@ use super::{types::SimulatedTransaction, address_based_conflict_graph::{Transact
 impl Executable for Nezha {
     fn execute(&self, consensus_output: Vec<ExecutableEthereumBatch>) {
 
-        let _ = self._execute(consensus_output);
+        let _ = self.inner.prepare_execution(consensus_output);
     }
 }
 
 pub struct Nezha {
-    global_state: Arc<ConcurrentEVMStorage>
+    inner: ConcurrencyLevelManager,
 }
 
 impl Nezha {
-    
-    pub fn new(global_state: Arc<ConcurrentEVMStorage>) -> Self {
+    pub fn new(
+        global_state: ConcurrentEVMStorage, 
+        concurrency_level: usize
+    ) -> Self {
         Self {
-            global_state
+            inner: ConcurrencyLevelManager::new(global_state, concurrency_level),
+        }
+    }
+}
+
+pub struct ConcurrencyLevelManager {
+    concurrency_level: usize,
+    global_state: Arc<ConcurrentEVMStorage>
+}
+
+impl ConcurrencyLevelManager {
+    
+    pub fn new(global_state: ConcurrentEVMStorage, concurrency_level: usize) -> Self {
+        Self {
+            global_state: Arc::new(global_state),
+            concurrency_level
         }
     }
 
-    fn _execute(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> ExecutionResult {
+    fn prepare_execution(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> ExecutionResult {
+
+        let mut result = vec![];
+        let mut target = consensus_output;
+    
+        while !target.is_empty() {
+            let split_idx = std::cmp::min(self.concurrency_level, target.len());
+            let remains: Vec<ExecutableEthereumBatch> = target.split_off(split_idx);
+
+            result.extend(self._execute(target));
+
+            target = remains;
+        } 
+        
+        ExecutionResult::new(result)
+    }
+
+    fn _execute(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> Vec<BatchDigest> {
         let mut now = Instant::now();
         let SimulationResult { digests, rw_sets } = self._simulate(consensus_output);
         let mut time = now.elapsed().as_millis();
@@ -68,7 +103,7 @@ impl Nezha {
 
         // println!("{} transactions are aborted.", aborted_tx_len);
 
-        ExecutionResult {digests}
+        digests
     }
     
     //TODO: create Simulator having a thread pool for cpu-bound jobs.

@@ -1,7 +1,7 @@
 use ethers_core::types::{H160, H256};
 use evm::executor::stack::{RwSet, Simulatable};
 
-use super::{types::SimulatedTransaction, address_based_conflict_graph::AddressBasedConflictGraph};
+use crate::{types::SimulatedTransaction, address_based_conflict_graph::AddressBasedConflictGraph};
 
 const CONTRACT_ADDR: u64 = 0x1;
 

@@ -8,8 +8,10 @@ use fastcrypto::hash::Hash;
 use narwhal_types::{BatchDigest, ConsensusOutput, ConsensusOutputDigest};
 use serde::{Serialize, Deserialize};
 
-use crate::executor::{DEFAULT_EVM_MEMORY_LIMIT, DEFAULT_EVM_STACK_LIMIT};
 use crate::transaction_validator::TxValidationError;
+
+pub(crate) const DEFAULT_EVM_STACK_LIMIT:usize = 1024;
+pub(crate) const DEFAULT_EVM_MEMORY_LIMIT:usize = usize::MAX; 
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct EthereumTransaction(TypedTransaction);

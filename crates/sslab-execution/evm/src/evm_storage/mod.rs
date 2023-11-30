@@ -1,15 +1,16 @@
-pub mod backend;
 mod evm_storage;
-pub use evm_storage::EvmStorage;
+pub mod backend;
 
-use std::{collections::BTreeMap, str::FromStr};
+use std::{collections::BTreeMap, str::FromStr as _};
+
 use ethers_core::{types::{U256, H160, U64}, utils::hex};
 use evm::backend::{MemoryVicinity, MemoryAccount};
+pub use evm_storage::*;
 
 use self::backend::{MemoryBackend, CMemoryBackend, CAccount, ConcurrentHashMap};
 
-pub type ConcurrentEVMStorage = EvmStorage<CMemoryBackend>;
 pub type SerialEVMStorage = EvmStorage<MemoryBackend>;
+pub type ConcurrentEVMStorage = EvmStorage<CMemoryBackend>;
 
 pub fn memory_storage(
     contract_addr: &str, 

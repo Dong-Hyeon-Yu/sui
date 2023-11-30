@@ -1,19 +1,16 @@
 use ethers_providers::{Provider, MockProvider};
 use narwhal_types::BatchDigest;
+use sslab_execution::{
+    utils::{
+        smallbank_contract_benchmark::concurrent_evm_storage, 
+        test_utils::{SmallBankTransactionHandler, DEFAULT_CHAIN_ID},
+    }, 
+    types::ExecutableEthereumBatch};
 use tokio::time::Instant;
 
-use crate::{
-    utils::smallbank_contract_benchmark::concurrent_evm_storage, 
-    types::ExecutableEthereumBatch, 
-    execution_models::nezha::{
-        address_based_conflict_graph::AddressBasedConflictGraph, 
-        types::SimulationResult,
-        tests::utils::{SmallBankTransactionHandler, DEFAULT_CHAIN_ID}
-    }
-};
 
 
-use super::nezha_core::ConcurrencyLevelManager;
+use crate::{SimulationResult, AddressBasedConflictGraph, nezha_core::ConcurrencyLevelManager};
 
 fn get_smallbank_handler() -> SmallBankTransactionHandler {
     let provider = Provider::<MockProvider>::new(MockProvider::default());

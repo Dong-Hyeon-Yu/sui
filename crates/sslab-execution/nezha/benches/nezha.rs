@@ -1,19 +1,18 @@
-use std::sync::Arc;
 use criterion::Throughput;
 use criterion::{criterion_group, criterion_main, Criterion, BatchSize};
 use ethers_providers::{Provider, MockProvider};
 use narwhal_types::BatchDigest;
 
-use sslab_core::execution_models::serial::SerialExecutor;
-use sslab_core::{
+use sslab_execution::{
     types::ExecutableEthereumBatch,
-    utils::smallbank_contract_benchmark::{concurrent_evm_storage, default_memory_storage},
-    execution_models::nezha::{
-        AddressBasedConflictGraph,
-        ConcurrencyLevelManager,
-        SimulationResult,
-        tests::utils::{SmallBankTransactionHandler, DEFAULT_CHAIN_ID}
-    },
+    utils::smallbank_contract_benchmark::concurrent_evm_storage,
+    utils::test_utils::{SmallBankTransactionHandler, DEFAULT_CHAIN_ID}
+};
+
+use sslab_execution_nezha::{
+    AddressBasedConflictGraph,
+    ConcurrencyLevelManager,
+    SimulationResult,
 };
 
 const DEFAULT_BATCH_SIZE: u64 = 200;
@@ -29,10 +28,6 @@ fn _get_nezha_executor() -> ConcurrencyLevelManager {
     ConcurrencyLevelManager::new(concurrent_evm_storage(), 20)
 }
 
-fn _get_serial_executor() -> SerialExecutor {
-    let memory_storage = Arc::new(default_memory_storage());
-    SerialExecutor::new(memory_storage)
-}
 
 fn _create_random_smallbank_workload(skewness: f32, batch_size: u64, block_concurrency: u64) -> Vec<ExecutableEthereumBatch> {
     let handler = _get_smallbank_handler();
@@ -71,35 +66,6 @@ fn block_concurrency(c: &mut Criterion) {
                             .reorder()
                             .extract_schedule();
                         nezha._concurrent_commit(scheduled_info)
-                    },
-                    BatchSize::SmallInput
-                );
-            }
-        );
-    }
-}
-
-fn serial(c: &mut Criterion) {
-    let param = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
-    let mut group = c.benchmark_group("Serial execution Benchmark according to block concurrency");
-    for i in param.iter() {
-        group.throughput(Throughput::Elements((DEFAULT_BATCH_SIZE*i) as u64));
-        group.bench_with_input(
-            criterion::BenchmarkId::new("serial execution", i),
-            i,
-            |b, i| {
-                b.iter_batched(
-                    || {
-                        let consensus_output = _create_random_smallbank_workload(DEFAULT_SKEWNESS, DEFAULT_BATCH_SIZE, *i);
-                        let serial = _get_serial_executor();
-                        (serial, consensus_output)
-                    },
-                    |(serial, consensus_output)| {
-                        consensus_output
-                            .into_iter()
-                            .for_each(|batch| {
-                                serial._execute(batch);
-                            });
                     },
                     BatchSize::SmallInput
                 );
@@ -169,6 +135,5 @@ fn commit(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, serial);
-// criterion_group!(benches, simulation, nezha, commit, block_concurrency);
+criterion_group!(benches, simulation, nezha, commit, block_concurrency);
 criterion_main!(benches);

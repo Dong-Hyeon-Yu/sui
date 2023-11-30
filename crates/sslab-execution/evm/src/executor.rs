@@ -6,11 +6,8 @@ use tracing::{debug, warn};
 
 use crate::{
     types::{ExecutableEthereumBatch, EthereumTransaction, ExecutableConsensusOutput}, 
-    execution_models::execution_storage::{backend::ApplyBackend, EvmStorage}
+    evm_storage::{backend::ApplyBackend, EvmStorage}
 }; 
-
-pub(crate) const DEFAULT_EVM_STACK_LIMIT:usize = 1024;
-pub(crate) const DEFAULT_EVM_MEMORY_LIMIT:usize = usize::MAX; 
 
 pub trait Executable {
     fn execute(&self, consensus_output: Vec<ExecutableEthereumBatch>);

@@ -1,6 +1,6 @@
 use std::{sync::Arc, str::FromStr};
 
-use ethers_core::types::{Signature, U256, transaction::eip2718::TypedTransaction, H160};
+use ethers_core::{types::{Signature, U256, transaction::eip2718::TypedTransaction, H160}, rand};
 use ethers_providers::{Provider, MockProvider};
 use ethers_signers::{LocalWallet, Signer};
 use rand::Rng as _;

@@ -67,6 +67,10 @@ exclude = [
 members = [
     "crates/sslab-core",
     "crates/sslab-benchmark",
+    "crates/sslab-execution/blockstm",
+    "crates/sslab-execution/evm",
+    "crates/sslab-execution/nezha",
+    "crates/sslab-execution/serial",
     
     "crates/anemo-benchmark",
     "crates/mysten-common",
@@ -259,7 +263,7 @@ hashbrown = "0.12"
 hdrhistogram = "7.5.1"
 hex = "0.4.3"
 hex-literal = "0.3.4"
-highlight = "all"
+highlight = "0.0.3"
 http = "0.2.8"
 http-body = "0.4.5"
 humantime = "2.1.0"
@@ -418,6 +422,11 @@ anemo-tower = { git = "https://github.com/mystenlabs/anemo.git", rev = "0f0ae8d8
 ### Workspace Members ###
 sslab-core = { path = "crates/sslab-core" }
 sslab-benchmark = { path = "crates/sslab-benchmark" }
+sslab-execution-serial = { path = "crates/sslab-execution/serial" }
+sslab-execution-blockstm = { path = "crates/sslab-execution/blockstm" }
+sslab-execution = { path = "crates/sslab-execution/evm" }
+sslab-execution-nezha = { path = "crates/sslab-execution/nezha" }
+evm = { git="https://github.com/Dong-Hyeon-Yu/evm.git", rev="120a40a5d4f817c34012285b472b28b89a47049e"}
 
 anemo-benchmark = { path = "crates/anemo-benchmark" }
 mysten-common = { path = "crates/mysten-common" }

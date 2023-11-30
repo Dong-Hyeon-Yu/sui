@@ -7,8 +7,6 @@ use crate::types::{ChainConfig, SpecId};
 
 use super::backend::{ExecutionBackend, ExecutionResult, ApplyBackend};
 
-
-
 #[derive(Clone, Debug)]
 pub struct EvmStorage<B: Backend+ApplyBackend+Clone+Default> {
     backend: B,  

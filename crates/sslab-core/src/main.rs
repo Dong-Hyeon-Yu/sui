@@ -20,8 +20,8 @@ use narwhal_node::{CertificateStoreCacheMetrics, NodeStorage, worker_node::Worke
 use narwhal_network::client::{WorkerNetworkClient, PrimaryNetworkClient};
 use node::metrics::{primary_metrics_registry, start_prometheus_server, worker_metrics_registry};
 use prometheus::Registry;
-use sslab_core::executor::ParallelExecutor;
-use sslab_core::{consensus_handler::SimpleConsensusHandler, transaction_validator::EthereumTxValidator};
+use sslab_execution::{executor::ParallelExecutor, transaction_validator::EthereumTxValidator};
+use sslab_core::consensus_handler::SimpleConsensusHandler;
 use sui_simulator::telemetry_subscribers;
 use std::sync::Arc;
 use sui_keys::keypair_file::{
@@ -284,11 +284,11 @@ async fn run(
 
             cfg_if::cfg_if! {
                 if #[cfg(feature = "nezha")] {
-                    use sslab_core::utils::smallbank_contract_benchmark::concurrent_evm_storage;
+                    use sslab_execution::utils::smallbank_contract_benchmark::concurrent_evm_storage;
                     
                     let memory_storage = concurrent_evm_storage();
                 } else {
-                    use sslab_core::utils::smallbank_contract_benchmark::default_memory_storage;
+                    use sslab_execution::utils::smallbank_contract_benchmark::default_memory_storage;
 
                     let memory_storage = default_memory_storage();
                 }
@@ -297,7 +297,7 @@ async fn run(
 
             cfg_if::cfg_if! {
                 if #[cfg(feature = "nezha")] {
-                    use sslab_core::execution_models::nezha::Nezha;
+                    use sslab_execution_nezha::Nezha;
 
                     let concurrency_level = match matches.subcommand() {
                         ("primary", Some(sub_matches)) => {
@@ -313,7 +313,7 @@ async fn run(
                     let execution_model = Nezha::new(memory_storage, concurrency_level);
                 }
                 else {
-                    use sslab_core::execution_models::serial::SerialExecutor;
+                    use sslab_execution_serial::SerialExecutor;
 
                     let execution_model = SerialExecutor::new(Arc::new(memory_storage));
                 }

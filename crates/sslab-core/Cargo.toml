@@ -57,14 +57,12 @@ narwhal-worker.workspace = true
 shared-crypto.workspace = true
 sui-archival.workspace = true
 sui-config.workspace = true
-sui-execution = { path = "../../sui-execution" }
 sui-framework.workspace = true
 sui-swarm-config.workspace = true
 sui-genesis-builder.workspace = true
 sui-keys.workspace = true
 sui-json-rpc-types.workspace = true
 sui-macros.workspace = true
-sui-move-build.workspace = true
 sui-network.workspace = true
 sui-protocol-config.workspace = true
 sui-simulator.workspace = true
@@ -74,55 +72,20 @@ tracing-subscriber.workspace = true
 workspace-hack = { version = "0.1", path = "../workspace-hack" }
 sui-core.workspace = true
 
-evm = { git="https://github.com/Dong-Hyeon-Yu/evm.git", rev="120a40a5d4f817c34012285b472b28b89a47049e"}#branch="master"}
-ethers-providers = { version = "^2.0.0" }
-ethers-core = { version = "^2.0.0" }
-enumn = "0.1.11"
-rayon = "1.8.0"
-nohash-hasher = "0.2.0"
-hashbrown = "0.14.2"
-# console-subscriber = "^0.1.0"
-flurry = "0.4.0"
-# sharded = { version = "0.2.1", features = ["fxhash", "parking_lot"] }
-# leapfrog = { version = "0.3.0", features = ["stable_alloc"] }
 
+sslab-execution = {workspace = true, features = ["benchmark"]}
+sslab-execution-serial = {workspace = true, optional = true}
+sslab-execution-nezha = {workspace = true, optional = true}
 
-# dev-dependencies used in criterion
-ethers = "^2.0.0"
-ethers-signers = { version = "^2.0.0" }
-rand_distr = "0.4.3"
-
-[dev-dependencies]
-criterion.workspace = true
-expect-test.workspace = true
-fs_extra.workspace = true
-more-asserts.workspace = true
-pretty_assertions.workspace = true
-serde-reflection.workspace = true
-serde_yaml.workspace = true
-
-narwhal-test-utils.workspace = true
-sui-test-transaction-builder.workspace = true
-sui-types = { workspace = true, features = ["test-utils"] }
-
-gnuplot = "0.0.39"
 
 
 [features]
-benchmark = ["narwhal-node/benchmark"]
+benchmark = ["narwhal-node/benchmark", "sslab-execution/benchmark"]
 
 # execution model
-nezha = []
-serial = []
+nezha = ["sslab-execution-nezha"]
+serial = ["sslab-execution-serial"]
 
 [[bin]]
 name = "sslab-narwhal-node"
 path = "src/main.rs"
-
-[[bench]]
-name = "nezha"
-path = "./benches/nezha.rs"
-harness = false
-
-# [build]
-# rustflags = ["--cfg", "tokio_unstable"]

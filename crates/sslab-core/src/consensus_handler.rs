@@ -6,7 +6,7 @@ use narwhal_executor::ExecutionState;
 use narwhal_types::{BatchAPI, CertificateAPI, ConsensusOutput, HeaderAPI};
 use tokio::{sync::mpsc::Sender, task::JoinHandle};
 use tracing::{info, instrument};
-use crate::{types::{ExecutableEthereumBatch, EthereumTransaction, ExecutableConsensusOutput}, executor::ExecutionComponent};
+use sslab_execution::{types::{ExecutableEthereumBatch, EthereumTransaction, ExecutableConsensusOutput}, executor::ExecutionComponent};
 use core::panic;
 use std::sync::Arc;
 

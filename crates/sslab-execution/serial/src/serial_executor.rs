@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
+use sslab_execution::{
+    executor::{Executable, EvmExecutionUtils}, 
+    evm_storage::{SerialEVMStorage, backend::ExecutionBackend}, 
+    types::{ExecutableEthereumBatch, ExecutionResult}
+};
 use tracing::{warn, info, trace};
 
-use crate::{
-    executor::{Executable, EvmExecutionUtils}, 
-    types::{ExecutionResult, ExecutableEthereumBatch}, 
-    execution_models::execution_storage::{SerialEVMStorage, backend::ExecutionBackend as _}
-};
 
 
 impl Executable for SerialExecutor {

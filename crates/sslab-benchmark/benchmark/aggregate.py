@@ -137,7 +137,7 @@ class LogAggregator:
 
         results = [
             self._print_skewness(),
-            self._print_concurrency(),
+            # self._print_concurrency(),
             self._print_execution(),
         ]
         for name, records in results:
@@ -198,19 +198,19 @@ class LogAggregator:
 
         return 'skewness', organized
 
-    def _print_concurrency(self):
-        records = deepcopy(self.records)
-        organized = defaultdict(list)
-        for setup, result in records.items():
-            clevel = setup.concurrency_level
-            setup.concurrency_level = 'any'
-            organized[setup] += [(clevel, result)]
+    # def _print_concurrency(self):
+    #     records = deepcopy(self.records)
+    #     organized = defaultdict(list)
+    #     for setup, result in records.items():
+    #         clevel = setup.concurrency_level
+    #         setup.concurrency_level = 'any'
+    #         organized[setup] += [(clevel, result)]
             
-        for setup, results in list(organized.items()):
-            results.sort(key=lambda x: x[0])
-            organized[setup] = [(x, y) for x, y in results]
+    #     for setup, results in list(organized.items()):
+    #         results.sort(key=lambda x: x[0])
+    #         organized[setup] = [(x, y) for x, y in results]
             
-        return 'concurrency', organized
+    #     return 'concurrency', organized
     
     def _print_execution(self):
         records = deepcopy(self.records)

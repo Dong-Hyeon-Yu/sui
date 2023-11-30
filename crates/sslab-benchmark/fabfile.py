@@ -299,7 +299,7 @@ def LAN(ctx, debug=False):
         'tx_size': 270,
         'duration': 60,
         'runs': 3,
-        'execution_model': [ExecutionModel.NEZHA, ExecutionModel.SERIAL],
+        'execution_model': [ExecutionModel.SERIAL],
         'concurrency_level': 20, #[2, 3, 4, 5, 6, 8, 10, 12, 14], # only for nezha
     }
     node_params = {
@@ -396,8 +396,8 @@ def plot(ctx):
         'nodes': [4],
         'workers': [1],
         'collocate': True,
-        'execution_model': [ExecutionModel.NEZHA, ExecutionModel.SERIAL],
-        'concurrency_level': 10, #[1, 2, 3, 4, 5, 6, 8, 10, 12, 14],
+        'execution_model': [ExecutionModel.NEZHA],
+        'concurrency_level': 20, #[1, 2, 3, 4, 5, 6, 8, 10, 12, 14],
         'skewness': [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
         'rate': [5_000, 10_000, 30_000, 50_000, 70_000, 100_000, 150_000, 200_000, 250_000],
         'tx_size': 270,

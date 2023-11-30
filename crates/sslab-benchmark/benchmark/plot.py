@@ -232,23 +232,8 @@ class Ploter:
 
         # Make the latency, tps, and robustness graphs.
         for skewness in params.skewness:
-            execution_files, concurrency_files = [], [],
+            execution_files = []
             for f in params.faults:
-                for rate in params.rate:
-                
-                    concurrency_files += glob(
-                        PathMaker.agg_file(
-                            'concurrency',
-                            f,
-                            params.nodes[0],
-                            params.workers[0],
-                            params.collocate,
-                            rate,
-                            ExecutionModel.NEZHA,
-                            'any',
-                            skewness
-                        )
-                    )
                 
                 for execution_model in params.execution_model:
                     clevels = params.concurrency_level if execution_model == ExecutionModel.NEZHA else [1]
@@ -266,9 +251,6 @@ class Ploter:
                                     skewness
                                 )
                             )
-                            
-            cls.plot_concurrency(concurrency_files, skewness, tps=True)
-            cls.plot_concurrency(concurrency_files, skewness, latency=True)
             cls.plot_execution(execution_files, skewness)
             
         skewness_files = []

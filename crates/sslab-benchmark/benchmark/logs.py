@@ -172,7 +172,8 @@ class LogParser:
         latencies = self._merge_results([latencies])
         
         tmp = findall(r'Abort rate: \d+.\d+ \((\d+)/(\d+) aborted\)', log)
-        aborted, total = zip(*tmp)
+        
+        aborted, total = zip(*tmp) if tmp else ([0], [0])
         
 
         return commits, latencies, subdag_size, aborted, total

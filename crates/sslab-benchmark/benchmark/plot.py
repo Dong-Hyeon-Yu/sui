@@ -28,6 +28,12 @@ def sec_major_formatter(x, pos):
         return
     return f'{float(x)/1000:.2f}'
 
+@tick.FuncFormatter
+def milisec_major_formatter(x, pos):
+    if pos is None:
+        return
+    return f'{float(x)}'
+
 
 @tick.FuncFormatter
 def mb_major_formatter(x, pos):
@@ -71,6 +77,11 @@ class Ploter:
         values = findall(r'Abort Rate: (\d+\.\d+) \+/- (\d+\.\d+)', data)
         values = [(float(x), float(y)) for x, y in values]
         return list(zip(*values))
+    
+    def _effective_tps(self, data):
+        values = findall(r' Effective TPS:: (\d+) \+/- (\d+)', data)
+        values = [(int(x), int(y)) for x, y in values]
+        return list(zip(*values))
 
     def _variable(self, data, isFloat=False):
         if isFloat:
@@ -96,6 +107,8 @@ class Ploter:
             y_values, y_err = y_axis(result)
             x_values = self._variable(result, isFloat=True) if 'skewness' in type else self._variable(result, isFloat=False)
             if len(y_values) != len(y_err) or len(y_err) != len(x_values):
+                print(x_values)
+                print(y_values)
                 raise PlotError('Unequal number of x, y, and y_err values')
 
             plt.errorbar(
@@ -115,9 +128,11 @@ class Ploter:
         ax.xaxis.set_major_formatter(default_major_formatter)
         ax.yaxis.set_major_formatter(default_major_formatter)
         if 'latency' in type:
-            ax.yaxis.set_major_formatter(sec_major_formatter)
+            ax.yaxis.set_major_formatter(milisec_major_formatter)
         if 'skewness' in type:
             ax.xaxis.set_major_formatter(tick.StrMethodFormatter('{x:.1f}'))
+        if 'abort_rate' in type:
+            ax.yaxis.set_major_formatter(tick.StrMethodFormatter('{x:.1f}'))
         if len(y_label) > 1:
             secaxy = ax.secondary_yaxis(
                 'right', functions=(self._tps2bps, self._bps2tps)
@@ -186,27 +201,43 @@ class Ploter:
         ploter._plot(x_label, y_label, ploter._tps, z_axis, 'tps')
         
     @classmethod
-    def plot_concurrency(cls, files, skewness, tps=False, latency=False):
-        assert tps != latency
+    def plot_concurrency(cls, files, skewness=0.0, tps=False, latency=False, abort_rate=False, effective_tps=False):
+        assert tps + latency + abort_rate + effective_tps == 1
         assert isinstance(files, list)
         assert all(isinstance(x, str) for x in files)
         z_axis = cls.send_rates
         x_label = 'Concurrency level'
-        y_label = ['Throughput (tx/s)' if tps else 'Latency (s)']
+        
         ploter = cls(files)
-        output_filename = f"concurrency-{'tps' if tps else 'latency'}-{skewness}"
-        ploter._plot(x_label, y_label, ploter._tps if tps else ploter._latency, z_axis, output_filename)
+        if tps:
+            y_label = ['Throughput (tx/s)']
+            output_filename = f"concurrency-tps-{skewness}"
+            plot_ftn = ploter._tps
+        elif latency:
+            y_label = ['Latency (ms)']
+            output_filename = f"concurrency-latency-{skewness}"
+            plot_ftn = ploter._latency
+        elif abort_rate:
+            y_label = ['Abort rate (%)']
+            output_filename = f"concurrency-abort_rate-{skewness}"
+            plot_ftn = ploter._abort_rate
+        elif effective_tps:
+            y_label = ['Effective TPS (tx/s)']
+            output_filename = f"concurrency-effective_tps-{skewness}"
+            plot_ftn = ploter._effective_tps
+        
+        ploter._plot(x_label, y_label, plot_ftn, z_axis, output_filename)
         
     @classmethod
-    def plot_skewness(cls, files, tps=False, latency=False, abort_rate=False):
+    def plot_skewness(cls, files, clevel=0, tps=False, latency=False, abort_rate=False):
         assert tps + latency + abort_rate == 1
         assert isinstance(files, list)
         assert all(isinstance(x, str) for x in files)
         z_axis = cls.send_rates
         x_label = 'Skewness'
-        y_label = ['Throughput (tx/s)' if tps else 'Latency (s)' if latency else 'Abort rate (%)']
+        y_label = ['Throughput (tx/s)' if tps else 'Latency (ms)' if latency else 'Abort rate (%)']
         ploter = cls(files)
-        output_filename = f"skewness-{'tps' if tps else 'latency' if latency else 'abort_rate'}"
+        output_filename = f"skewness-{'tps' if tps else 'latency' if latency else 'abort_rate'}-{clevel}"
         ploter._plot(x_label, y_label, ploter._tps if tps else ploter._latency if latency else ploter._abort_rate, z_axis, output_filename)
         
     @classmethod
@@ -253,10 +284,32 @@ class Ploter:
                             )
             cls.plot_execution(execution_files, skewness)
             
-        skewness_files = []
+            for f in params.faults:
+                concurrency_files = []
+                for rate in params.rate:
+                    concurrency_files += glob(
+                        PathMaker.agg_file(
+                            'concurrency',
+                            f,
+                            params.nodes[0],
+                            params.workers[0],
+                            params.collocate,
+                            rate,
+                            ExecutionModel.NEZHA,
+                            'any',
+                            skewness
+                        )
+                    )
+            cls.plot_concurrency(concurrency_files, skewness, tps=True)
+            cls.plot_concurrency(concurrency_files, skewness, latency=True)
+            cls.plot_concurrency(concurrency_files, skewness, abort_rate=True)
+            cls.plot_concurrency(concurrency_files, skewness, effective_tps=True)
+            
+        
         for f in params.faults:
-            for rate in params.rate:
-                for clevel in params.concurrency_level:
+            for clevel in params.concurrency_level:
+                skewness_files = []
+                for rate in params.rate:                
                     skewness_files += glob(
                         PathMaker.agg_file(
                             'skewness',
@@ -270,7 +323,7 @@ class Ploter:
                             'any',
                         )
                     )
-
-        cls.plot_skewness(skewness_files, tps=True)
-        cls.plot_skewness(skewness_files, latency=True)
-        cls.plot_skewness(skewness_files, abort_rate=True)
+                if skewness_files:
+                    cls.plot_skewness(skewness_files, clevel, tps=True)
+                    cls.plot_skewness(skewness_files, clevel, latency=True)
+                    cls.plot_skewness(skewness_files, clevel, abort_rate=True)

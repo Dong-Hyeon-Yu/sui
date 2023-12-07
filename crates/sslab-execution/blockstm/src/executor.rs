@@ -262,9 +262,10 @@ where
             // );
 
             for _ in 0..(compute_cpus) {
+                let args = executor_initial_arguments.clone();
                 s.spawn(|_| {
                     // Make executor for each thread.
-                    let executor = E::init(executor_initial_arguments);
+                    let executor = E::init(args);
 
                     let mut scheduler_task = SchedulerTask::NoTask;
                     loop {

@@ -3,6 +3,7 @@ results/
 data/
 plots/*.txt
 plots/*.pdf
+plots/*.png
 .db-*
 .committee.json
 .parameters.json

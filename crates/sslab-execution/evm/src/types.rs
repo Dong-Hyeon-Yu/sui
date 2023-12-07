@@ -14,7 +14,7 @@ pub(crate) const DEFAULT_EVM_STACK_LIMIT:usize = 1024;
 pub(crate) const DEFAULT_EVM_MEMORY_LIMIT:usize = usize::MAX; 
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
-pub struct EthereumTransaction(TypedTransaction);
+pub struct EthereumTransaction(pub TypedTransaction);
 
 impl EthereumTransaction {
 

@@ -66,16 +66,18 @@ class Setup:
 
 
 class Result:
-    def __init__(self, mean_tps, mean_latency, mean_send_rate, mean_batch_size, abort_rate, 
-                 std_tps=0, std_latency=0, std_abort_rate=0):
+    def __init__(self, mean_tps, mean_latency, mean_send_rate, mean_batch_size, abort_rate, mean_effective_tps,
+                 std_tps=0, std_latency=0, std_abort_rate=0, std_effective_tps=0):
         self.mean_tps = mean_tps
         self.mean_latency = mean_latency
         self.mean_send_rate = mean_send_rate
         self.mean_batch_size = mean_batch_size
         self.mean_abort_rate = abort_rate
+        self.mean_effective_tps = mean_effective_tps
         self.std_tps = std_tps
         self.std_latency = std_latency
         self.std_abort_rate = std_abort_rate
+        self.std_effective_tps = std_effective_tps
 
     def __str__(self):
         return (
@@ -84,6 +86,7 @@ class Result:
             f' Actual Sending Rate: {self.mean_send_rate} tx/s\n'
             f' Average Batch size: {self.mean_batch_size} KB\n'
             f' Abort Rate: {self.mean_abort_rate} +/- {self.std_abort_rate} %\n'
+            f' Effective TPS:: {self.mean_effective_tps} +/- {self.std_effective_tps} tx/s\n'
         )
 
     @classmethod
@@ -93,7 +96,8 @@ class Result:
         send_rate = int(search(r'Actual Sending Rate: (\d+)', raw).group(1))
         batch_size = int(search(r'Average Batch size: (\d+)', raw).group(1))
         abort_rate = float(search(r'Abort Rate: (\d+\.\d+)', raw).group(1))
-        return cls(tps, latency, send_rate, batch_size, abort_rate)
+        effective_tps = int(search(r'Effective TPS: (\d+)', raw).group(1))
+        return cls(tps, latency, send_rate, batch_size, abort_rate, effective_tps)
 
     @classmethod
     def aggregate(cls, results):
@@ -105,11 +109,13 @@ class Result:
         mean_send_rate = round(mean([x.mean_send_rate for x in results]))
         mean_batch_size = round(mean([x.mean_batch_size for x in results]))
         mean_abort_rate = round(mean([x.mean_abort_rate for x in results]), 2)
+        mean_effective_tps = round(mean([x.mean_effective_tps for x in results]))
         std_tps = round(stdev([x.mean_tps for x in results]))
         std_latency = round(stdev([x.mean_latency for x in results]))
         std_abort_rate = round(stdev([x.mean_abort_rate for x in results]), 2)
-        return cls(mean_tps, mean_latency, mean_send_rate, mean_batch_size, mean_abort_rate, 
-                   std_tps, std_latency, std_abort_rate)
+        std_effective_tps = round(stdev([x.mean_effective_tps for x in results]))
+        return cls(mean_tps, mean_latency, mean_send_rate, mean_batch_size, mean_abort_rate, mean_effective_tps,
+                   std_tps, std_latency, std_abort_rate, std_effective_tps)
 
 
 class LogAggregator:
@@ -137,7 +143,7 @@ class LogAggregator:
 
         results = [
             self._print_skewness(),
-            # self._print_concurrency(),
+            self._print_concurrency(),
             self._print_execution(),
         ]
         for name, records in results:
@@ -198,19 +204,19 @@ class LogAggregator:
 
         return 'skewness', organized
 
-    # def _print_concurrency(self):
-    #     records = deepcopy(self.records)
-    #     organized = defaultdict(list)
-    #     for setup, result in records.items():
-    #         clevel = setup.concurrency_level
-    #         setup.concurrency_level = 'any'
-    #         organized[setup] += [(clevel, result)]
+    def _print_concurrency(self):
+        records = deepcopy(self.records)
+        organized = defaultdict(list)
+        for setup, result in records.items():
+            clevel = setup.concurrency_level
+            setup.concurrency_level = 'any'
+            organized[setup] += [(clevel, result)]
             
-    #     for setup, results in list(organized.items()):
-    #         results.sort(key=lambda x: x[0])
-    #         organized[setup] = [(x, y) for x, y in results]
+        for setup, results in list(organized.items()):
+            results.sort(key=lambda x: x[0])
+            organized[setup] = [(x, y) for x, y in results]
             
-    #     return 'concurrency', organized
+        return 'concurrency', organized
     
     def _print_execution(self):
         records = deepcopy(self.records)

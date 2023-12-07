@@ -1628,9 +1628,9 @@ checksum = "14c189c53d098945499cdfa7ecc63567cf3886b3332b312a5b4585d8d3a6a610"
 
 [[package]]
 name = "bytes"
-version = "1.4.0"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89b2fd2a0dcf38d7971e2194b6b6eebab45ae01067456a7fd93d5547a61b70be"
+checksum = "a2bd12c1caf447e69cd4528f47f94d203fd2582878ecb9e9465484c4148a8223"
 dependencies = [
  "serde 1.0.152",
 ]
@@ -2888,12 +2888,17 @@ dependencies = [
  "crossbeam",
  "crossbeam-queue",
  "dashmap",
+ "ethers",
+ "evm",
  "num_cpus",
  "once_cell",
  "proptest",
  "proptest-derive 0.4.0",
  "rand 0.8.5",
  "rayon",
+ "sslab-execution",
+ "sui-types",
+ "tracing",
 ]
 
 [[package]]
@@ -3746,7 +3751,7 @@ checksum = "0206175f82b8d6bf6652ff7d71a1e27fd2e4efde587fd368662814d6ec1d9ce0"
 [[package]]
 name = "evm"
 version = "0.39.1"
-source = "git+https://github.com/Dong-Hyeon-Yu/evm.git?rev=120a40a5d4f817c34012285b472b28b89a47049e#120a40a5d4f817c34012285b472b28b89a47049e"
+source = "git+https://github.com/Dong-Hyeon-Yu/evm.git?rev=fce29dab645340c4ecb9ed36858af1f33abcd8ee#fce29dab645340c4ecb9ed36858af1f33abcd8ee"
 dependencies = [
  "auto_impl",
  "environmental",
@@ -3766,7 +3771,7 @@ dependencies = [
 [[package]]
 name = "evm-core"
 version = "0.39.0"
-source = "git+https://github.com/Dong-Hyeon-Yu/evm.git?rev=120a40a5d4f817c34012285b472b28b89a47049e#120a40a5d4f817c34012285b472b28b89a47049e"
+source = "git+https://github.com/Dong-Hyeon-Yu/evm.git?rev=fce29dab645340c4ecb9ed36858af1f33abcd8ee#fce29dab645340c4ecb9ed36858af1f33abcd8ee"
 dependencies = [
  "parity-scale-codec 3.5.0",
  "primitive-types 0.12.1",
@@ -3777,7 +3782,7 @@ dependencies = [
 [[package]]
 name = "evm-gasometer"
 version = "0.39.0"
-source = "git+https://github.com/Dong-Hyeon-Yu/evm.git?rev=120a40a5d4f817c34012285b472b28b89a47049e#120a40a5d4f817c34012285b472b28b89a47049e"
+source = "git+https://github.com/Dong-Hyeon-Yu/evm.git?rev=fce29dab645340c4ecb9ed36858af1f33abcd8ee#fce29dab645340c4ecb9ed36858af1f33abcd8ee"
 dependencies = [
  "environmental",
  "evm-core",
@@ -3788,7 +3793,7 @@ dependencies = [
 [[package]]
 name = "evm-runtime"
 version = "0.39.0"
-source = "git+https://github.com/Dong-Hyeon-Yu/evm.git?rev=120a40a5d4f817c34012285b472b28b89a47049e#120a40a5d4f817c34012285b472b28b89a47049e"
+source = "git+https://github.com/Dong-Hyeon-Yu/evm.git?rev=fce29dab645340c4ecb9ed36858af1f33abcd8ee#fce29dab645340c4ecb9ed36858af1f33abcd8ee"
 dependencies = [
  "auto_impl",
  "environmental",

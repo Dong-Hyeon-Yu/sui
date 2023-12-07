@@ -61,7 +61,7 @@ pub trait ExecutorTask: Sync {
 
     /// Type to intialize the single thread transaction executor. Copy and Sync are required because
     /// we will create an instance of executor on each individual thread.
-    type Argument: Sync + Copy;
+    type Argument: Clone + Send + Sync;
 
     /// Create an instance of the transaction executor.
     fn init(args: Self::Argument) -> Self;

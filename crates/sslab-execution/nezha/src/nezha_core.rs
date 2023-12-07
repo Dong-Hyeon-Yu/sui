@@ -92,6 +92,7 @@ impl ConcurrencyLevelManager {
 
         let scheduled_tx_len = scheduled_info.scheduled_txs_len();
         let aborted_tx_len =  scheduled_info.aborted_txs_len();
+        info!("Parallelism metric: {:?}", scheduled_info.parallism_metric());
 
         now = Instant::now();
         self._concurrent_commit(scheduled_info);
@@ -235,6 +236,14 @@ impl ScheduledInfo {
 
     pub fn aborted_txs_len(&self) -> usize {
         self.aborted_txs.len()
+    }
+
+    pub fn parallism_metric(&self) -> (f64, usize, usize) {
+        let max_width = self.scheduled_txs.iter().map(|vec| vec.len()).max().unwrap_or(0);
+        let depth = self.scheduled_txs.len();
+        let average_width = self.scheduled_txs.iter().map(|vec| vec.len()).sum::<usize>() as f64 / depth as f64;
+
+        (average_width, max_width, depth)
     }
 }
 

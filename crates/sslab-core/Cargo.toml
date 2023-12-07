@@ -80,6 +80,7 @@ sslab-execution-nezha = {workspace = true, optional = true}
 
 
 [features]
+default = ["sslab-execution-serial"]
 benchmark = ["narwhal-node/benchmark", "sslab-execution/benchmark"]
 
 # execution model

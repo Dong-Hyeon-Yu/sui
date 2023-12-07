@@ -94,7 +94,7 @@ impl ConcurrencyLevelManager {
         let aborted_tx_len =  scheduled_info.aborted_txs_len();
 
         now = Instant::now();
-        self._concurrent_commit(scheduled_info);
+        self._concurrent_commit(scheduled_info, 10);
         time = now.elapsed().as_millis();
 
         info!("Concurrent commit took {} ms for {} transactions.", time, scheduled_tx_len);
@@ -156,7 +156,7 @@ impl ConcurrencyLevelManager {
         }
     }
 
-    pub fn _concurrent_commit(&self, scheduled_info: ScheduledInfo) {
+    pub fn _concurrent_commit(&self, scheduled_info: ScheduledInfo, chunk_size: usize) {
         let storage = self.global_state.clone();
         // let _storage = &storage;
         let scheduled_txs = scheduled_info.scheduled_txs;
@@ -169,9 +169,9 @@ impl ConcurrencyLevelManager {
             let _storage = &storage;
             for txs_to_commit in scheduled_txs {
                 txs_to_commit
-                    .par_iter()
-                    .for_each(|tx| {
-                        let effect = tx.extract();
+                    .par_chunks(chunk_size)
+                    .for_each(|txs| {
+                        let effect = txs.into_iter().flat_map(|tx| tx.extract()).collect_vec();
                         _storage.apply_local_effect(effect)
                     })
             }

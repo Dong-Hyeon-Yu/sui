@@ -74,7 +74,7 @@ sui-core.workspace = true
 
 
 sslab-execution = {workspace = true, features = ["benchmark"]}
-sslab-execution-serial.workspace = true
+sslab-execution-serial = {workspace = true, optional = true}
 sslab-execution-nezha = {workspace = true, optional = true}
 
 
@@ -85,7 +85,7 @@ benchmark = ["narwhal-node/benchmark", "sslab-execution/benchmark"]
 
 # execution model
 nezha = ["sslab-execution-nezha"]
-serial = []
+serial = ["sslab-execution-serial"]
 
 [[bin]]
 name = "sslab-narwhal-node"

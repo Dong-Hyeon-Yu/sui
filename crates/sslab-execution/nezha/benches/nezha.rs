@@ -1,4 +1,6 @@
 #![allow(dead_code)]
+use std::sync::RwLock;
+
 use criterion::Throughput;
 use criterion::{criterion_group, criterion_main, Criterion, BatchSize};
 use ethers_providers::{Provider, MockProvider};
@@ -111,10 +113,11 @@ fn block_concurrency_scheduling(c: &mut Criterion) {
     let mut group = c.benchmark_group("scheduling according to block concurrency");
     for i in param {
         group.throughput(Throughput::Elements((DEFAULT_BATCH_SIZE*i) as u64));
+        let parallelism_metrics: std::rc::Rc<RwLock<Vec<(_, _, _, _)>>> =  std::rc::Rc::new(RwLock::new(Vec::new()));
         group.bench_with_input(
             criterion::BenchmarkId::new("nezha", i),
-            &i,
-            |b, i| {
+            &(i, parallelism_metrics.clone()),
+            |b, (i, metrics)| {
                 b.iter_batched(
                     || {
                         let consensus_output = _create_random_smallbank_workload(DEFAULT_SKEWNESS, DEFAULT_BATCH_SIZE, *i);
@@ -123,15 +126,26 @@ fn block_concurrency_scheduling(c: &mut Criterion) {
                         rw_sets
                     },
                     |rw_sets| {
-                        let _ = AddressBasedConflictGraph::construct(rw_sets)
+                        let result = AddressBasedConflictGraph::construct(rw_sets)
                             .hierarchcial_sort()
                             .reorder()
                             .extract_schedule();
+                        metrics.write().unwrap().push(result.parallism_metric())
                     },
                     BatchSize::SmallInput
                 );
             }
         );
+
+        let (mut total_tx, mut average_width, mut max_width, mut depth) = (0 as usize, 0 as f64, 0 as usize, 0 as usize);
+        let len = parallelism_metrics.read().unwrap().len();
+        for (a1, a2, a3, a4) in parallelism_metrics.read().unwrap().iter() {
+            total_tx += a1;
+            average_width += a2;
+            max_width += a3;
+            depth += a4;
+        };
+        println!("total_tx: {}, average_width: {:.2}, max_width: {:.2}, depth: {:.2}", total_tx/len, average_width/len as f64, max_width as f64/len as f64, depth as f64/len as f64)
     }
 }
 
@@ -258,6 +272,6 @@ fn chunk_size(c: &mut Criterion) {
 }
 
 // criterion_group!(benches, simulation, nezha, commit, block_concurrency);
-// criterion_group!(benches, block_concurrency_simulation);
-criterion_group!(benches, block_concurrency_simulation, block_concurrency_scheduling, block_concurrency_commit);
+criterion_group!(benches, block_concurrency_scheduling);
+// criterion_group!(benches, block_concurrency_simulation, block_concurrency_scheduling, block_concurrency_commit);
 criterion_main!(benches);

@@ -30,8 +30,8 @@ fn _get_smallbank_handler() -> SmallBankTransactionHandler {
     SmallBankTransactionHandler::new(provider, DEFAULT_CHAIN_ID)
 }
 
-fn _get_nezha_executor() -> ConcurrencyLevelManager {
-    ConcurrencyLevelManager::new(concurrent_evm_storage(), 20)
+fn _get_nezha_executor(clevel: u64) -> ConcurrencyLevelManager {
+    ConcurrencyLevelManager::new(concurrent_evm_storage(), clevel as usize)
 }
 
 fn _create_random_smallbank_workload(skewness: f32, batch_size: u64, block_concurrency: u64) -> Vec<ExecutableEthereumBatch> {
@@ -60,7 +60,7 @@ fn block_concurrency(c: &mut Criterion) {
                 b.iter_batched(
                     || {
                         let consensus_output = _create_random_smallbank_workload(DEFAULT_SKEWNESS, DEFAULT_BATCH_SIZE, *i);
-                        let nezha = _get_nezha_executor();
+                        let nezha = _get_nezha_executor(*i);
                         (nezha, consensus_output)
                     },
                     |(nezha, consensus_output)| {
@@ -79,8 +79,9 @@ fn block_concurrency(c: &mut Criterion) {
 }
 
 fn block_concurrency_simulation(c: &mut Criterion) {
-    let param = 1..41;
+
     let mut group = c.benchmark_group("simulation according to block concurrency");
+    let param = 10..11;
     for i in param {
         group.throughput(Throughput::Elements((DEFAULT_BATCH_SIZE*i) as u64));
         group.bench_with_input(
@@ -90,7 +91,7 @@ fn block_concurrency_simulation(c: &mut Criterion) {
                 b.iter_batched(
                     || {
                         let consensus_output = _create_random_smallbank_workload(DEFAULT_SKEWNESS, DEFAULT_BATCH_SIZE, *i);
-                        let nezha = _get_nezha_executor();
+                        let nezha = _get_nezha_executor(*i);
                         (nezha, consensus_output)
                     },
                     |(nezha, consensus_output)| {
@@ -121,7 +122,7 @@ fn block_concurrency_scheduling(c: &mut Criterion) {
                 b.iter_batched(
                     || {
                         let consensus_output = _create_random_smallbank_workload(DEFAULT_SKEWNESS, DEFAULT_BATCH_SIZE, *i);
-                        let nezha = _get_nezha_executor();
+                        let nezha = _get_nezha_executor(*i);
                         let SimulationResult { rw_sets, .. } = nezha._simulate(consensus_output);
                         rw_sets
                     },
@@ -150,7 +151,7 @@ fn block_concurrency_scheduling(c: &mut Criterion) {
 }
 
 fn block_concurrency_commit(c: &mut Criterion) {
-    let param = 1..41;
+    let param = 1..11;
     let mut group = c.benchmark_group("concurrent commit according to block concurrency");
     for i in param {
         group.throughput(Throughput::Elements((DEFAULT_BATCH_SIZE*i) as u64));
@@ -161,7 +162,7 @@ fn block_concurrency_commit(c: &mut Criterion) {
                 b.iter_batched(
                     || {
                         let consensus_output = _create_random_smallbank_workload(DEFAULT_SKEWNESS, DEFAULT_BATCH_SIZE, *i);
-                        let nezha = _get_nezha_executor();
+                        let nezha = _get_nezha_executor(*i);
                         let SimulationResult { rw_sets, .. } = nezha._simulate(consensus_output);
                         let scheduled_info = AddressBasedConflictGraph::construct(rw_sets)
                             .hierarchcial_sort()
@@ -187,7 +188,7 @@ fn simulation(c: &mut Criterion) {
         b.iter_batched(
             || {
                 let consensus_output = _create_random_smallbank_workload(DEFAULT_SKEWNESS, DEFAULT_BATCH_SIZE, DEFAULT_BLOCK_CONCURRENCY);
-                let nezha = _get_nezha_executor();
+                let nezha = _get_nezha_executor(DEFAULT_BLOCK_CONCURRENCY);
                 (nezha, consensus_output)
             },
             |(nezha, consensus_output)| {
@@ -204,7 +205,7 @@ fn nezha(c: &mut Criterion) {
         b.iter_batched(
             || {
                 let consensus_output = _create_random_smallbank_workload(DEFAULT_SKEWNESS, DEFAULT_BATCH_SIZE, DEFAULT_BLOCK_CONCURRENCY);
-                let nezha = _get_nezha_executor();
+                let nezha = _get_nezha_executor(DEFAULT_BLOCK_CONCURRENCY);
                 let SimulationResult { rw_sets, .. } = nezha._simulate(consensus_output);
                 rw_sets
             },
@@ -225,7 +226,7 @@ fn commit(c: &mut Criterion) {
         b.iter_batched(
             || {
                 let consensus_output = _create_random_smallbank_workload(DEFAULT_SKEWNESS, DEFAULT_BATCH_SIZE, DEFAULT_BLOCK_CONCURRENCY);
-                let nezha = _get_nezha_executor();
+                let nezha = _get_nezha_executor(DEFAULT_BLOCK_CONCURRENCY);
                 let SimulationResult { rw_sets, .. } = nezha._simulate(consensus_output);
                 let scheduled_info = AddressBasedConflictGraph::construct(rw_sets)
                     .hierarchcial_sort()
@@ -253,7 +254,7 @@ fn chunk_size(c: &mut Criterion) {
                 b.iter_batched(
                     || {
                         let consensus_output = _create_random_smallbank_workload(DEFAULT_SKEWNESS, DEFAULT_BATCH_SIZE, 13);
-                        let nezha = _get_nezha_executor();
+                        let nezha = _get_nezha_executor(13);
                         (nezha, consensus_output)
                     },
                     |(nezha, consensus_output)| {
@@ -272,6 +273,6 @@ fn chunk_size(c: &mut Criterion) {
 }
 
 // criterion_group!(benches, simulation, nezha, commit, block_concurrency);
-criterion_group!(benches, block_concurrency_scheduling);
+criterion_group!(benches, block_concurrency_simulation);
 // criterion_group!(benches, block_concurrency_simulation, block_concurrency_scheduling, block_concurrency_commit);
 criterion_main!(benches);

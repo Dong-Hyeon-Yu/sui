@@ -22,6 +22,7 @@
         - clang       # RocksDB
         - pkg-config  # RocksDB
         - libssl-dev  # RocksDB        
+        - libpq-dev
       state: present
     become: yes	
   

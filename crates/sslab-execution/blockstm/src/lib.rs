@@ -7,6 +7,8 @@ pub mod executor;
 mod outcome_array;
 #[cfg(any(test, feature = "fuzzing"))]
 pub mod proptest_types;
+pub mod utils;
+mod evm_utils;
 mod scheduler;
 pub mod task;
 mod txn_last_input_output;
@@ -16,11 +18,13 @@ mod unit_tests;
 
 use std::sync::Arc;
 use evm::{backend::Apply, executor::stack::RwSet};
+use evm_utils::execute_tx;
+use executor::EtherMVHashMapView;
 use rayon::iter::{ParallelIterator, IntoParallelIterator};
-use sslab_execution::{evm_storage::{SerialEVMStorage, backend::ExecutionBackend}, executor::{Executable, EvmExecutionUtils}, types::EthereumTransaction};
+use sslab_execution::{evm_storage::backend::{ExecutionBackend, CMemoryBackend}, executor::Executable, types::EthereumTransaction};
 use sui_types::error::SuiError;
 use task::ExecutorTask;
-use tracing::warn;
+use tracing::{warn, debug};
 
 use crate::executor::ParallelTransactionExecutor;
 
@@ -56,7 +60,7 @@ impl task::TransactionOutput for EtherTxnOutput {
 
 
 struct EvmExecutorTask {
-    global_state: Arc<SerialEVMStorage>
+    global_state: Arc<evm_utils::EvmStorage<CMemoryBackend>>
 }
 
 impl ExecutorTask for EvmExecutorTask {
@@ -64,7 +68,7 @@ impl ExecutorTask for EvmExecutorTask {
     type T = EtherTxn;
     type Output = EtherTxnOutput;
     type Error = SuiError;
-    type Argument = Arc<SerialEVMStorage>;
+    type Argument = Arc<evm_utils::EvmStorage<CMemoryBackend>>;
 
     fn init(args: Self::Argument) -> Self {
         Self {
@@ -77,15 +81,16 @@ impl ExecutorTask for EvmExecutorTask {
         view: &executor::MVHashMapView<<Self::T as task::Transaction>::Key, <Self::T as task::Transaction>::Value>,
         txn: &Self::T,
     ) -> task::ExecutionStatus<Self::Output, Self::Error> {
-        match EvmExecutionUtils::simulate_tx(&txn.0, self.global_state.as_ref()) {
+        let ether_versioned_view = EtherMVHashMapView {versioned_map:view};
+        match execute_tx(&txn.0, self.global_state.as_ref(), &ether_versioned_view) {
             Ok(Some((effects, _, rw_set))) => {
                 
                 task::ExecutionStatus::Success(EtherTxnOutput(effects, rw_set))
                 //TODO: skip when conflicts
             },
-            Ok(None) => task::ExecutionStatus::Abort(SuiError::ExecutionError("evm error, maybe out of gas?".to_string())),
+            Ok(None) => task::ExecutionStatus::Success(EtherTxnOutput(vec![], RwSet::default())),
             Err(e) => {
-                warn!("Error executing transaction: {:?}", e);
+                debug!("Error executing transaction: {:?}", e);
                 task::ExecutionStatus::Abort(e)
             }
         }
@@ -94,11 +99,11 @@ impl ExecutorTask for EvmExecutorTask {
 
 
 pub struct BlockSTM {
-    global_state: Arc<SerialEVMStorage>
+    global_state: Arc<evm_utils::EvmStorage<CMemoryBackend>>
 }
 
 impl BlockSTM {
-    pub fn new(global_state: Arc<SerialEVMStorage>) -> Self {
+    pub fn new(global_state: Arc<evm_utils::EvmStorage<CMemoryBackend>>) -> Self {
         Self {
             global_state
         }

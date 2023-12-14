@@ -1,5 +1,5 @@
 [package]
-name = "diem-parallel-executor"
+name = "sslab-execution-blockstm"
 version = "0.1.0"
 authors = ["Diem Association <opensource@diem.com>"]
 description = "Diem parallel transaction executor library"
@@ -32,14 +32,16 @@ dashmap.workspace = true
 tracing.workspace = true
 
 sui-types.workspace = true
-sslab-execution.workspace = true
-evm.workspace = true
+sslab-execution = {workspace = true, features = ["blockstm"]}
+evm = {workspace = true, features = ["mvcc"] }
 
 [dev-dependencies]
 criterion = "0.5.1"
 rand = "0.8.3"
 proptest = "1.0.0"
 proptest-derive = "0.4.0"
+ethers-providers = { version = "^2.0.0" }
+narwhal-types.workspace = true
 
 [features]
 fuzzing = ["criterion", "proptest", "proptest-derive"]
@@ -48,3 +50,7 @@ fuzzing = ["criterion", "proptest", "proptest-derive"]
 name = "scheduler_benches"
 harness = false
 required-features = ["fuzzing"]
+
+[[bench]]
+name = "performance_benches"
+harness = false

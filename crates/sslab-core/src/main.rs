@@ -287,6 +287,10 @@ async fn run(
                     use sslab_execution::utils::smallbank_contract_benchmark::concurrent_evm_storage;
                     
                     let memory_storage = concurrent_evm_storage();
+                } else if #[cfg(feature = "blockstm")] {
+                    use sslab_execution_blockstm::utils::smallbank_contract_benchmark::concurrent_evm_storage;
+                    
+                    let memory_storage = concurrent_evm_storage();
                 } else {
                     use sslab_execution::utils::smallbank_contract_benchmark::default_memory_storage;
 
@@ -298,6 +302,7 @@ async fn run(
             cfg_if::cfg_if! {
                 if #[cfg(feature = "nezha")] {
                     use sslab_execution_nezha::Nezha;
+                    
 
                     let concurrency_level = match matches.subcommand() {
                         ("primary", Some(sub_matches)) => {
@@ -311,6 +316,11 @@ async fn run(
                     };
 
                     let execution_model = Nezha::new(memory_storage, concurrency_level);
+                }
+                else if #[cfg(feature = "blockstm")] {
+                    use sslab_execution_blockstm::BlockSTM;
+
+                    let execution_model = BlockSTM::new(Arc::new(memory_storage));
                 }
                 else {
                     use sslab_execution_serial::SerialExecutor;

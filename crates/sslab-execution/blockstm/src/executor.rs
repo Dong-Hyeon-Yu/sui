@@ -10,6 +10,7 @@ use crate::{
     infallible::Mutex,
 };
 use anyhow::{bail, Result as AResult};
+use ethers::types::H256;
 // use mvhashmap::MVHashMap;
 use num_cpus;
 use rayon::{prelude::*, scope};
@@ -23,6 +24,7 @@ use std::{
     },
     thread::spawn,
 };
+use evm::executor::stack::MultiversionView;
 
 /// A struct that is always used by a single thread performing an execution task. The struct is
 /// passed to the VM and acts as a proxy to resolve reads first in the shared multi-version
@@ -31,6 +33,36 @@ use std::{
 /// TODO(issue 10177): MvHashMapView currently needs to be sync due to trait bounds, but should
 /// not be. In this case, the read_dependency member can have a RefCell<bool> type and the
 /// captured_reads member can have RefCell<Vec<ReadDescriptor<K>>> type.
+
+pub struct EtherMVHashMapView<'a> {
+    pub versioned_map: &'a MVHashMapView<'a, H256, H256>,
+}
+
+impl MultiversionView for EtherMVHashMapView<'_> {
+    type ReadDescriptor = ReadDescriptor<H256>;
+
+    type ReadResult = AResult<Option<Arc<H256>>>;
+
+    type TxnIdx = TxnIndex;
+
+    fn take_reads(&self) -> Vec<Self::ReadDescriptor> {
+        self.versioned_map.take_reads()
+    }
+
+    fn read(&self, address: &ethers::types::H160, key: &H256) -> Self::ReadResult {
+        //TODO: how to separate contract address during execution?
+        self.versioned_map.read(key)
+    }
+
+    fn txn_idx(&self) -> Self::TxnIdx {
+        self.versioned_map.txn_idx()
+    }
+
+    fn read_dependency(&self) -> bool {
+        self.versioned_map.read_dependency()
+    }
+}
+
 pub struct MVHashMapView<'a, K, V> {
     versioned_map: &'a MVHashMap<K, V>,
     txn_idx: TxnIndex,

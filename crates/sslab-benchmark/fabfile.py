@@ -25,7 +25,7 @@ def local(ctx, debug=False):
         'skewness': 0.0,
         'duration': 60,
         'concurrency_level': 20,
-        'execution_model': ExecutionModel.NEZHA,
+        'execution_model': ExecutionModel.BLOCKSTM,
     }
     node_params = {
         'header_num_of_batches_threshold': 32,

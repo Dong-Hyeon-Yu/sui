@@ -11,7 +11,7 @@ criterion.workspace = true
 itertools.workspace = true
 tracing.workspace = true
 tokio = { workspace = true, features = ["full", "tracing", "test-util"] }
-
+sui-types.workspace = true
 narwhal-types.workspace = true
 sslab-execution.workspace = true
 evm.workspace = true

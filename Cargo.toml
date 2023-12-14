@@ -426,7 +426,7 @@ sslab-execution-serial = { path = "crates/sslab-execution/serial" }
 sslab-execution-blockstm = { path = "crates/sslab-execution/blockstm" }
 sslab-execution = { path = "crates/sslab-execution/evm" }
 sslab-execution-nezha = { path = "crates/sslab-execution/nezha" }
-evm = { git="https://github.com/Dong-Hyeon-Yu/evm.git", rev="fce29dab645340c4ecb9ed36858af1f33abcd8ee"}
+evm = { git="https://github.com/Dong-Hyeon-Yu/evm.git", rev="fe28dfa1e5269171a9541bdcf827182f10511895"}
 
 anemo-benchmark = { path = "crates/anemo-benchmark" }
 mysten-common = { path = "crates/mysten-common" }

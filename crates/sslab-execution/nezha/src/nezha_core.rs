@@ -4,7 +4,7 @@ use narwhal_types::BatchDigest;
 use rayon::prelude::*;
 use sslab_execution::{
     types::{ExecutableEthereumBatch, ExecutionResult}, 
-    executor::{Executable, EvmExecutionUtils}, 
+    executor::Executable, 
     evm_storage::{ConcurrentEVMStorage, backend::ExecutionBackend}
 };
 use tokio::time::Instant;
@@ -129,7 +129,7 @@ impl ConcurrencyLevelManager {
             let result : Vec<SimulatedTransaction> = tx_list
                 .par_iter()
                 .filter_map(|tx| {
-                    match EvmExecutionUtils::simulate_tx(tx, &snapshot) {
+                    match crate::evm_utils::simulate_tx(tx, &snapshot) {
                         Ok(Some((effect, log, rw_set))) => {
                             
                             Some(SimulatedTransaction::new(tx.id(), Some(rw_set), effect, log))

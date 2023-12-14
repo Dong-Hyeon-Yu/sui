@@ -1,7 +1,12 @@
 use std::collections::BTreeMap;
 
 use ethers_core::types::{H160, U64};
-use evm::{backend::Backend, executor::stack::{PrecompileFn, StackExecutor, MemoryStackState, StackSubstateMetadata}};
+use evm::{
+    backend::Backend, 
+    executor::stack::{
+        PrecompileFn, StackExecutor, MemoryStackState, StackSubstateMetadata
+    }
+};
 
 use crate::types::{ChainConfig, SpecId};
 

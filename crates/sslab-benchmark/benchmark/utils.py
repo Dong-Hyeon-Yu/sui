@@ -260,4 +260,5 @@ def multiaddr_to_url_data(addr: str):  # noqa: C901
 class ExecutionModel:
     SERIAL = 'serial'
     NEZHA = 'nezha'
+    BLOCKSTM = "blockstm"
     

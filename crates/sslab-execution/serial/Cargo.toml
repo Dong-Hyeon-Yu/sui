@@ -7,9 +7,11 @@ license = "Apache-2.0"
 publish = false
 
 [dependencies]
+sui-types.workspace = true
 sslab-execution.workspace = true
 tracing.workspace = true
 criterion.workspace = true
+evm.workspace = true
 
 [dev-dependencies]
 narwhal-types.workspace = true

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use sslab_execution::{
-    executor::{Executable, EvmExecutionUtils}, 
+    executor::Executable, 
     evm_storage::{SerialEVMStorage, backend::ExecutionBackend}, 
     types::{ExecutableEthereumBatch, ExecutionResult}
 };
@@ -36,7 +36,7 @@ impl SerialExecutor {
         let state = self.global_state.as_ref();
 
         for tx in batch.data() {
-            match EvmExecutionUtils::execute_tx(tx, state) {
+            match crate::evm_utils::execute_tx(tx, state) {
                 Ok(Some((effect, _))) 
                     => state.apply_local_effect(effect),
                 Ok(None) 

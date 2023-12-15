@@ -60,7 +60,7 @@ fn test_smallbank() {
     let aborted_tx_len =  scheduled_info.aborted_txs_len();
 
     now = Instant::now();
-    nezha._concurrent_commit(scheduled_info);
+    nezha._concurrent_commit(scheduled_info, 1);
     time = now.elapsed().as_millis();
 
     println!("Concurrent commit took {} ms for {} transactions.", time, scheduled_tx_len);

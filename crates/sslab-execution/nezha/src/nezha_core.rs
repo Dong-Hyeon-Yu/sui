@@ -92,9 +92,10 @@ impl ConcurrencyLevelManager {
 
         let scheduled_tx_len = scheduled_info.scheduled_txs_len();
         let aborted_tx_len =  scheduled_info.aborted_txs_len();
+        info!("Parallelism metric: {:?}", scheduled_info.parallism_metric());
 
         now = Instant::now();
-        self._concurrent_commit(scheduled_info);
+        self._concurrent_commit(scheduled_info, 10);
         time = now.elapsed().as_millis();
 
         info!("Concurrent commit took {} ms for {} transactions.", time, scheduled_tx_len);
@@ -156,7 +157,7 @@ impl ConcurrencyLevelManager {
         }
     }
 
-    pub fn _concurrent_commit(&self, scheduled_info: ScheduledInfo) {
+    pub fn _concurrent_commit(&self, scheduled_info: ScheduledInfo, chunk_size: usize) {
         let storage = self.global_state.clone();
         // let _storage = &storage;
         let scheduled_txs = scheduled_info.scheduled_txs;
@@ -169,9 +170,9 @@ impl ConcurrencyLevelManager {
             let _storage = &storage;
             for txs_to_commit in scheduled_txs {
                 txs_to_commit
-                    .par_iter()
-                    .for_each(|tx| {
-                        let effect = tx.extract();
+                    .par_chunks(chunk_size)
+                    .for_each(|txs| {
+                        let effect = txs.into_iter().flat_map(|tx| tx.extract()).collect_vec();
                         _storage.apply_local_effect(effect)
                     })
             }
@@ -235,6 +236,16 @@ impl ScheduledInfo {
 
     pub fn aborted_txs_len(&self) -> usize {
         self.aborted_txs.len()
+    }
+
+    pub fn parallism_metric(&self) -> (usize, f64, f64, usize, usize) {
+        let total_tx = self.scheduled_txs_len()+self.aborted_txs_len();
+        let max_width = self.scheduled_txs.iter().map(|vec| vec.len()).max().unwrap_or(0);
+        let depth = self.scheduled_txs.len();
+        let average_width = self.scheduled_txs.iter().map(|vec| vec.len()).sum::<usize>() as f64 / depth as f64;
+        let var_width = self.scheduled_txs.iter().map(|vec| vec.len()).fold(0.0, |acc, len| acc + (len as f64 - average_width).powi(2)) / depth as f64;
+        let std_width = var_width.sqrt();
+        (total_tx, average_width, std_width, max_width, depth)
     }
 }
 

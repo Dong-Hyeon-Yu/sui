@@ -238,13 +238,14 @@ impl ScheduledInfo {
         self.aborted_txs.len()
     }
 
-    pub fn parallism_metric(&self) -> (usize, f64, usize, usize) {
+    pub fn parallism_metric(&self) -> (usize, f64, f64, usize, usize) {
         let total_tx = self.scheduled_txs_len()+self.aborted_txs_len();
         let max_width = self.scheduled_txs.iter().map(|vec| vec.len()).max().unwrap_or(0);
         let depth = self.scheduled_txs.len();
         let average_width = self.scheduled_txs.iter().map(|vec| vec.len()).sum::<usize>() as f64 / depth as f64;
-
-        (total_tx, average_width, max_width, depth)
+        let var_width = self.scheduled_txs.iter().map(|vec| vec.len()).fold(0.0, |acc, len| acc + (len as f64 - average_width).powi(2)) / depth as f64;
+        let std_width = var_width.sqrt();
+        (total_tx, average_width, std_width, max_width, depth)
     }
 }
 

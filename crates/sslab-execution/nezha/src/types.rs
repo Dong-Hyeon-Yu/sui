@@ -1,3 +1,4 @@
+use ethers_core::types::H256;
 use evm::{backend::{Apply, Log}, executor::stack::RwSet};
 use narwhal_types::BatchDigest;
 
@@ -10,18 +11,18 @@ pub struct SimulationResult {
 
 #[derive(Clone, Debug, Default)]
 pub struct SimulatedTransaction {
-    tx_id: u64,
+    tx_id: H256,
     rw_set: Option<RwSet>,
     effects: Vec<Apply>,
     logs: Vec<Log>,
 }
 
 impl SimulatedTransaction {
-    pub fn new(tx_id: u64, rw_set: Option<RwSet>, effects: Vec<Apply>, logs: Vec<Log>) -> Self {
+    pub fn new(tx_id: H256, rw_set: Option<RwSet>, effects: Vec<Apply>, logs: Vec<Log>) -> Self {
         Self { tx_id, rw_set, effects, logs }
     }
 
-    pub fn deconstruct(self) -> (u64, Option<RwSet>, Vec<Apply>, Vec<Log>) {
+    pub fn deconstruct(self) -> (H256, Option<RwSet>, Vec<Apply>, Vec<Log>) {
         (self.tx_id, self.rw_set, self.effects, self.logs)
     }
 
@@ -30,7 +31,7 @@ impl SimulatedTransaction {
     }
 
     #[allow(dead_code)] // this function is used in unit tests.
-    pub(crate) fn id(&self) -> &u64 {
+    pub(crate) fn id(&self) -> &H256 {
         &self.tx_id
     }
 }

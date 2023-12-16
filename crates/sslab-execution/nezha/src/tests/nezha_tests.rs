@@ -1,5 +1,6 @@
 use ethers_core::types::{H160, H256};
 use evm::executor::stack::{RwSet, Simulatable};
+use hashbrown::HashSet;
 
 use crate::{types::SimulatedTransaction, address_based_conflict_graph::AddressBasedConflictGraph};
 
@@ -15,7 +16,7 @@ fn transaction_with_rw(tx_id: u64, read_addr: u64, write_addr: u64) -> Simulated
         H160::from_low_u64_be(CONTRACT_ADDR), 
         H256::from_low_u64_be(write_addr), 
         H256::from_low_u64_be(1));
-    SimulatedTransaction::new(tx_id, Some(set), Vec::new(), Vec::new())
+    SimulatedTransaction::new(H256::from_low_u64_be(tx_id), Some(set), Vec::new(), Vec::new())
 }
 
 fn transaction_with_multiple_rw(tx_id: u64, read_addr: Vec<u64>, write_addr: Vec<u64>) -> SimulatedTransaction {
@@ -32,7 +33,7 @@ fn transaction_with_multiple_rw(tx_id: u64, read_addr: Vec<u64>, write_addr: Vec
             H256::from_low_u64_be(*addr), 
             H256::from_low_u64_be(1));
     });
-    SimulatedTransaction::new(tx_id, Some(set), Vec::new(), Vec::new())
+    SimulatedTransaction::new(H256::from_low_u64_be(tx_id), Some(set), Vec::new(), Vec::new())
 }
 
 fn nezha_test(input_txs: Vec<SimulatedTransaction>, answer: Vec<Vec<u64>>, print_result: bool) {
@@ -46,16 +47,16 @@ fn nezha_test(input_txs: Vec<SimulatedTransaction>, answer: Vec<Vec<u64>>, print
         scheduled_info.scheduled_txs.iter()
             .for_each(|txs| {
                 txs.iter().for_each(|tx| {
-                    print!("{} ", tx.id());
+                    print!("{} ", tx.id().to_low_u64_be());
                 });
                 print!("\n");
             });
     }
     
     scheduled_info.scheduled_txs.iter().zip(answer.iter()).for_each(|(txs, idx)| {
-        txs.iter().zip(idx.iter()).for_each(|(tx, id)| {
-            assert_eq!(tx.id(), id);
-        })
+        assert_eq!(txs.len(), idx.len());
+        let answer_set:HashSet<&u64> = idx.iter().collect();
+        assert!(txs.iter().all(|tx| answer_set.contains(&tx.id().to_low_u64_be())))
      });
 }
 

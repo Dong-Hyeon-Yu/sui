@@ -11,7 +11,7 @@ pub(crate) type FastHashSet<K> = hashbrown::HashSet<K, nohash_hasher::BuildNoHas
 
 pub struct AddressBasedConflictGraph {
     addresses: hashbrown::HashMap<H256, Address>,
-    tx_list: FastHashMap<u64, Rc<Transaction>>, // tx_id -> transaction
+    tx_list: hashbrown::HashMap<H256, Rc<Transaction>>, // tx_id -> transaction
     aborted_txs: Vec<Rc<Transaction>>, // optimization for reordering.
 }
 
@@ -20,7 +20,7 @@ impl AddressBasedConflictGraph {
     fn new() -> Self {
         Self {
             addresses: hashbrown::HashMap::new(),
-            tx_list: FastHashMap::default(),
+            tx_list: hashbrown::HashMap::new(),
             aborted_txs: Vec::new(),
         }
     }
@@ -96,7 +96,7 @@ impl AddressBasedConflictGraph {
 
     #[must_use]
     pub fn extract_schedule(&mut self) -> ScheduledInfo {
-        let tx_list = std::mem::replace(&mut self.tx_list, FastHashMap::default());
+        let tx_list = std::mem::replace(&mut self.tx_list, hashbrown::HashMap::default());
         let aborted_txs = std::mem::replace(&mut self.aborted_txs, Vec::new());
 
         tx_list.iter().for_each(|(_, tx)| tx.clear_write_units());
@@ -212,7 +212,7 @@ impl AddressBasedConflictGraph {
 
 #[derive(Clone, Debug)]
 pub struct Transaction {
-    tx_id: u64, 
+    tx_id: H256, 
     sequence: Cell<u64>,  // 0 represents that this transaction havn't been ordered yet.
     aborted: Cell<bool>,
     write_units: RefCell<Vec<Rc<Unit>>>,
@@ -222,11 +222,11 @@ pub struct Transaction {
 }
 
 impl Transaction {
-    fn new(tx_id: u64, effects: Vec<Apply>, logs: Vec<Log>) -> Self {
+    fn new(tx_id: H256, effects: Vec<Apply>, logs: Vec<Log>) -> Self {
         Self { tx_id, sequence: Cell::new(0), aborted: Cell::new(false), write_units: RefCell::new(Vec::new()), effects, logs }
     }
 
-    pub fn id(&self) -> u64 {
+    pub fn id(&self) -> H256 {
         self.tx_id.clone()
     }
 

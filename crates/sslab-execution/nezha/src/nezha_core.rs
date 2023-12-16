@@ -1,4 +1,5 @@
 use std::{sync::Arc, rc::Rc};
+use ethers_core::types::H256;
 use itertools::Itertools;
 use narwhal_types::BatchDigest;
 use rayon::prelude::*;
@@ -133,7 +134,7 @@ impl ConcurrencyLevelManager {
                     match crate::evm_utils::simulate_tx(tx, &snapshot) {
                         Ok(Some((effect, log, rw_set))) => {
                             
-                            Some(SimulatedTransaction::new(tx.id(), Some(rw_set), effect, log))
+                            Some(SimulatedTransaction::new(tx.digest(), Some(rw_set), effect, log))
                         },
                         _ => {
                             warn!("fail to execute a transaction {}", tx.id());
@@ -187,12 +188,12 @@ impl ConcurrencyLevelManager {
 
 pub struct ScheduledInfo {
     pub scheduled_txs: Vec<Vec<SimulatedTransaction>>,  
-    pub aborted_txs: Vec<u64>
+    pub aborted_txs: Vec<H256>
 }
 
 impl ScheduledInfo {
 
-    pub fn from(tx_list: FastHashMap<u64, Rc<Transaction>>, aborted_txs: Vec<Rc<Transaction>>) -> Self {
+    pub fn from(tx_list: hashbrown::HashMap<H256, Rc<Transaction>>, aborted_txs: Vec<Rc<Transaction>>) -> Self {
         let mut buffer = FastHashMap::default();
 
         // group by sequence.

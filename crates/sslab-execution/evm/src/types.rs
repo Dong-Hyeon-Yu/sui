@@ -13,13 +13,17 @@ use crate::transaction_validator::TxValidationError;
 pub(crate) const DEFAULT_EVM_STACK_LIMIT:usize = 1024;
 pub(crate) const DEFAULT_EVM_MEMORY_LIMIT:usize = usize::MAX; 
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, Eq, PartialEq)]
 pub struct EthereumTransaction(pub TypedTransaction);
 
 impl EthereumTransaction {
 
     pub fn id(&self) -> u64 {
         u64::from_be_bytes(self.0.sighash()[2..10].try_into().ok().unwrap())
+    }
+
+    pub fn digest(&self) -> H256 {
+        self.0.sighash()
     }
 
     pub fn encode(&self) -> Vec<u8> {
@@ -79,6 +83,12 @@ impl EthereumTransaction {
     }
     pub fn nonce(&self) -> U256 {
         self.0.nonce().unwrap().clone()
+    }
+}
+
+impl std::hash::Hash for EthereumTransaction {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.sighash().hash(state);
     }
 }
 

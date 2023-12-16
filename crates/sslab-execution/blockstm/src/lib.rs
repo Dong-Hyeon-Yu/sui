@@ -70,7 +70,7 @@ impl ExecutorTask for EvmExecutorTask {
     type Error = SuiError;
     type Argument = Arc<evm_utils::EvmStorage<CMemoryBackend>>;
 
-    fn init(args: Self::Argument) -> Self {
+    fn init(args: Self::Argument) -> Self {  //TODO: modify to get the referce of Arc<EvmStorage> ?, clone() is expensive.
         Self {
             global_state: args
         }
@@ -86,7 +86,6 @@ impl ExecutorTask for EvmExecutorTask {
             Ok(Some((effects, _, rw_set))) => {
                 
                 task::ExecutionStatus::Success(EtherTxnOutput(effects, rw_set))
-                //TODO: skip when conflicts
             },
             Ok(None) => task::ExecutionStatus::Success(EtherTxnOutput(vec![], RwSet::default())),
             Err(e) => {
@@ -123,11 +122,11 @@ impl Executable for BlockSTM {
                 .collect();
            
             match executor.execute_transactions_parallel(
-                self.global_state.clone(), 
+                self.global_state.clone(), //TODO: modify to get the referce of Arc<EvmStorage> ?, clone() is expensive.
                 txn_to_execute
             ) {
                 Ok(effects) => {
-                    let _effects = effects.into_par_iter().flat_map(|output| output.0).collect(); //TODO: evm 실행 시에 mvHashMapView를 사용하도록 수정
+                    let _effects = effects.into_par_iter().flat_map(|output| output.0).collect();
                     self.global_state.apply_local_effect(_effects);
                 },
                 Err(e) => {

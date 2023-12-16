@@ -19,7 +19,7 @@ evm.workspace = true
 ethers-core = { version = "^2.0.0" }
 rayon = "1.8.0"
 nohash-hasher = "0.2.0"
-hashbrown = "0.14.2"
+hashbrown = { version = "0.14.2", features = ["inline-more", "default"]}
 
 
 [dev-dependencies]

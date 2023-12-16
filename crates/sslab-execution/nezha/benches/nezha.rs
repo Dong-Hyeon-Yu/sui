@@ -4,10 +4,6 @@ use std::sync::RwLock;
 use criterion::Throughput;
 use criterion::{criterion_group, criterion_main, Criterion, BatchSize};
 use ethers_providers::{Provider, MockProvider};
-use narwhal_types::BatchDigest;
-
-use rayon::iter::IntoParallelIterator;
-use rayon::prelude::*;
 
 use sslab_execution::{
     types::ExecutableEthereumBatch,
@@ -21,31 +17,23 @@ use sslab_execution_nezha::{
     SimulationResult,
 };
 
-const DEFAULT_BATCH_SIZE: u64 = 200;
-const DEFAULT_BLOCK_CONCURRENCY: u64 = 12;
-const DEFAULT_SKEWNESS: f32 = 0.0;
+const DEFAULT_BATCH_SIZE: usize = 200;
+const DEFAULT_BLOCK_CONCURRENCY: usize = 12;
+const DEFAULT_SKEWNESS: f32 = 1.0;
 
 fn _get_smallbank_handler() -> SmallBankTransactionHandler {
     let provider = Provider::<MockProvider>::new(MockProvider::default());
     SmallBankTransactionHandler::new(provider, DEFAULT_CHAIN_ID)
 }
 
-fn _get_nezha_executor(clevel: u64) -> ConcurrencyLevelManager {
-    ConcurrencyLevelManager::new(concurrent_evm_storage(), clevel as usize)
+fn _get_nezha_executor(clevel: usize) -> ConcurrencyLevelManager {
+    ConcurrencyLevelManager::new(concurrent_evm_storage(), clevel)
 }
 
-fn _create_random_smallbank_workload(skewness: f32, batch_size: u64, block_concurrency: u64) -> Vec<ExecutableEthereumBatch> {
+fn _create_random_smallbank_workload(skewness: f32, batch_size: usize, block_concurrency: usize) -> Vec<ExecutableEthereumBatch> {
     let handler = _get_smallbank_handler();
 
-    (0..block_concurrency)
-        .into_iter()
-        .map(|_| {
-            let tmp = (0..batch_size).into_par_iter().map(|_|
-                handler.random_operation(skewness, 10_000)
-            ).collect();
-            ExecutableEthereumBatch::new(tmp, BatchDigest::default())
-        })
-        .collect()
+    handler.create_batches(batch_size, block_concurrency, skewness, 10_000)
 }
 
 fn block_concurrency(c: &mut Criterion) {
@@ -53,6 +41,7 @@ fn block_concurrency(c: &mut Criterion) {
     let mut group = c.benchmark_group("Nezha Benchmark according to block concurrency");
     for i in param {
         group.throughput(Throughput::Elements((DEFAULT_BATCH_SIZE*i) as u64));
+        // let effective_tps: std::rc::Rc<RwLock<Vec<(_,_)>>> =  std::rc::Rc::new(RwLock::new(Vec::new()));
         group.bench_with_input(
             criterion::BenchmarkId::new("nezha", i),
             &i,
@@ -69,12 +58,20 @@ fn block_concurrency(c: &mut Criterion) {
                             .hierarchcial_sort()
                             .reorder()
                             .extract_schedule();
+                        // effective_tps.write().unwrap().push((scheduled_info.scheduled_txs_len(), scheduled_info.aborted_txs_len()+scheduled_info.scheduled_txs_len()));
                         nezha._concurrent_commit(scheduled_info, 1)
                     },
                     BatchSize::SmallInput
                 );
             }
         );
+        // let (mut committed, mut total) = (0, 0);
+        // let len = effective_tps.read().unwrap().len();
+        // for (a, b) in effective_tps.read().unwrap().iter() {
+        //     committed += a;
+        //     total += b;
+        // }
+        // println!("committed: {:?} / total: {:?}", committed as f64/ len as f64, total as f64/ len as f64);
     }
 }
 
@@ -274,6 +271,6 @@ fn chunk_size(c: &mut Criterion) {
 }
 
 // criterion_group!(benches, simulation, nezha, commit, block_concurrency);
-criterion_group!(benches, block_concurrency_scheduling);
+criterion_group!(benches, block_concurrency);
 // criterion_group!(benches, block_concurrency_simulation, block_concurrency_scheduling, block_concurrency_commit);
 criterion_main!(benches);

@@ -3728,7 +3728,7 @@ checksum = "0206175f82b8d6bf6652ff7d71a1e27fd2e4efde587fd368662814d6ec1d9ce0"
 [[package]]
 name = "evm"
 version = "0.39.1"
-source = "git+https://github.com/Dong-Hyeon-Yu/evm.git?rev=fe28dfa1e5269171a9541bdcf827182f10511895#fe28dfa1e5269171a9541bdcf827182f10511895"
+source = "git+https://github.com/Dong-Hyeon-Yu/evm.git?rev=d81889d9303491a61f91560399ed292e09b91739#d81889d9303491a61f91560399ed292e09b91739"
 dependencies = [
  "anyhow",
  "auto_impl",
@@ -3750,7 +3750,7 @@ dependencies = [
 [[package]]
 name = "evm-core"
 version = "0.39.0"
-source = "git+https://github.com/Dong-Hyeon-Yu/evm.git?rev=fe28dfa1e5269171a9541bdcf827182f10511895#fe28dfa1e5269171a9541bdcf827182f10511895"
+source = "git+https://github.com/Dong-Hyeon-Yu/evm.git?rev=d81889d9303491a61f91560399ed292e09b91739#d81889d9303491a61f91560399ed292e09b91739"
 dependencies = [
  "parity-scale-codec 3.5.0",
  "primitive-types 0.12.1",
@@ -3761,7 +3761,7 @@ dependencies = [
 [[package]]
 name = "evm-gasometer"
 version = "0.39.0"
-source = "git+https://github.com/Dong-Hyeon-Yu/evm.git?rev=fe28dfa1e5269171a9541bdcf827182f10511895#fe28dfa1e5269171a9541bdcf827182f10511895"
+source = "git+https://github.com/Dong-Hyeon-Yu/evm.git?rev=d81889d9303491a61f91560399ed292e09b91739#d81889d9303491a61f91560399ed292e09b91739"
 dependencies = [
  "cfg-if",
  "environmental",
@@ -3773,7 +3773,7 @@ dependencies = [
 [[package]]
 name = "evm-runtime"
 version = "0.39.0"
-source = "git+https://github.com/Dong-Hyeon-Yu/evm.git?rev=fe28dfa1e5269171a9541bdcf827182f10511895#fe28dfa1e5269171a9541bdcf827182f10511895"
+source = "git+https://github.com/Dong-Hyeon-Yu/evm.git?rev=d81889d9303491a61f91560399ed292e09b91739#d81889d9303491a61f91560399ed292e09b91739"
 dependencies = [
  "auto_impl",
  "cfg-if",
@@ -4576,6 +4576,7 @@ checksum = "f93e7192158dbcda357bdec5fb5788eebf8bbac027f3f33e719d29135ae84156"
 dependencies = [
  "ahash 0.8.2",
  "allocator-api2",
+ "rayon",
 ]
 
 [[package]]
@@ -10525,12 +10526,14 @@ dependencies = [
  "fastcrypto",
  "flurry",
  "futures",
+ "hashbrown 0.14.2",
  "mysten-metrics",
  "narwhal-executor",
  "narwhal-types",
  "narwhal-worker",
  "parking_lot 0.12.1",
  "rand_distr",
+ "rayon",
  "serde 1.0.152",
  "serde_json",
  "serde_with",
@@ -10555,7 +10558,6 @@ dependencies = [
  "ethers",
  "ethers-providers",
  "evm",
- "narwhal-types",
  "num_cpus",
  "once_cell",
  "proptest",
@@ -10598,7 +10600,6 @@ dependencies = [
  "ethers-providers",
  "ethers-signers",
  "evm",
- "narwhal-types",
  "rand_distr",
  "sslab-execution",
  "sui-types",

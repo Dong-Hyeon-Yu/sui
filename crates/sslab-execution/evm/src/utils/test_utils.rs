@@ -3,9 +3,11 @@ use std::{sync::Arc, str::FromStr};
 use ethers_core::{types::{Signature, U256, transaction::eip2718::TypedTransaction, H160}, rand};
 use ethers_providers::{Provider, MockProvider};
 use ethers_signers::{LocalWallet, Signer};
+use narwhal_types::BatchDigest;
 use rand::Rng as _;
 use rand_distr::{Zipf, Uniform, Distribution};
-use crate::types::EthereumTransaction;
+use rayon::prelude::*;
+use crate::types::{EthereumTransaction, ExecutableEthereumBatch};
 use self::small_bank::SmallBank;
 
 
@@ -20,6 +22,7 @@ pub struct SmallBankTransactionHandler {
     chain_id: u64,
     contract: Option<SmallBank<Provider<MockProvider>>>,
     random_op_gen: Uniform<u8>,
+    val_gen: Uniform<u32>,
 }
 
 #[allow(dead_code)]
@@ -30,7 +33,26 @@ impl SmallBankTransactionHandler {
             chain_id,
             contract: Some(SmallBank::new(H160::from_str(DEFAULT_CONTRACT_ADDRESS).unwrap(), Arc::new(provider))),
             random_op_gen: Uniform::new(1, 7),
+            val_gen: Uniform::new(1, 1000),
         }
+    }
+
+    pub fn create_batches(&self, batch_size: usize, batch_num: usize, zipfian_coef: f32, account_num: u64) -> Vec<ExecutableEthereumBatch> {
+        let target_tnx_num = batch_size * batch_num;
+
+        let mut buffer = (0..target_tnx_num)
+            .into_par_iter()
+            .map(|_| self.random_operation(zipfian_coef, account_num))
+            .collect::<hashbrown::HashSet<_>>();
+
+        while buffer.len() == target_tnx_num {
+            buffer.insert(self.random_operation(zipfian_coef, account_num));
+        }
+
+        buffer.into_par_iter().collect::<Vec<_>>()
+            .par_chunks_exact(batch_size)
+            .map(|chunk| ExecutableEthereumBatch::new(chunk.to_vec(), BatchDigest::default()))
+            .collect()
     }
 
     pub fn random_operation(&self, zipfian_coef: f32, account_num: u64) -> EthereumTransaction {
@@ -39,17 +61,23 @@ impl SmallBankTransactionHandler {
         let acc1 = rand::thread_rng().sample(acc_gen).to_string();
         let acc2 = rand::thread_rng().sample(acc_gen).to_string();
 
-        let op = self.random_op_gen.sample(&mut rand::thread_rng());
+        let rng = &mut rand::thread_rng();
+        let op = self.random_op_gen.sample(rng);
         match op {
-            0 => self.create_account(acc1, U256::from(100), U256::from(99)),
+            0 => self.create_account(acc1, U256::from(1_000_000), U256::from(1_000_000)),
             1 => self.amalgamate(acc1, acc2),
             2 => self.get_balance(acc1),
-            3 => self.send_payment(acc1, acc2, U256::from(10)),
-            4 => self.update_balance(acc1, U256::from(10)),
-            5 => self.update_saving(acc1, U256::from(10)),
-            6 => self.write_check(acc1, U256::from(10)),
+            3 => self.send_payment(acc1, acc2, self.random_value(rng)),
+            4 => self.update_balance(acc1, self.random_value(rng)),
+            5 => self.update_saving(acc1, self.random_value(rng)),
+            6 => self.write_check(acc1, self.random_value(rng)),
             _ => panic!("invalid operation"),
         }
+    }
+
+    #[inline]
+    fn random_value(&self, rng: &mut rand::rngs::ThreadRng) -> U256 {
+        U256::from(self.val_gen.sample(rng))
     }
 
     fn create_account(&self, acc: String, init_check: U256, init_save: U256) -> EthereumTransaction {
@@ -98,7 +126,7 @@ impl SmallBankTransactionHandler {
         tx.set_from(self.admin_wallet.address())
         .set_to(H160::from_str(DEFAULT_CONTRACT_ADDRESS).unwrap())
         .set_chain_id(self.chain_id)
-        .set_nonce(U256::zero())
+        .set_nonce(U256::from(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()))
         .set_gas(u64::MAX)
         .set_gas_price(U256::zero());
     }

@@ -85,8 +85,8 @@ class LogParser:
         self.commits = self._merge_results([x.items() for x in commits])
         self.execution_latencies = self._merge_results([x.items() for x in latencies])
         self.subdag_size = self._merge_results([x.items() for x in subdag_size])
-        self.aborted = sum([int(x) for single_list in aborted for x in single_list])
-        self.total = sum([int(x) for single_list in total for x in single_list])
+        self.aborted = sum([int(x) for single_list in aborted for x in single_list]) / self.committee_size
+        self.total = sum([int(x) for single_list in total for x in single_list]) / self.committee_size
 
         # Parse the workers logs.
         try:
@@ -293,6 +293,10 @@ class LogParser:
         return tps, bps, duration
     
     def _execution_latency(self):
+        latency = [c - self.orders[d] for d, c in self.commits.items()]
+        return mean(latency) if latency else 0
+    
+    def _batch_execution_latency(self):
         latencies = self.execution_latencies.values()
         return mean(latencies) if latencies else 0
 
@@ -332,10 +336,12 @@ class LogParser:
         consensus_latency = self._consensus_latency() * 1_000
         consensus_tps, consensus_bps, duration = self._consensus_throughput()
         execution_latency = self._execution_latency() * 1_000
+        batch_execution_latency = self._batch_execution_latency() * 1_000
         execution_tps, execution_bps, excution_duration = self._execution_throughput()
         
-        effective_tps = (self.total_committed_tx - self.aborted) / excution_duration if self.aborted else execution_tps
-        abort_rate = 100 * self.aborted / self.total if self.aborted else 0.0
+        abort_rate = self.aborted / self.total if self.aborted else 0.0
+        effective_tps = execution_tps * (1-abort_rate) if self.aborted else execution_tps
+        abort_rate *= 100
         
         end_to_end_tps, end_to_end_bps, _ = self._end_to_end_throughput()
         end_to_end_latency = self._end_to_end_latency() * 1_000
@@ -407,6 +413,7 @@ class LogParser:
             f' Execution TPS: {round(execution_tps):,} tx/s\n'
             f' Execution BPS: {round(execution_bps):,} B/s\n'
             f' Execution latency: {round(execution_latency):,} ms\n'
+            f' \tBatch execution latency: {round(batch_execution_latency):,} ms\n'
             f' \tAverage Abort Rate: {abort_rate:.2f} % \n'
             f' \tEffective TPS: {round(effective_tps):,} tx/s\n'
             '\n'

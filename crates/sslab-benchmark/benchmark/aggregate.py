@@ -66,16 +66,31 @@ class Setup:
 
 
 class Result:
-    def __init__(self, mean_tps, mean_latency, mean_send_rate, mean_batch_size, abort_rate, mean_effective_tps,
-                 std_tps=0, std_latency=0, std_abort_rate=0, std_effective_tps=0):
+    def __init__(
+            self, 
+            mean_tps, 
+            mean_latency, 
+            mean_batch_execution_latency, 
+            mean_send_rate, 
+            mean_batch_size, 
+            abort_rate, 
+            mean_effective_tps,
+            std_tps=0, 
+            std_latency=0, 
+            std_batch_exeuction_latency=0,
+            std_abort_rate=0, 
+            std_effective_tps=0
+        ):
         self.mean_tps = mean_tps
         self.mean_latency = mean_latency
+        self.mean_batch_exeuction_latency = mean_batch_execution_latency
         self.mean_send_rate = mean_send_rate
         self.mean_batch_size = mean_batch_size
         self.mean_abort_rate = abort_rate
         self.mean_effective_tps = mean_effective_tps
         self.std_tps = std_tps
         self.std_latency = std_latency
+        self.std_batch_exeuction_latency = std_batch_exeuction_latency
         self.std_abort_rate = std_abort_rate
         self.std_effective_tps = std_effective_tps
 
@@ -83,6 +98,7 @@ class Result:
         return (
             f' TPS: {self.mean_tps} +/- {self.std_tps} tx/s\n'
             f' Latency: {self.mean_latency} +/- {self.std_latency} ms\n'
+            f' Batch latency: {self.mean_batch_exeuction_latency} +/- {self.std_batch_exeuction_latency} ms\n'
             f' Actual Sending Rate: {self.mean_send_rate} tx/s\n'
             f' Average Batch size: {self.mean_batch_size} KB\n'
             f' Abort Rate: {self.mean_abort_rate} +/- {self.std_abort_rate} %\n'
@@ -93,11 +109,12 @@ class Result:
     def from_str(cls, raw):
         tps = int(search(r'Execution TPS: (\d+)', raw).group(1))
         latency = int(search(r'Execution latency: (\d+)', raw).group(1))
+        batch_latency = int(search(r'Batch execution latency: (\d+)', raw).group(1))
         send_rate = int(search(r'Actual Sending Rate: (\d+)', raw).group(1))
         batch_size = int(search(r'Average Batch size: (\d+)', raw).group(1))
         abort_rate = float(search(r'Abort Rate: (\d+\.\d+)', raw).group(1))
         effective_tps = int(search(r'Effective TPS: (\d+)', raw).group(1))
-        return cls(tps, latency, send_rate, batch_size, abort_rate, effective_tps)
+        return cls(tps, latency, batch_latency, send_rate, batch_size, abort_rate, effective_tps)
 
     @classmethod
     def aggregate(cls, results):
@@ -106,16 +123,18 @@ class Result:
 
         mean_tps = round(mean([x.mean_tps for x in results]))
         mean_latency = round(mean([x.mean_latency for x in results]))
+        mean_batch_exeuction_latency = round(mean([x.mean_batch_exeuction_latency for x in results]))
         mean_send_rate = round(mean([x.mean_send_rate for x in results]))
         mean_batch_size = round(mean([x.mean_batch_size for x in results]))
         mean_abort_rate = round(mean([x.mean_abort_rate for x in results]), 2)
         mean_effective_tps = round(mean([x.mean_effective_tps for x in results]))
         std_tps = round(stdev([x.mean_tps for x in results]))
         std_latency = round(stdev([x.mean_latency for x in results]))
+        std_batch_exeuction_latency = round(stdev([x.mean_batch_exeuction_latency for x in results]))
         std_abort_rate = round(stdev([x.mean_abort_rate for x in results]), 2)
         std_effective_tps = round(stdev([x.mean_effective_tps for x in results]))
-        return cls(mean_tps, mean_latency, mean_send_rate, mean_batch_size, mean_abort_rate, mean_effective_tps,
-                   std_tps, std_latency, std_abort_rate, std_effective_tps)
+        return cls(mean_tps, mean_latency, mean_batch_exeuction_latency,  mean_send_rate, mean_batch_size, mean_abort_rate, mean_effective_tps,
+                   std_tps, std_latency, std_batch_exeuction_latency, std_abort_rate, std_effective_tps)
 
 
 class LogAggregator:

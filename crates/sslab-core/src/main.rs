@@ -398,9 +398,9 @@ async fn run(
         "Starting Prometheus HTTP metrics endpoint at {}",
         prom_address
     );
-    let _metrics_server_handle = start_prometheus_server(prom_address, &registry);
 
     if let Some(primary) = primary {
+        let _metrics_server_handle = start_prometheus_server(prom_address, &registry);
         primary.wait().await;
     } else if let Some(worker) = worker {
         worker.wait().await;

@@ -56,7 +56,8 @@
   - name: add listening ports 
     shell: |
       ufw allow proto udp from any to any port 5000:6000 &&
-      ufw allow proto tcp from any to any port 5000:6000
+      ufw allow proto tcp from any to any port 5000:6000 &&
+      ufw allow 9090/tcp
     become: yes
 
   - name: Clone a github repository
@@ -65,3 +66,12 @@
       dest: /home/nezha/sui
       clone: yes
       update: yes
+
+  roles:
+  - prometheus.prometheus.prometheus
+  vars:
+    prometheus_targets:
+      node:
+      - targets:
+      - localhost:6000
+

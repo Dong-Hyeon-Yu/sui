@@ -3,12 +3,12 @@ use mysten_metrics::spawn_logged_monitored_task;
 use async_trait::async_trait;
 use fastcrypto::hash::Hash as _Hash;
 use narwhal_executor::ExecutionState;
-use narwhal_types::{BatchAPI, CertificateAPI, ConsensusOutput, HeaderAPI};
-use tokio::{sync::mpsc::Sender, task::JoinHandle, time::Instant};
-use tracing::{info, instrument};
+use narwhal_types::{BatchAPI, CertificateAPI, ConsensusOutput, HeaderAPI, BatchDigest};
+use rayon::prelude::*;
+use tokio::{sync::mpsc::Sender, task::JoinHandle};
+use tracing::{info, instrument, warn};
 use sslab_execution::{types::{ExecutableEthereumBatch, EthereumTransaction, ExecutableConsensusOutput}, executor::ExecutionComponent};
 use core::panic;
-use std::sync::Arc;
 
 #[allow(dead_code)]
 pub struct SimpleConsensusHandler {
@@ -72,20 +72,12 @@ impl ExecutionState for SimpleConsensusHandler {
     /// This function will be called by Narwhal, after Narwhal sequenced this certificate.
     #[instrument(level = "trace", skip_all)]
     async fn handle_consensus_output(&self, consensus_output: ConsensusOutput) {
-        let time = Instant::now();
-
-        let round = consensus_output.sub_dag.leader_round();
-
-        /* (serialized, transaction, output_cert) */
-        let mut ethereum_batches : Vec<ExecutableEthereumBatch> = vec![];
-        let timestamp = consensus_output.sub_dag.commit_timestamp();
-
         info!(
             "Received consensus output {:?} at leader round {}, subdag index {}, timestamp {} ",
             consensus_output.digest(),
-            round,
+            consensus_output.sub_dag.leader_round(),
             consensus_output.sub_dag.sub_dag_index,
-            timestamp.clone(),
+            consensus_output.sub_dag.commit_timestamp(),
         );
 
         cfg_if::cfg_if! {
@@ -94,11 +86,16 @@ impl ExecutionState for SimpleConsensusHandler {
                 consensus_output.batches.iter().for_each(|batches|
                     batches.iter().for_each(|batch| info!("Consensus handler received a batch -> {:?}", batch.digest()))
                 );
+
+                // NOTE: This log entry is used to compute performance.
+                info!("Received consensus_output has {} batches at subdag_index {}.", consensus_output.sub_dag.num_batches(), consensus_output.sub_dag.sub_dag_index);
             }
         }
 
-        // NOTE: This log entry is used to compute performance.
-        info!("Received consensus_output has {} batches at subdag_index {}.", consensus_output.sub_dag.num_batches(), consensus_output.sub_dag.sub_dag_index);
+        /* (serialized, transaction, output_cert) */
+        let mut ethereum_batches : Vec<ExecutableEthereumBatch> = vec![];
+
+        let (tx_decoded_txn, rx_decoded_txn) = std::sync::mpsc::channel::<Vec<EthereumTransaction>>();
 
         for (cert, batches) in consensus_output
             .sub_dag
@@ -108,40 +105,42 @@ impl ExecutionState for SimpleConsensusHandler {
         {
             assert_eq!(cert.header().payload().len(), batches.len());
             
-            let output_cert = Arc::new(cert.clone());
             for batch in batches {
-                assert!(output_cert.header().payload().contains_key(&batch.digest()));
+                assert!(cert.header().payload().contains_key(&batch.digest()));
 
                 if batch.transactions().is_empty() {
                     continue;
                 }
 
-                let mut _batch_tx: Vec<EthereumTransaction> = vec![];
-                for serialized_transaction in batch.transactions() {
+                let _tx_decoded_txn = tx_decoded_txn.clone();
 
-                    let transaction = match EthereumTransaction::decode(serialized_transaction) {
-                        Ok(transaction) => transaction,
-                        Err(err) => {
-                            // This should have been prevented by Narwhal batch verification.
-                            panic!(
-                                "Unexpected malformed transaction (failed to deserialize): {}\nCertificate={:?} BatchDigest={:?} Transaction={:?}",
-                                err, output_cert, batch.digest(), serialized_transaction
-                            );
-                        }
-                    };
-                    _batch_tx.push(transaction);
-                }
+                let _batch = std::sync::Arc::new(batch.clone());
 
+                std::thread::spawn(move || {
+                    let _batch_tx = _batch.transactions()
+                        .par_iter()
+                        .map(|serialized_transaction| {
+                            decode_transaction(serialized_transaction, _batch.digest())
+                        })
+                        .collect::<Vec<_>>();
+                    
+                    let _ = _tx_decoded_txn
+                        .send(_batch_tx);
+                }).join().expect("fail to decode serialized transaction.");
+
+                let _batch_tx = rx_decoded_txn.recv().ok().unwrap();
+                
                 if !_batch_tx.is_empty() {
                     ethereum_batches.push(ExecutableEthereumBatch::new(_batch_tx, batch.digest()));
+                } else {
+                    warn!("Received an empty decoded batch at subdag_index {}. This couldn't possible.", consensus_output.sub_dag.sub_dag_index)
                 }
             }
         }
 
-        let executable_consensus_output = ExecutableConsensusOutput::new(ethereum_batches.clone(), &consensus_output);
+        let executable_consensus_output = ExecutableConsensusOutput::new(ethereum_batches, &consensus_output);
 
-        if !ethereum_batches.is_empty() {
-            info!("Consensus handler latency: {:?} ms", time.elapsed().as_millis());
+        if !executable_consensus_output.data().is_empty() {
             let _ = self.tx_consensus_certificate
                 .send(executable_consensus_output)
                 .await;
@@ -152,4 +151,17 @@ impl ExecutionState for SimpleConsensusHandler {
         0
     }
 
+}
+
+fn decode_transaction(serialized_transaction: &Vec<u8>, batch_digest: BatchDigest) -> EthereumTransaction {
+    match EthereumTransaction::decode(serialized_transaction) {
+        Ok(transaction) => transaction,
+        Err(err) => {
+            // This should have been prevented by Narwhal batch verification.
+            panic!(
+                "Unexpected malformed transaction (failed to deserialize): {}\nBatchDigest={:?} Transaction={:?}",
+                err, batch_digest, serialized_transaction
+            );
+        }
+    }
 }

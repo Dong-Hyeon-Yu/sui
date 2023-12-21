@@ -105,7 +105,7 @@ struct MultipleClient {
 
 impl MultipleClient {
 
-    const MAX_RATE_PER_CLIENT: u64 = 1000;
+    const MAX_RATE_PER_CLIENT: u64 = 5000;
 
     pub fn new (target: Url, rate: u64, skewness: f32, nodes: Vec<Url>) -> MultipleClient {
         let num_of_clients = std::cmp::max((rate + Self::MAX_RATE_PER_CLIENT - 1) / Self::MAX_RATE_PER_CLIENT, 1);
@@ -117,7 +117,7 @@ impl MultipleClient {
         for _ in 0..num_of_clients {
             let client = Client {
                 target: target.clone(),
-                rate: rate / num_of_clients,
+                rate: rate *4 / num_of_clients,
                 skewness,
                 nodes: nodes.clone(),
             };

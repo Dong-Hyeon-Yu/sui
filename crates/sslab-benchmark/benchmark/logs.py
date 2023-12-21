@@ -37,8 +37,8 @@ class LogParser:
             self.committee_size = len(primaries) + int(faults)
             self.workers = len(workers) // len(primaries)
         else:
-            self.committee_size = '?'
-            self.workers = '?'
+            self.committee_size = 4
+            self.workers = 1
 
         # Parse the clients logs.
         try:
@@ -81,10 +81,12 @@ class LogParser:
             chain(*request_vote_outbound_latencies))
         
         # execution metrics
-        commits, latencies, subdag_size, aborted, total = zip(*execution_results)
+        commits, subdag_size, aborted, total, subscriber_receive, handler_receive, execution_receive = zip(*execution_results)
         self.commits = self._merge_results([x.items() for x in commits])
-        self.execution_latencies = self._merge_results([x.items() for x in latencies])
         self.subdag_size = self._merge_results([x.items() for x in subdag_size])
+        self.subscriber_receive = self._merge_results([x.items() for x in subscriber_receive])
+        self.handler_receive = self._merge_results([x.items() for x in handler_receive])
+        self.execution_receive = self._merge_results([x.items() for x in execution_receive])
         self.aborted = sum([int(x) for single_list in aborted for x in single_list]) / self.committee_size
         self.total = sum([int(x) for single_list in total for x in single_list]) / self.committee_size
 
@@ -156,27 +158,32 @@ class LogParser:
         if search(r'(?:panicked)', log) is not None:
             raise ParseError('Primary(s) panicked')
         
+        tmp = findall(r'(.*?) .* Subscriber received a batch -> ([^ ]+=)', log)
+        tmp = [(digest, self._to_posix(t)) for t, digest in tmp]
+        subsriber_receive = self._merge_results([tmp])
+        
+        tmp = findall(r'(.*?) .* Consensus handler received a batch -> ([^ ]+=)', log)
+        tmp = [(digest, self._to_posix(t)) for t, digest in tmp]
+        handler_receive = self._merge_results([tmp])
+        
         tmp = findall(r'.*? .* Received consensus_output has (\d+) batches at subdag_index (\d+).', log)
         subdag_size = [(i, int(s)) for s, i in tmp]
         subdag_size = self._merge_results([subdag_size])
 
         tmp = findall(r'(.*?) .* Received Batch -> ([^ ]+=)', log)
         tmp = [(digest, self._to_posix(t)) for t, digest in tmp]
-        starts = self._merge_results([tmp])
+        execution_receive = self._merge_results([tmp])
 
         tmp = findall(r'(.*?) .* Executed Batch -> ([^ ]+=)', log)
         tmp = [(digest, self._to_posix(t)) for t, digest in tmp]
         commits = self._merge_results([tmp])
-
-        latencies = [(digest, e - starts[digest]) for digest, e in commits.items()]
-        latencies = self._merge_results([latencies])
         
         tmp = findall(r'Abort rate: \d+.\d+ \((\d+)/(\d+) aborted\)', log)
         
         aborted, total = zip(*tmp) if tmp else ([0], [0])
         
 
-        return commits, latencies, subdag_size, aborted, total
+        return commits, subdag_size, aborted, total, subsriber_receive, handler_receive, execution_receive
 
     def _parse_consensus(self, log):
         if search(r'(?:panicked)', log) is not None:
@@ -292,13 +299,25 @@ class LogParser:
         tps = self.total_committed_tx / duration
         return tps, bps, duration
     
-    def _execution_latency(self):
-        latency = [c - self.orders[d] for d, c in self.commits.items()]
+    def _consensus_to_execution_latency(self):
+        latency = [c - self.orders[d] for d, c in self.subscriber_receive.items()]
+        return mean(latency) if latency else 0
+    
+    def _subscriber_latency(self):
+        latency = [c - self.subscriber_receive[d] for d, c in self.handler_receive.items()]
+        return mean(latency) if latency else 0
+    
+    def _consensus_handler_latency(self):
+        latency = [c - self.handler_receive[d] for d, c in self.execution_receive.items()]
         return mean(latency) if latency else 0
     
     def _batch_execution_latency(self):
-        latencies = self.execution_latencies.values()
-        return mean(latencies) if latencies else 0
+        latency = [c - self.execution_receive[d] for d, c in self.commits.items()]
+        return mean(latency) if latency else 0
+    
+    def _execution_latency(self):
+        latency = [c - self.orders[d] for d, c in self.commits.items()]
+        return mean(latency) if latency else 0
 
 
     def _end_to_end_throughput(self):
@@ -335,9 +354,14 @@ class LogParser:
 
         consensus_latency = self._consensus_latency() * 1_000
         consensus_tps, consensus_bps, duration = self._consensus_throughput()
-        execution_latency = self._execution_latency() * 1_000
+
+        sending_latency_to_execution = self._consensus_to_execution_latency() * 1_000
+        subscriber_latency = self._subscriber_latency() * 1_000
+        handler_latency = self._consensus_handler_latency() * 1_000
         batch_execution_latency = self._batch_execution_latency() * 1_000
+        execution_latency = self._execution_latency() * 1_000
         execution_tps, execution_bps, excution_duration = self._execution_throughput()
+        
         
         abort_rate = self.aborted / self.total if self.aborted else 0.0
         effective_tps = execution_tps * (1-abort_rate) if self.aborted else execution_tps
@@ -413,6 +437,9 @@ class LogParser:
             f' Execution TPS: {round(execution_tps):,} tx/s\n'
             f' Execution BPS: {round(execution_bps):,} B/s\n'
             f' Execution latency: {round(execution_latency):,} ms\n'
+            f' \tConsensus to execution latency: {round(sending_latency_to_execution):,} ms\n'
+            f' \tSubscriber latency: {round(subscriber_latency):,} ms\n'
+            f' \tConsensus handler latency: {round(handler_latency):,} ms\n'
             f' \tBatch execution latency: {round(batch_execution_latency):,} ms\n'
             f' \tAverage Abort Rate: {abort_rate:.2f} % \n'
             f' \tEffective TPS: {round(effective_tps):,} tx/s\n'

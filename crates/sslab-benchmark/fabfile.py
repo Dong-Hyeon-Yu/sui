@@ -294,12 +294,12 @@ def LAN(ctx, debug=False):
         'nodes': [4],
         'workers': 1,
         'collocate': True,
-        'rate': [30_000, 50_000, 70_000, 100_000, 150_000, 200_000, 250_000],
+        'rate': 30_000, #[30_000, 50_000, 70_000, 100_000, 150_000, 200_000, 250_000],
         'skewness': [0.0],
         'tx_size': 270,
-        'duration': 100,
-        'runs': 3,
-        'execution_model': [ExecutionModel.SERIAL],
+        'duration': 30,
+        'runs': 1,
+        'execution_model': [ExecutionModel.NEZHA],
         'concurrency_level': [20], # only for nezha
     }
     node_params = {
@@ -325,7 +325,7 @@ def LAN(ctx, debug=False):
         },
         'max_concurrent_requests': 500_000,
         'prometheus_metrics': {
-            "socket_addr": "/ip4/0.0.0.0/tcp/0/http"
+            "socket_addr": "/ip4/0.0.0.0/tcp/6000/http"
         },
         "network_admin_server": {
             # Use a random available local port.

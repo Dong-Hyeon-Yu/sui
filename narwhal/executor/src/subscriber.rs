@@ -222,11 +222,16 @@ impl Subscriber {
             };
         }
 
+
         let sub_dag = Arc::new(deliver);
         let mut subscriber_output = ConsensusOutput {
             sub_dag: sub_dag.clone(),
             batches: Vec::with_capacity(num_certs),
         };
+
+        sub_dag.certificates.iter().for_each(|cert| {
+            cert.header().payload().keys().for_each(|digest| info!("Subscriber received a batch -> {:?}", digest));
+        });
 
         let mut batch_digests_and_workers: HashMap<
             NetworkPublicKey,
@@ -297,6 +302,7 @@ impl Subscriber {
             }
             subscriber_output.batches.push(output_batches);
         }
+
         subscriber_output
     }
 

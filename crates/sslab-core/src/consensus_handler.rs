@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use fastcrypto::hash::Hash as _Hash;
 use narwhal_executor::ExecutionState;
 use narwhal_types::{BatchAPI, CertificateAPI, ConsensusOutput, HeaderAPI};
-use tokio::{sync::mpsc::Sender, task::JoinHandle};
+use tokio::{sync::mpsc::Sender, task::JoinHandle, time::Instant};
 use tracing::{info, instrument};
 use sslab_execution::{types::{ExecutableEthereumBatch, EthereumTransaction, ExecutableConsensusOutput}, executor::ExecutionComponent};
 use core::panic;
@@ -72,6 +72,8 @@ impl ExecutionState for SimpleConsensusHandler {
     /// This function will be called by Narwhal, after Narwhal sequenced this certificate.
     #[instrument(level = "trace", skip_all)]
     async fn handle_consensus_output(&self, consensus_output: ConsensusOutput) {
+        let time = Instant::now();
+
         let round = consensus_output.sub_dag.leader_round();
 
         /* (serialized, transaction, output_cert) */
@@ -85,6 +87,15 @@ impl ExecutionState for SimpleConsensusHandler {
             consensus_output.sub_dag.sub_dag_index,
             timestamp.clone(),
         );
+
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "benchmark")] {
+                // NOTE: This log entry is used to compute performance.
+                consensus_output.batches.iter().for_each(|batches|
+                    batches.iter().for_each(|batch| info!("Consensus handler received a batch -> {:?}", batch.digest()))
+                );
+            }
+        }
 
         // NOTE: This log entry is used to compute performance.
         info!("Received consensus_output has {} batches at subdag_index {}.", consensus_output.sub_dag.num_batches(), consensus_output.sub_dag.sub_dag_index);
@@ -130,6 +141,7 @@ impl ExecutionState for SimpleConsensusHandler {
         let executable_consensus_output = ExecutableConsensusOutput::new(ethereum_batches.clone(), &consensus_output);
 
         if !ethereum_batches.is_empty() {
+            info!("Consensus handler latency: {:?} ms", time.elapsed().as_millis());
             let _ = self.tx_consensus_certificate
                 .send(executable_consensus_output)
                 .await;

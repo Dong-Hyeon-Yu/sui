@@ -33,20 +33,24 @@ impl SerialExecutor {
 
     pub fn _execute(&self, batch: ExecutableEthereumBatch) -> ExecutionResult {
 
-        let state = self.global_state.as_ref();
+        let state = self.global_state.clone();
 
-        for tx in batch.data() {
-            match crate::evm_utils::execute_tx(tx, state) {
-                Ok(Some((effect, _))) 
-                    => state.apply_local_effect(effect),
-                Ok(None) 
-                    => trace!("{:?} may be reverted.", tx.id()),
-                Err(e) 
-                    => warn!("fail to execute a transaction {:?}", e)
+        let digest = batch.digest().clone();
+
+        std::thread::spawn(move || {
+            for tx in batch.data() {
+                match crate::evm_utils::execute_tx(tx, state.as_ref()) {
+                    Ok(Some((effect, _))) 
+                        => state.apply_local_effect(effect),
+                    Ok(None) 
+                        => trace!("{:?} may be reverted.", tx.id()),
+                    Err(e) 
+                        => warn!("fail to execute a transaction {:?}", e)
+                }
             }
-        }
-
-        ExecutionResult::new(vec![batch.digest().clone()])
+        }).join().expect("fail to execute transactions");
+        
+        ExecutionResult::new(vec![digest])
     }
 }
 

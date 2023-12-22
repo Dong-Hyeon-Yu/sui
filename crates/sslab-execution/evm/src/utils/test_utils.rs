@@ -1,5 +1,5 @@
 use std::{sync::Arc, str::FromStr};
-
+use bytes::Bytes;
 use ethers_core::{types::{Signature, U256, transaction::eip2718::TypedTransaction, H160}, rand};
 use ethers_providers::{Provider, MockProvider};
 use ethers_signers::{LocalWallet, Signer};
@@ -55,6 +55,24 @@ impl SmallBankTransactionHandler {
             .collect()
     }
 
+    pub fn create_raw_batches(&self, batch_size: usize, batch_num: usize, zipfian_coef: f32, account_num: u64) -> Vec<Vec<bytes::Bytes>> {
+        let target_tnx_num = batch_size * batch_num;
+
+        let mut buffer = (0..target_tnx_num)
+            .into_par_iter()
+            .map(|_| self.random_operation_raw(zipfian_coef, account_num))
+            .collect::<hashbrown::HashSet<_>>();
+
+        while buffer.len() == target_tnx_num {
+            buffer.insert(self.random_operation_raw(zipfian_coef, account_num));
+        }
+
+        buffer.into_par_iter().collect::<Vec<_>>()
+            .par_chunks_exact(batch_size)
+            .map(|chunk| chunk.to_vec())
+            .collect::<Vec<_>>()
+    }
+
     pub fn random_operation(&self, zipfian_coef: f32, account_num: u64) -> EthereumTransaction {
 
         let acc_gen = Zipf::new(account_num, zipfian_coef).unwrap();
@@ -63,7 +81,7 @@ impl SmallBankTransactionHandler {
 
         let rng = &mut rand::thread_rng();
         let op = self.random_op_gen.sample(rng);
-        match op {
+        let mut tx = match op {
             0 => self.create_account(acc1, U256::from(1_000_000), U256::from(1_000_000)),
             1 => self.amalgamate(acc1, acc2),
             2 => self.get_balance(acc1),
@@ -72,7 +90,31 @@ impl SmallBankTransactionHandler {
             5 => self.update_saving(acc1, self.random_value(rng)),
             6 => self.write_check(acc1, self.random_value(rng)),
             _ => panic!("invalid operation"),
-        }
+        };
+
+        self.get_signed(&mut tx)
+    }
+
+    pub fn random_operation_raw(&self, zipfian_coef: f32, account_num: u64) -> bytes::Bytes {
+
+        let acc_gen = Zipf::new(account_num, zipfian_coef).unwrap();
+        let acc1 = rand::thread_rng().sample(acc_gen).to_string();
+        let acc2 = rand::thread_rng().sample(acc_gen).to_string();
+
+        let rng = &mut rand::thread_rng();
+        let op = self.random_op_gen.sample(rng);
+        let tx = match op {
+            0 => self.create_account(acc1, U256::from(1_000_000), U256::from(1_000_000)),
+            1 => self.amalgamate(acc1, acc2),
+            2 => self.get_balance(acc1),
+            3 => self.send_payment(acc1, acc2, self.random_value(rng)),
+            4 => self.update_balance(acc1, self.random_value(rng)),
+            5 => self.update_saving(acc1, self.random_value(rng)),
+            6 => self.write_check(acc1, self.random_value(rng)),
+            _ => panic!("invalid operation"),
+        };
+
+        self.get_raw_signed(tx)
     }
 
     #[inline]
@@ -80,46 +122,46 @@ impl SmallBankTransactionHandler {
         U256::from(self.val_gen.sample(rng))
     }
 
-    fn create_account(&self, acc: String, init_check: U256, init_save: U256) -> EthereumTransaction {
-        let tx = &mut self.contract.as_ref().unwrap().create_account(acc, init_check, init_save).tx;
-        self.set_default_params(tx);
-        self.get_signed(tx)
+    fn create_account(&self, acc: String, init_check: U256, init_save: U256) -> TypedTransaction {
+        let mut tx = self.contract.as_ref().unwrap().create_account(acc, init_check, init_save).tx;
+        self.set_default_params(&mut tx);
+        tx
     }
 
-    fn amalgamate(&self, from: String, to: String) -> EthereumTransaction {
-        let tx = &mut self.contract.as_ref().unwrap().amalgamate(from, to).tx;
-        self.set_default_params(tx);
-        self.get_signed(tx)
+    fn amalgamate(&self, from: String, to: String) -> TypedTransaction {
+        let mut tx = self.contract.as_ref().unwrap().amalgamate(from, to).tx;
+        self.set_default_params(&mut tx);
+        tx
     }
 
-    fn get_balance(&self, addr: String) -> EthereumTransaction {
-        let tx = &mut self.contract.as_ref().unwrap().get_balance(addr).tx;
-        self.set_default_params(tx);
-        self.get_signed(tx)
+    fn get_balance(&self, addr: String) -> TypedTransaction {
+        let mut tx = self.contract.as_ref().unwrap().get_balance(addr).tx;
+        self.set_default_params(&mut tx);
+        tx
     }
 
-    fn send_payment(&self, from: String, to: String, amount: U256) -> EthereumTransaction {
-        let tx = &mut self.contract.as_ref().unwrap().send_payment(from, to, amount).tx;
-        self.set_default_params(tx);
-        self.get_signed(tx)
+    fn send_payment(&self, from: String, to: String, amount: U256) -> TypedTransaction {
+        let mut tx = self.contract.as_ref().unwrap().send_payment(from, to, amount).tx;
+        self.set_default_params(&mut tx);
+        tx
     }
 
-    fn update_balance(&self, addr: String, amount: U256) -> EthereumTransaction {
-        let tx = &mut self.contract.as_ref().unwrap().deposit_checking(addr, amount).tx;
-        self.set_default_params(tx);
-        self.get_signed(tx)
+    fn update_balance(&self, addr: String, amount: U256) -> TypedTransaction {
+        let mut tx = self.contract.as_ref().unwrap().deposit_checking(addr, amount).tx;
+        self.set_default_params(&mut tx);
+        tx
     }
 
-    fn update_saving(&self, addr: String, amount: U256) -> EthereumTransaction {
-        let tx = &mut self.contract.as_ref().unwrap().update_saving(addr, amount).tx;
-        self.set_default_params(tx);
-        self.get_signed(tx)
+    fn update_saving(&self, addr: String, amount: U256) -> TypedTransaction {
+        let mut tx = self.contract.as_ref().unwrap().update_saving(addr, amount).tx;
+        self.set_default_params(&mut tx);
+        tx
     }
 
-    fn write_check(&self, addr: String, amount: U256) -> EthereumTransaction {
-        let tx = &mut self.contract.as_ref().unwrap().write_check(addr, amount).tx;
-        self.set_default_params(tx);
-        self.get_signed(tx)
+    fn write_check(&self, addr: String, amount: U256) -> TypedTransaction  {
+        let mut tx = self.contract.as_ref().unwrap().write_check(addr, amount).tx;
+        self.set_default_params(&mut tx);
+        tx
     }
 
     fn set_default_params(&self, tx: &mut TypedTransaction) {
@@ -136,6 +178,11 @@ impl SmallBankTransactionHandler {
         let tx_bytes = tx.rlp_signed(&signature).0.to_vec();
         let rlp_signed = tx_bytes.as_slice();
         EthereumTransaction::decode(rlp_signed).unwrap()
+    }
+
+    fn get_raw_signed(&self, tx: TypedTransaction) -> Bytes {
+        let signature: Signature = self.admin_wallet.sign_transaction_sync(&tx).expect("signature failed");
+        tx.rlp_signed(&signature).0
     }
 }
 

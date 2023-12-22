@@ -9,6 +9,7 @@ publish = false
 
 [dependencies]
 async-trait.workspace = true
+bytes.workspace = true
 cfg-if.workspace = true
 criterion.workspace = true
 fastcrypto.workspace = true

@@ -10451,9 +10451,11 @@ dependencies = [
  "cfg-if",
  "chrono",
  "clap 2.34.0",
+ "criterion 0.4.0",
  "dashmap",
  "either",
  "enum_dispatch",
+ "ethers-providers",
  "eyre",
  "fastcrypto",
  "futures",
@@ -10516,6 +10518,7 @@ name = "sslab-execution"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "bytes",
  "cfg-if",
  "criterion 0.4.0",
  "enumn",

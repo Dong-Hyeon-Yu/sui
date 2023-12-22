@@ -79,7 +79,10 @@ sslab-execution-serial = {workspace = true}
 sslab-execution-nezha = {workspace = true, optional = true}
 sslab-execution-blockstm = {workspace = true, optional = true}
 
-
+[dev-dependencies]
+criterion.workspace = true
+ethers-providers = { version = "^2.0.0" }
+rayon = "1.8.0"
 
 [features]
 benchmark = ["narwhal-node/benchmark", "sslab-execution/benchmark"]
@@ -92,3 +95,7 @@ blockstm = ["sslab-execution-blockstm"]
 [[bin]]
 name = "sslab-narwhal-node"
 path = "src/main.rs"
+
+[[bench]]
+name = "decoding"
+harness = false

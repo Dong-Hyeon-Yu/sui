@@ -153,7 +153,7 @@ impl ExecutionState for SimpleConsensusHandler {
 
 }
 
-fn decode_transaction(serialized_transaction: &Vec<u8>, batch_digest: BatchDigest) -> EthereumTransaction {
+pub fn decode_transaction(serialized_transaction: &Vec<u8>, batch_digest: BatchDigest) -> EthereumTransaction {
     match EthereumTransaction::decode(serialized_transaction) {
         Ok(transaction) => transaction,
         Err(err) => {

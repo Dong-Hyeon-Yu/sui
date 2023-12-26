@@ -265,7 +265,7 @@ async fn run(
     };
 
     // Make the data store.
-    let registry_service = RegistryService::new(Registry::new());
+    let registry_service = RegistryService::new(registry.clone());
     let certificate_store_cache_metrics =
         CertificateStoreCacheMetrics::new(&registry_service.default_registry());
 
@@ -400,8 +400,10 @@ async fn run(
     );
 
     if let Some(primary) = primary {
+        info!("registry created {:?}", registry);
         let _metrics_server_handle = start_prometheus_server(prom_address, &registry);
         primary.wait().await;
+        info!("registry finished {:?}", registry);
     } else if let Some(worker) = worker {
         worker.wait().await;
     }

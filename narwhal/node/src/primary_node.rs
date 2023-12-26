@@ -1,6 +1,5 @@
 // Copyright (c) Mysten Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
-use crate::metrics::new_registry;
 use crate::{try_join_all, FuturesUnordered, NodeError};
 use anemo::PeerId;
 use config::{AuthorityIdentifier, Committee, Parameters, WorkerCache};
@@ -81,7 +80,7 @@ impl PrimaryNodeInner {
         self.own_peer_id = Some(PeerId(network_keypair.public().0.to_bytes()));
 
         // create a new registry
-        let registry = new_registry();
+        let registry = self.registry_service.default_registry();
 
         // create the channel to send the shutdown signal
         let mut tx_shutdown = PreSubscribedBroadcastSender::new(NUM_SHUTDOWN_RECEIVERS);
@@ -103,7 +102,7 @@ impl PrimaryNodeInner {
         .await?;
 
         // store the registry
-        self.swap_registry(Some(registry));
+        // self.swap_registry(Some(registry));
 
         // now keep the handlers
         self.handles.clear();

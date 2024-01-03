@@ -7175,6 +7175,7 @@ dependencies = [
  "narwhal-types",
  "prometheus",
  "rand 0.8.5",
+ "rayon",
  "reqwest",
  "serde_json",
  "sui-protocol-config",

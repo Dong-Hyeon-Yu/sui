@@ -14,6 +14,7 @@ use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use mysten_metrics::metered_channel::{Receiver, Sender};
 use mysten_metrics::{monitored_scope, spawn_logged_monitored_task};
+use rayon::prelude::*;
 use network::{client::PrimaryNetworkClient, ReportBatchToPrimary};
 use std::sync::Arc;
 use store::{rocks::DBMap, Map};
@@ -193,18 +194,18 @@ impl BatchMaker {
 
         //rlp-decompress the batch and serialize it by other light-weight encoding method.
         batch
-        .transactions_mut()
-        .into_iter()  // TODO: par_into_iter..?
-        .for_each(|tx| {
-            let _tx: Vec<u8> = tx.clone();
-            let rlp = Rlp::new(&_tx);
-            tx.clear();
+            .transactions_mut()
+            .into_par_iter() 
+            .for_each(|tx| {
+                let _tx: Vec<u8> = tx.clone();
+                let rlp = Rlp::new(&_tx);
+                tx.clear();
 
-            let (rlp_decoded_tx, _) = TypedTransaction::decode_signed(&rlp)
-                .expect("validation for rlp decoding must be done once receiving the tx from clients at TxServer");
-            let se = serde_json::to_vec(&rlp_decoded_tx).unwrap();
-            tx.extend(se);
-        });
+                let (rlp_decoded_tx, _) = TypedTransaction::decode_signed(&rlp)
+                    .expect("validation for rlp decoding must be done once receiving the tx from clients at TxServer");
+                let se = serde_json::to_vec(&rlp_decoded_tx).unwrap();
+                tx.extend(se);
+            });
 
         #[cfg(feature = "benchmark")]
         {

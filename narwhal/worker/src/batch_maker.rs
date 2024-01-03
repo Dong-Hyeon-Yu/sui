@@ -193,19 +193,28 @@ impl BatchMaker {
             .collect::<Vec<[u8; 8]>>();
 
         //rlp-decompress the batch and serialize it by other light-weight encoding method.
-        batch
-            .transactions_mut()
-            .into_par_iter() 
-            .for_each(|tx| {
-                let _tx: Vec<u8> = tx.clone();
-                let rlp = Rlp::new(&_tx);
-                tx.clear();
+        let (tx_decoded_txn, rx_decoded_txn) = std::sync::mpsc::channel::<Batch>();
 
-                let (rlp_decoded_tx, _) = TypedTransaction::decode_signed(&rlp)
-                    .expect("validation for rlp decoding must be done once receiving the tx from clients at TxServer");
-                let se = serde_json::to_vec(&rlp_decoded_tx).unwrap();
-                tx.extend(se);
-            });
+        std::thread::spawn(move || {
+            batch
+                .transactions_mut()
+                .into_par_iter() 
+                .for_each(|tx| {
+                    let _tx: Vec<u8> = tx.clone();
+                    let rlp = Rlp::new(&_tx);
+                    tx.clear();
+
+                    let (rlp_decoded_tx, _) = TypedTransaction::decode_signed(&rlp)
+                        .expect("validation for rlp decoding must be done once receiving the tx from clients at TxServer");
+                    let se = serde_json::to_vec(&rlp_decoded_tx).unwrap();
+                    tx.extend(se);
+                });
+            
+            let _ = tx_decoded_txn.send(batch);
+        }).join().expect("fail to decode serialized transaction.");
+
+        let mut batch = rx_decoded_txn.recv().ok().unwrap();
+        
 
         #[cfg(feature = "benchmark")]
         {

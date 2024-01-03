@@ -11,6 +11,8 @@ pub enum TxValidationError {
     SignatureError(#[from] SignatureError),
     #[error(transparent)]
     DecoderError(#[from] TypedTransactionError),
+    #[error(transparent)]
+    SerdeError(#[from] serde_json::Error),
 }
 
 #[derive(Clone, Debug, Default)]
@@ -24,17 +26,22 @@ impl TransactionValidator for EthereumTxValidator {
     /// Determines if a transaction valid for the worker to consider putting in a batch
     fn validate(&self, t: &[u8]) -> Result<(), Self::Error> { 
 
-        let rlp = Rlp::new(t);
+        match serde_json::from_slice::<TypedTransaction>(t) {
+            Ok(_) => Ok(()),
+            Err(_) => {
+                let rlp = Rlp::new(t);
         
-        match TypedTransaction::decode_signed(&rlp) {
-            Ok((tx, sig)) => {
-                if let Err(e) = sig.verify(tx.sighash(), *tx.from().unwrap()) {
-                    return Err(TxValidationError::SignatureError(e));
+                match TypedTransaction::decode_signed(&rlp) {
+                    Ok((tx, sig)) => {
+                        if let Err(e) = sig.verify(tx.sighash(), *tx.from().unwrap()) {
+                            return Err(TxValidationError::SignatureError(e));
+                        }
+                        // debug!("validated tx: {:?}, sig: {:?}", tx, sig);
+                        Ok(())
+                    },
+                    Err(e) => Err(TxValidationError::DecoderError(e))
                 }
-                // debug!("validated tx: {:?}, sig: {:?}", tx, sig);
-                Ok(())
-            },
-            Err(e) => Err(TxValidationError::DecoderError(e))
+            }
         }
     }
 

@@ -30,6 +30,7 @@ pub struct WorkerNetworkClient {
     shutdown_notify: Arc<NotifyOnce>,
 }
 
+#[allow(dead_code)]
 struct WorkerNetworkClientInner {
     // The private-public network key pair of this authority.
     primary_peer_id: PeerId,

@@ -4,6 +4,10 @@
 
 use crate::metrics::WorkerMetrics;
 use config::WorkerId;
+use ethers_core::{
+    types::transaction::eip2718::TypedTransaction,
+    utils::rlp::Rlp,
+};
 use fastcrypto::hash::Hash;
 use futures::future::BoxFuture;
 use futures::stream::FuturesUnordered;
@@ -178,18 +182,35 @@ impl BatchMaker {
         size: usize,
         responses: Vec<TxResponse>,
     ) -> Option<BoxFuture<'a, ()>> {
+
+        // TODO: only for benchmarking. 
+        // Look for sample txs (they all start with 0) and gather their txs id (the next 8 bytes).
+        let _tx_ids = batch
+            .transactions()
+            .iter()
+            .filter_map(|tx| tx[2..10].try_into().ok())
+            .collect::<Vec<[u8; 8]>>();
+
+        //rlp-decompress the batch and serialize it by other light-weight encoding method.
+        batch
+        .transactions_mut()
+        .into_iter()  // TODO: par_into_iter..?
+        .for_each(|tx| {
+            let _tx: Vec<u8> = tx.clone();
+            let rlp = Rlp::new(&_tx);
+            tx.clear();
+
+            let (rlp_decoded_tx, _) = TypedTransaction::decode_signed(&rlp)
+                .expect("validation for rlp decoding must be done once receiving the tx from clients at TxServer");
+            let se = serde_json::to_vec(&rlp_decoded_tx).unwrap();
+            tx.extend(se);
+        });
+
         #[cfg(feature = "benchmark")]
         {
             let digest = batch.digest();
 
-            // Look for sample txs (they all start with 0) and gather their txs id (the next 8 bytes).
-            let tx_ids: Vec<_> = batch
-                .transactions()
-                .iter()
-                .filter_map(|tx| tx[2..10].try_into().ok())
-                .collect();
-
-            for id in tx_ids.clone() {
+            for id in _tx_ids.clone() {
                 // NOTE: This log entry is used to compute performance.
                 tracing::info!(
                     "Batch {:?} contains sample tx {}",
@@ -223,7 +244,7 @@ impl BatchMaker {
             }
 
             // NOTE: This log entry is used to compute performance.
-            tracing::info!("Batch {:?} contains {} B with {} tx", digest, size, tx_ids.len());
+            tracing::info!("Batch {:?} contains {} B with {} tx", digest, size, _tx_ids.len());
         }
 
         let reason = if timeout { "timeout" } else { "size_reached" };

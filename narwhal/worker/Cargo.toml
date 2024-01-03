@@ -11,9 +11,11 @@ arc-swap.workspace = true
 async-trait.workspace = true
 byteorder.workspace = true
 bytes.workspace = true
+ethers-core = "^2.0.0"
 futures.workspace = true
 governor.workspace = true
 rand = { workspace = true, features = ["small_rng"] }
+serde_json.workspace = true
 tap.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["sync", "rt", "macros"] }

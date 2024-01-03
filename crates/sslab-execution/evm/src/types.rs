@@ -30,7 +30,13 @@ impl EthereumTransaction {
         self.0.rlp().to_vec()
     }
 
-    pub fn decode(bytes: &[u8]) -> Result<EthereumTransaction, TxValidationError> { 
+    pub fn from_json(bytes: &[u8]) -> Result<EthereumTransaction, TxValidationError> { 
+        let tx: TypedTransaction = serde_json::from_slice(bytes).unwrap();
+
+        Ok(EthereumTransaction(tx))
+    }
+
+    pub fn from_rlp(bytes: &[u8]) -> Result<EthereumTransaction, TxValidationError> {
         let rlp = Rlp::new(bytes);
 
         let (tx, _) = TypedTransaction::decode_signed(&rlp)?;

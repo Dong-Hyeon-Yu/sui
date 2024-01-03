@@ -177,7 +177,7 @@ impl SmallBankTransactionHandler {
         let signature: Signature = self.admin_wallet.sign_transaction_sync(tx).expect("signature failed");
         let tx_bytes = tx.rlp_signed(&signature).0.to_vec();
         let rlp_signed = tx_bytes.as_slice();
-        EthereumTransaction::decode(rlp_signed).unwrap()
+        EthereumTransaction::from_rlp(rlp_signed).unwrap()
     }
 
     fn get_raw_signed(&self, tx: TypedTransaction) -> Bytes {

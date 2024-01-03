@@ -154,7 +154,7 @@ impl ExecutionState for SimpleConsensusHandler {
 }
 
 pub fn decode_transaction(serialized_transaction: &Vec<u8>, batch_digest: BatchDigest) -> EthereumTransaction {
-    match EthereumTransaction::decode(serialized_transaction) {
+    match EthereumTransaction::from_json(serialized_transaction) {
         Ok(transaction) => transaction,
         Err(err) => {
             // This should have been prevented by Narwhal batch verification.

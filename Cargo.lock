@@ -7173,6 +7173,7 @@ dependencies = [
  "narwhal-storage",
  "narwhal-test-utils",
  "narwhal-types",
+ "num_cpus",
  "prometheus",
  "rand 0.8.5",
  "rayon",

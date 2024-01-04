@@ -196,18 +196,25 @@ impl BatchMaker {
         let (tx_decoded_txn, rx_decoded_txn) = std::sync::mpsc::channel::<Batch>();
 
         std::thread::spawn(move || {
-            batch
-                .transactions_mut()
-                .into_par_iter() 
-                .for_each(|tx| {
-                    let _tx: Vec<u8> = tx.clone();
-                    let rlp = Rlp::new(&_tx);
-                    tx.clear();
-
-                    let (rlp_decoded_tx, _) = TypedTransaction::decode_signed(&rlp)
-                        .expect("validation for rlp decoding must be done once receiving the tx from clients at TxServer");
-                    let se = serde_json::to_vec(&rlp_decoded_tx).unwrap();
-                    tx.extend(se);
+            let batch = rayon::ThreadPoolBuilder::new()
+                .num_threads(num_cpus::get()/4)
+                .build()
+                .unwrap()
+                .install(|| {
+                    batch
+                        .transactions_mut()
+                        .into_par_iter() 
+                        .for_each(|tx| {
+                            let _tx: Vec<u8> = tx.clone();
+                            let rlp = Rlp::new(&_tx);
+                            tx.clear();
+        
+                            let (rlp_decoded_tx, _) = TypedTransaction::decode_signed(&rlp)
+                                .expect("validation for rlp decoding must be done once receiving the tx from clients at TxServer");
+                            let se = serde_json::to_vec(&rlp_decoded_tx).unwrap();
+                            tx.extend(se);
+                        });
+                    batch
                 });
             
             let _ = tx_decoded_txn.send(batch);

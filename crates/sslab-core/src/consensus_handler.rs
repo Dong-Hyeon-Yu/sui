@@ -117,15 +117,19 @@ impl ExecutionState for SimpleConsensusHandler {
                 let _batch = std::sync::Arc::new(batch.clone());
 
                 std::thread::spawn(move || {
-                    let _batch_tx = _batch.transactions()
-                        .par_iter()
-                        .map(|serialized_transaction| {
-                            decode_transaction(serialized_transaction, _batch.digest())
-                        })
-                        .collect::<Vec<_>>();
-                    
-                    let _ = _tx_decoded_txn
-                        .send(_batch_tx);
+                    let _batch_tx = rayon::ThreadPoolBuilder::new()
+                        .num_threads(num_cpus::get()*3/4)
+                        .build().unwrap()
+                        .install(|| {
+                            _batch.transactions()
+                                .par_iter()
+                                .map(|serialized_transaction| {
+                                    decode_transaction(serialized_transaction, _batch.digest())
+                                })
+                                .collect::<Vec<_>>()
+                        });
+
+                    let _ = _tx_decoded_txn.send(_batch_tx);
                 }).join().expect("fail to decode serialized transaction.");
 
                 let _batch_tx = rx_decoded_txn.recv().ok().unwrap();

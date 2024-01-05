@@ -1,5 +1,7 @@
+#!/usr/bin/env ansible-playbook
+
 - name: Install dependencies
-  hosts: nezha-core				# /etc/ansible/hosts
+  hosts: nezha_core				# /etc/ansible/hosts
   
   tasks:					
   - name: Ansible Update Cache and Upgrade all Packages
@@ -26,8 +28,9 @@
     become: yes	
   
   - name: check if cargo is installed
-    shell: command -v cargo 
+    command: ~/.cargo/bin/cargo --version 
     register: cargo_exists
+    changed_when: false
     ignore_errors: yes
 
   - name: Download Installer
@@ -53,11 +56,23 @@
       state: present
     become: yes
   
-  - name: add listening ports 
-    shell: |
-      ufw allow proto udp from any to any port 5000:6000 &&
-      ufw allow proto tcp from any to any port 5000:6000 &&
-      ufw allow 9090/tcp
+  - name: add listening tcp ports 
+    community.general.ufw:
+      rule: allow
+      port: '{{ item }}'
+      proto: tcp
+    with_items:
+      - 5000:6000 # sui node
+      - '9090' # prometheous
+    become: yes
+
+  - name: add listening udp ports 
+    community.general.ufw:
+      rule: allow
+      port: '{{ item }}'
+      proto: udp
+    with_items:
+      - 5000:6000 # sui node
     become: yes
 
   - name: Clone a github repository

@@ -413,11 +413,10 @@ class LANBench:
 
             
                 for r in bench_parameters.rate:
-                    for concurrency_level in bench_parameters.concurrency_level:
-                        
-                        if execution_model != ExecutionModel.NEZHA:
-                            concurrency_level = 1
-                        
+                    
+                    clevels = [1] if execution_model != ExecutionModel.NEZHA else bench_parameters.concurrency_level
+                    for concurrency_level in clevels:
+                    
                         for skewness in bench_parameters.skewness:
                             
                             Print.heading(f'\nRunning {n} nodes (input rate: {r:,} tx/s, concurrency level: {concurrency_level})')

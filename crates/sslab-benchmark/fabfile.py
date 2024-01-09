@@ -23,7 +23,7 @@ def local(ctx, debug=False):
         'workers': 1,
         'rate': 250_000,
         'skewness': 0.0,
-        'duration': 60,
+        'duration': 30,
         'concurrency_level': 20,
         'execution_model': ExecutionModel.BLOCKSTM,
     }
@@ -232,6 +232,14 @@ def seed(ctx, starting_data_port):
     except BenchError as e:
         Print.error(e)
 
+@task
+def create_aws_key(ctx):
+    try:
+        manager = InstanceManager.make()
+        res = manager.clients[manager.settings.aws_regions[0]].create_key_pair(KeyName="aws")
+        print(res)
+    except BenchError as e:
+        Print.error(e)
 
 @task
 def create(ctx, nodes=2):
@@ -294,13 +302,13 @@ def LAN(ctx, debug=False):
         'nodes': [4],
         'workers': 1,
         'collocate': True,
-        'rate': 30_000, #[30_000, 50_000, 70_000, 100_000, 150_000, 200_000, 250_000],
+        'rate': [20_000, 40_000, 60_000, 80_000, 100_000, 120_000],
         'skewness': [0.0],
         'tx_size': 270,
-        'duration': 30,
-        'runs': 1,
-        'execution_model': [ExecutionModel.NEZHA],
-        'concurrency_level': [20], # only for nezha
+        'duration': 100,
+        'runs': 3,
+        'execution_model': [ExecutionModel.NEZHA, ExecutionModel.BLOCKSTM],
+        'concurrency_level': [1], # only for nezha
     }
     node_params = {
         'header_num_of_batches_threshold': 32,
@@ -309,7 +317,7 @@ def LAN(ctx, debug=False):
         'gc_depth': 50,  # rounds
         'sync_retry_delay': '10_000ms',  # ms
         'sync_retry_nodes': 3,  # number of nodes
-        'batch_size': 500_000,  # bytes
+        'batch_size': 150_000,  # bytes
         'max_batch_delay': '200ms',  # ms,
         'block_synchronizer': {
             'range_synchronize_timeout': '30_000ms',
@@ -342,14 +350,17 @@ def LAN(ctx, debug=False):
 def remote(ctx, debug=False):
     ''' Run benchmarks on AWS '''
     bench_params = {
-        'faults': 3,
-        'nodes': [10],
+        'faults': 0,
+        'nodes': [4],
         'workers': 1,
-        'collocate': True,
-        'rate': [10_000, 110_000],
-        'tx_size': 512,
-        'duration': 300,
-        'runs': 2,
+        'collocate': False,
+        'rate': 100000,#[20_000, 40_000, 60_000, 80_000, 100_000, 120_000],
+        'skewness': [0.0],
+        'tx_size': 270,
+        'duration': 60,
+        'runs': 1,
+        'execution_model': [ExecutionModel.NEZHA],
+        'concurrency_level': [1], # only for nezha
     }
     node_params = {
         'header_num_of_batches_threshold': 32,
@@ -358,7 +369,7 @@ def remote(ctx, debug=False):
         'gc_depth': 50,  # rounds
         'sync_retry_delay': '10_000ms',  # ms
         'sync_retry_nodes': 3,  # number of nodes
-        'batch_size': 500_000,  # bytes
+        'batch_size': 150_000,  # bytes
         'max_batch_delay': '200ms',  # ms,
         'block_synchronizer': {
             'range_synchronize_timeout': '30_000ms',
@@ -374,7 +385,7 @@ def remote(ctx, debug=False):
         },
         'max_concurrent_requests': 500_000,
         'prometheus_metrics': {
-            "socket_addr": "/ip4/0.0.0.0/tcp/0/http"
+            "socket_addr": "/ip4/0.0.0.0/tcp/6000/http"
         },
         "network_admin_server": {
             # Use a random available local port.
@@ -383,7 +394,9 @@ def remote(ctx, debug=False):
         },
     }
     try:
-        Bench(ctx).run(bench_params, node_params, debug)
+        bench = Bench(ctx)
+        bench.manager.print_info()
+        bench.run(bench_params, node_params, debug)
     except BenchError as e:
         Print.error(e)
 
@@ -395,11 +408,11 @@ def plot(ctx):
         'faults': [0],
         'nodes': [4],
         'workers': [1],
-        'collocate': True,
-        'execution_model': [ExecutionModel.BLOCKSTM, ExecutionModel.NEZHA, ExecutionModel.SERIAL],
+        'collocate': False,
+        'execution_model': [ExecutionModel.BLOCKSTM, ExecutionModel.NEZHA],
         'concurrency_level': [1],
-        'skewness': [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
-        'rate': [5_000, 10_000, 30_000, 50_000, 70_000, 100_000, 150_000, 200_000, 250_000],
+        'skewness': 0.0, #[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+        'rate': [20_000, 40_000, 60_000, 80_000, 100_000, 120_000],
         'tx_size': 270,
         'max_latency': [1_000]
     }

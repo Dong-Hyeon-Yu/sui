@@ -13,7 +13,7 @@ from copy import deepcopy
 import subprocess
 
 from benchmark.config import Committee, NodeParameters, WorkerCache, BenchParameters, ConfigError
-from benchmark.utils import BenchError, Print, PathMaker, progress_bar
+from benchmark.utils import BenchError, ExecutionModel, Print, PathMaker, progress_bar
 from benchmark.commands import CommandMaker
 from benchmark.logs import LogParser, ParseError
 from benchmark.aws_instance import InstanceManager
@@ -32,7 +32,10 @@ class ExecutionError(Exception):
     pass
 
 
+AWS_USER = 'ubuntu'
+
 class Bench:
+    
     def __init__(self, ctx):
         self.manager = InstanceManager.make()
         self.settings = self.manager.settings
@@ -65,6 +68,7 @@ class Bench:
             'sudo apt-get -y install cmake',
 
             # Install rust (non-interactive).
+            'sudo apt-get -y install curl',
             'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y',
             'source $HOME/.cargo/env',
             'rustup default stable',
@@ -75,6 +79,7 @@ class Bench:
             'sudo apt-get install libssl-dev',
 
             # Clone the repo.
+            'sudo apt-get install -y git tmux protobuf-compiler',
             f'(git clone {self.settings.repo_url} || (cd {self.settings.repo_name} ; git pull))'
         ]
         hosts = self.manager.hosts(flat=True)
@@ -93,7 +98,7 @@ class Bench:
         delete_logs = CommandMaker.clean_logs() if delete_logs else 'true'
         cmd = [delete_logs, f'({CommandMaker.kill()} || true)']
         try:
-            g = Group(*hosts, user='ubuntu', connect_kwargs=self.connect)
+            g = Group(*hosts, user=AWS_USER, connect_kwargs=self.connect)
             g.run(' && '.join(cmd), hide=True)
         except GroupException as e:
             raise BenchError('Failed to kill nodes', FabricError(e))
@@ -136,11 +141,11 @@ class Bench:
     def _background_run(self, host, command, log_file):
         name = splitext(basename(log_file))[0]
         cmd = f'tmux new -d -s "{name}" "{command} |& tee {log_file}"'
-        c = Connection(host, user='ubuntu', connect_kwargs=self.connect)
+        c = Connection(host, user=AWS_USER, connect_kwargs=self.connect)
         output = c.run(cmd, hide=True)
         self._check_stderr(output)
 
-    def _update(self, hosts, bench_parameters):
+    def _update(self, hosts, bench_parameters, execution_model, include_execution=True):
         if bench_parameters.collocate:
             ips = list(set(hosts))
         else:
@@ -152,18 +157,25 @@ class Bench:
         compile_cmd = ' '.join(CommandMaker.compile())
         cmd = [
             f'(cd {self.settings.repo_name} && git fetch -f)',
-            f'(cd {self.settings.repo_name} && git checkout -f {self.settings.branch} --)',
-            f'(cd {self.settings.repo_name} && git pull -f)',
+            f'(cd {self.settings.repo_name} && git checkout {self.settings.branch})',
+            f'(cd {self.settings.repo_name} && git reset --hard origin/{self.settings.branch})',
+            # f'(cd {self.settings.repo_name} && git pull -f)',
             'source $HOME/.cargo/env',
-            f'(cd {self.settings.repo_name}/narwhal/node && {compile_cmd})',
-            CommandMaker.alias_binaries(
-                f'./{self.settings.repo_name}/target/release/'
-            )
+            f'(cd {self.settings.repo_name}/crates/sslab-benchmark && {compile_cmd})',  
         ]
-        g = Group(*ips, user='ubuntu', connect_kwargs=self.connect)
+        if include_execution:
+            compile_cmd = ' '.join(CommandMaker.compile(execution_model=execution_model, LAN=True))
+            cmd += [f'(cd {self.settings.repo_name}/crates/sslab-core && {compile_cmd})']
+        else:
+            cmd += [f'(cd {self.settings.repo_name}/narwhal/node && {compile_cmd})']
+
+        cmd += [CommandMaker.alias_binaries(
+            f'./{self.settings.repo_name}/target/release/', include_execution
+        )]
+        g = Group(*ips, user=AWS_USER, connect_kwargs=self.connect)
         g.run(' && '.join(cmd), hide=True)
 
-    def _config(self, hosts, node_parameters, bench_parameters):
+    def _config(self, hosts, node_parameters, bench_parameters, include_execution=True):
         Print.info('Generating configuration files...')
 
         # Cleanup all local configuration files.
@@ -177,7 +189,7 @@ class Bench:
         subprocess.run(cmd, check=True, cwd=PathMaker.node_crate_path())
 
         # Create alias for the client and nodes binary.
-        cmd = CommandMaker.alias_binaries(PathMaker.binary_path())
+        cmd = CommandMaker.alias_binaries(PathMaker.binary_path(), include_execution)
         subprocess.run([cmd], shell=True)
 
         # Generate configuration files.
@@ -233,7 +245,7 @@ class Bench:
         else:
             workers = OrderedDict(
                 (x, OrderedDict(
-                    (worker_names[i*bench_parameters.workers + y], h) for y in range(workers))
+                    (worker_names[i*bench_parameters.workers + y], h) for y in range(bench_parameters.workers))
                  ) for i, (x, h) in enumerate(zip(primary_names, hosts))
             )
 
@@ -250,7 +262,7 @@ class Bench:
             primary_names, prefix='Uploading config files:')
         for i, name in enumerate(progress):
             for ip in list(committee.ips(name) | worker_cache.ips(name)):
-                c = Connection(ip, user='ubuntu', connect_kwargs=self.connect)
+                c = Connection(ip, user=AWS_USER, connect_kwargs=self.connect)
                 c.run(f'{CommandMaker.cleanup()} || true', hide=True)
                 c.put(PathMaker.committee_file(), '.')
                 c.put(PathMaker.workers_file(), '.')
@@ -263,7 +275,7 @@ class Bench:
 
         return (committee, worker_cache)
 
-    def _run_single(self, rate, committee, worker_cache, bench_parameters, debug=False):
+    def _run_single(self, rate, skewness, committee, worker_cache, bench_parameters, concurrency_level=1, debug=False):
         faults = bench_parameters.faults
 
         # Kill any potentially unfinished run and delete logs.
@@ -281,8 +293,8 @@ class Bench:
                 host = address.split(':')[1].strip("/")
                 cmd = CommandMaker.run_client(
                     address,
-                    bench_parameters.tx_size,
                     rate_share,
+                    skewness,
                     [x for y in workers_addresses for _, x in y]
                 )
                 log_file = PathMaker.client_log_file(i, id)
@@ -300,6 +312,7 @@ class Bench:
                 PathMaker.workers_file(),
                 PathMaker.db_path(i),
                 PathMaker.parameters_file(),
+                concurrency_level=concurrency_level,
                 debug=debug
             )
             log_file = PathMaker.primary_log_file(i)
@@ -330,7 +343,7 @@ class Bench:
             sleep(ceil(duration / 20))
         self.kill(hosts=hosts, delete_logs=False)
 
-    def _logs(self, committee, worker_cache, faults):
+    def _logs(self, committee, worker_cache, faults, execution_model, concurrency_level):
         # Delete local logs (if any).
         cmd = CommandMaker.clean_logs()
         subprocess.run([cmd], shell=True, stderr=subprocess.DEVNULL)
@@ -342,7 +355,7 @@ class Bench:
         for i, addresses in enumerate(progress):
             for id, address in addresses:
                 host = address.split(':')[1].strip("/")
-                c = Connection(host, user='ubuntu',
+                c = Connection(host, user=AWS_USER,
                                connect_kwargs=self.connect)
                 c.get(
                     PathMaker.client_log_file(i, id),
@@ -358,7 +371,7 @@ class Bench:
             primary_addresses, prefix='Downloading primaries logs:')
         for i, address in enumerate(progress):
             host = address.split(':')[1].strip("/")
-            c = Connection(host, user='ubuntu', connect_kwargs=self.connect)
+            c = Connection(host, user=AWS_USER, connect_kwargs=self.connect)
             c.get(
                 PathMaker.primary_log_file(i),
                 local=PathMaker.primary_log_file(i)
@@ -366,9 +379,9 @@ class Bench:
 
         # Parse logs and return the parser.
         Print.info('Parsing logs and computing performance...')
-        return LogParser.process(PathMaker.logs_path(), faults=faults)
+        return LogParser.process(PathMaker.logs_path(), execution_model, faults=faults,concurrency_level=concurrency_level)
 
-    def run(self, bench_parameters_dict, node_parameters_dict, debug=False):
+    def run(self, bench_parameters_dict, node_parameters_dict, debug=False, include_execution=True):
         assert isinstance(debug, bool)
         Print.heading('Starting remote benchmark')
         try:
@@ -383,55 +396,63 @@ class Bench:
             Print.warn('There are not enough instances available')
             return
 
-        # Update nodes.
-        try:
-            self._update(selected_hosts, bench_parameters)
-        except (GroupException, ExecutionError) as e:
-            e = FabricError(e) if isinstance(e, GroupException) else e
-            raise BenchError('Failed to update nodes', e)
+        for execution_model in bench_parameters.execution_model:
 
-        # Upload all configuration files.
-        try:
-            committee, worker_cache = self._config(
-                selected_hosts, node_parameters, bench_parameters
-            )
-        except (subprocess.SubprocessError, GroupException) as e:
-            e = FabricError(e) if isinstance(e, GroupException) else e
-            raise BenchError('Failed to configure nodes', e)
+            # Update nodes.
+            try:
+                self._update(selected_hosts, bench_parameters, execution_model, include_execution)
+            except (GroupException, ExecutionError) as e:
+                e = FabricError(e) if isinstance(e, GroupException) else e
+                raise BenchError('Failed to update nodes', e)
 
-        # Run benchmarks.
-        for n in bench_parameters.nodes:
-            committee_copy = deepcopy(committee)
-            committee_copy.remove_nodes(committee.size() - n)
+            # Upload all configuration files.
+            try:
+                committee, worker_cache = self._config(
+                    selected_hosts, node_parameters, bench_parameters
+                )
+            except (subprocess.SubprocessError, GroupException) as e:
+                e = FabricError(e) if isinstance(e, GroupException) else e
+                raise BenchError('Failed to configure nodes', e)
 
-            worker_cache_copy = deepcopy(worker_cache)
-            worker_cache_copy.remove_nodes(worker_cache.size() - n)
+            # Run benchmarks.
+            for n in bench_parameters.nodes:
+                committee_copy = deepcopy(committee)
+                committee_copy.remove_nodes(committee.size() - n)
 
-            for r in bench_parameters.rate:
-                Print.heading(f'\nRunning {n} nodes (input rate: {r:,} tx/s)')
+                worker_cache_copy = deepcopy(worker_cache)
+                worker_cache_copy.remove_nodes(worker_cache.size() - n)
 
-                # Run the benchmark.
-                for i in range(bench_parameters.runs):
-                    Print.heading(f'Run {i+1}/{bench_parameters.runs}')
-                    try:
-                        self._run_single(
-                            r, committee_copy, worker_cache_copy, bench_parameters, debug
-                        )
+                for r in bench_parameters.rate:
+                    clevels = [1] if execution_model != ExecutionModel.NEZHA else bench_parameters.concurrency_level
+                    for concurrency_level in clevels:
+                    
+                        for skewness in bench_parameters.skewness:
+                            
+                            Print.heading(f'\nRunning {n} nodes (input rate: {r:,} tx/s, skeness: {skewness:.1}, concurrency level: {concurrency_level})')
 
-                        faults = bench_parameters.faults
-                        logger = self._logs(
-                            committee_copy, worker_cache_copy, faults)
-                        logger.print(PathMaker.result_file(
-                            faults,
-                            n,
-                            bench_parameters.workers,
-                            bench_parameters.collocate,
-                            r,
-                            bench_parameters.tx_size,
-                        ))
-                    except (subprocess.SubprocessError, GroupException, ParseError) as e:
-                        self.kill(hosts=selected_hosts)
-                        if isinstance(e, GroupException):
-                            e = FabricError(e)
-                        Print.error(BenchError('Benchmark failed', e))
-                        continue
+                            # Run the benchmark.
+                            for i in range(bench_parameters.runs):
+                                Print.heading(f'Run {i+1}/{bench_parameters.runs}')
+                                try:
+                                    self._run_single(
+                                        r, skewness, committee_copy, worker_cache_copy, bench_parameters, concurrency_level, debug
+                                    )
+
+                                    faults = bench_parameters.faults
+                                    logger = self._logs(
+                                        committee_copy, worker_cache_copy, faults, execution_model, concurrency_level)
+                                    logger.print(PathMaker.result_file(
+                                        faults,
+                                        n,
+                                        bench_parameters.workers,
+                                        bench_parameters.collocate,
+                                        r,
+                                        execution_model,
+                                        concurrency_level,
+                                    ))
+                                except (subprocess.SubprocessError, GroupException, ParseError) as e:
+                                    self.kill(hosts=selected_hosts)
+                                    if isinstance(e, GroupException):
+                                        e = FabricError(e)
+                                    Print.error(BenchError('Benchmark failed', e))
+                                    continue

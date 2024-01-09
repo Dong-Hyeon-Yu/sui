@@ -71,7 +71,7 @@ class InstanceManager:
 
     def _create_security_group(self, client):
         client.create_security_group(
-            Description='HotStuff node',
+            Description='Bullshark node',
             GroupName=self.SECURITY_GROUP_NAME,
         )
 
@@ -103,17 +103,32 @@ class InstanceManager:
                         'CidrIpv6': '::/0',
                         'Description': 'Dag port',
                     }],
-                }
+                },
+                {
+                    'IpProtocol': 'tcp',
+                    'FromPort': 9090,
+                    'ToPort': 9090,
+                    'IpRanges': [{
+                        'CidrIp': '0.0.0.0/0',
+                        'Description': 'Prometheous access',
+                    }],
+                    'Ipv6Ranges': [{
+                        'CidrIpv6': '::/0',
+                        'Description': 'Prometheous access',
+                    }],
+                },
             ]
         )
 
     def _get_ami(self, client):
         # The AMI changes with regions.
         response = client.describe_images(
-            Filters=[{
+            Filters=[
+                {
                 'Name': 'description',
-                'Values': ['Canonical, Ubuntu, 20.04 LTS, amd64 focal image build on 2020-10-26']
-            }]
+                'Values': ['Canonical, Ubuntu, 22.04 LTS, amd64 jammy image build on 2023-12-07']
+                },
+            ]
         )
         return response['Images'][0]['ImageId']
 

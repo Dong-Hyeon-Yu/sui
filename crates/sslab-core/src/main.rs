@@ -279,7 +279,7 @@ async fn run(
 
             let client = WorkerNetworkClient::new_from_keypair(&primary_network_keypair);
 
-            let (tx_consensus_certificate, rx_consensus_certificate) = tokio::sync::mpsc::channel(100);
+            let (tx_consensus_certificate, rx_consensus_certificate) = tokio::sync::mpsc::channel(5);
             
 
             cfg_if::cfg_if! {

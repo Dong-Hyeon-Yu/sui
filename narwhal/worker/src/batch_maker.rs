@@ -197,7 +197,7 @@ impl BatchMaker {
 
         std::thread::spawn(move || {
             let batch = rayon::ThreadPoolBuilder::new()
-                .num_threads(num_cpus::get()/4)
+                .num_threads(num_cpus::get()*3/4)
                 .build()
                 .unwrap()
                 .install(|| {
@@ -218,7 +218,7 @@ impl BatchMaker {
                 });
             
             let _ = tx_decoded_txn.send(batch);
-        }).join().expect("fail to decode serialized transaction.");
+        }).join().expect("fail to decode serialized transaction."); //TODO: tokio yield?
 
         let mut batch = rx_decoded_txn.recv().ok().unwrap();
         

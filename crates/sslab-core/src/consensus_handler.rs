@@ -130,7 +130,7 @@ impl ExecutionState for SimpleConsensusHandler {
                         });
 
                     let _ = _tx_decoded_txn.send(_batch_tx);
-                }).join().expect("fail to decode serialized transaction.");
+                }).join().expect("fail to decode serialized transaction."); //TODO: tokio yield?
 
                 let _batch_tx = rx_decoded_txn.recv().ok().unwrap();
                 

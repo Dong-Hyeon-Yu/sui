@@ -1,10 +1,10 @@
 {
     "key": {
-        "name": "sui",
-        "path": "/home/sslab/.ssh/sui.pem",
+        "name": "ansible",
+        "path": "/home/sslab/.ssh/ansible",
         "passphrase": ""
     },
-    "user": "ubuntu",
+    "user": "nezha",
     "LAN" : {
         "hosts": [
             "141.223.121.124",

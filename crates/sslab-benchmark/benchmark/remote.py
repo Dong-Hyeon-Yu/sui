@@ -142,6 +142,7 @@ class Bench:
         name = splitext(basename(log_file))[0]
         cmd = f'tmux new -d -s "{name}" "{command} |& tee {log_file}"'
         c = Connection(host, user=AWS_USER, connect_kwargs=self.connect)
+        c.run(CommandMaker.clean_db(), hide=True)
         output = c.run(cmd, hide=True)
         self._check_stderr(output)
 

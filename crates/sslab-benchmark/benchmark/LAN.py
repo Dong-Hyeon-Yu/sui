@@ -34,7 +34,7 @@ class ExecutionError(Exception):
 
 class LANBench:
     def __init__(self, ctx):
-        self.manager = InstanceManager.make()
+        self.manager = InstanceManager.make('settings-LAN.json')
         self.settings = self.manager.settings
         try:
             ctx.connect_kwargs.pkey = RSAKey.from_private_key_file(

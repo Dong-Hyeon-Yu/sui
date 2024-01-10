@@ -193,26 +193,20 @@ impl BatchMaker {
             .collect::<Vec<[u8; 8]>>();
 
         let mut batch = tokio::task::spawn_blocking(move || {
-            rayon::ThreadPoolBuilder::new()
-                .num_threads(num_cpus::get()*3/4)
-                .build()
-                .unwrap()
-                .install(|| {
-                    batch
-                        .transactions_mut()
-                        .into_par_iter() 
-                        .for_each(|tx| {
-                            let _tx: Vec<u8> = tx.clone();
-                            let rlp = Rlp::new(&_tx);
-                            tx.clear();
-        
-                            let (rlp_decoded_tx, _) = TypedTransaction::decode_signed(&rlp)
-                                .expect("validation for rlp decoding must be done once receiving the tx from clients at TxServer");
-                            let se = serde_json::to_vec(&rlp_decoded_tx).unwrap();
-                            tx.extend(se);
-                        });
-                    batch
-                })
+            batch
+                .transactions_mut()
+                .into_par_iter() 
+                .for_each(|tx| {
+                    let _tx: Vec<u8> = tx.clone();
+                    let rlp = Rlp::new(&_tx);
+                    tx.clear();
+
+                    let (rlp_decoded_tx, _) = TypedTransaction::decode_signed(&rlp)
+                        .expect("validation for rlp decoding must be done once receiving the tx from clients at TxServer");
+                    let se = serde_json::to_vec(&rlp_decoded_tx).unwrap();
+                    tx.extend(se);
+                });
+            batch
         }).await.expect("Failed to spawn a thread for decoding transactions.");
         
 

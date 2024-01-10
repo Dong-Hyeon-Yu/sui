@@ -83,10 +83,12 @@ impl ExecutionState for SimpleConsensusHandler {
         cfg_if::cfg_if! {
             if #[cfg(feature = "benchmark")] {
                 // NOTE: This log entry is used to compute performance.
-                consensus_output.batches.iter().for_each(|batches|
-                    batches.iter().for_each(|batch| info!("Consensus handler received a batch -> {:?}", batch.digest()))
-                );
-
+                tokio::task::spawn_blocking(move || {
+                    consensus_output.batches.iter().for_each(|batches|
+                        batches.par_iter().for_each(|batch| info!("Consensus handler received a batch -> {:?}", batch.digest()))
+                    );
+                }).await.expect("Failed to spawn a thread for logging consensus output.");
+                
                 // NOTE: This log entry is used to compute performance.
                 info!("Received consensus_output has {} batches at subdag_index {}.", consensus_output.sub_dag.num_batches(), consensus_output.sub_dag.sub_dag_index);
             }
@@ -111,23 +113,20 @@ impl ExecutionState for SimpleConsensusHandler {
                 }
 
                 let _batch = std::sync::Arc::new(batch.clone());
+                let digest = _batch.digest();
+                let _digest = digest.clone();
 
                 let _batch_tx = tokio::task::spawn_blocking(move || {
-                    rayon::ThreadPoolBuilder::new()
-                        .num_threads(num_cpus::get()*3/4)
-                        .build().unwrap()
-                        .install(|| {
-                            _batch.transactions()
-                                .par_iter()
-                                .map(|serialized_transaction| {
-                                    decode_transaction(serialized_transaction, _batch.digest())
-                                })
-                                .collect::<Vec<_>>()
+                    _batch.transactions()
+                        .par_iter()
+                        .map(|serialized_transaction| {
+                            decode_transaction(serialized_transaction, _digest)
                         })
+                        .collect::<Vec<_>>()
                 }).await.expect("Failed to spawn a thread for decoding transactions.");
                 
                 if !_batch_tx.is_empty() {
-                    ethereum_batches.push(ExecutableEthereumBatch::new(_batch_tx, batch.digest()));
+                    ethereum_batches.push(ExecutableEthereumBatch::new(_batch_tx, digest));
                 } else {
                     warn!("Received an empty decoded batch at subdag_index {}. This couldn't possible.", consensus_output.sub_dag.sub_dag_index)
                 }

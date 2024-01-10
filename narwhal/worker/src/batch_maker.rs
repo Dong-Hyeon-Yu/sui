@@ -192,11 +192,8 @@ impl BatchMaker {
             .filter_map(|tx| tx[2..10].try_into().ok())
             .collect::<Vec<[u8; 8]>>();
 
-        //rlp-decompress the batch and serialize it by other light-weight encoding method.
-        let (tx_decoded_txn, rx_decoded_txn) = std::sync::mpsc::channel::<Batch>();
-
-        std::thread::spawn(move || {
-            let batch = rayon::ThreadPoolBuilder::new()
+        let mut batch = tokio::task::spawn_blocking(move || {
+            rayon::ThreadPoolBuilder::new()
                 .num_threads(num_cpus::get()*3/4)
                 .build()
                 .unwrap()
@@ -215,12 +212,8 @@ impl BatchMaker {
                             tx.extend(se);
                         });
                     batch
-                });
-            
-            let _ = tx_decoded_txn.send(batch);
-        }).join().expect("fail to decode serialized transaction."); //TODO: tokio yield?
-
-        let mut batch = rx_decoded_txn.recv().ok().unwrap();
+                })
+        }).await.expect("Failed to spawn a thread for decoding transactions.");
         
 
         #[cfg(feature = "benchmark")]

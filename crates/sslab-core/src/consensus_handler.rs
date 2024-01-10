@@ -95,8 +95,6 @@ impl ExecutionState for SimpleConsensusHandler {
         /* (serialized, transaction, output_cert) */
         let mut ethereum_batches : Vec<ExecutableEthereumBatch> = vec![];
 
-        let (tx_decoded_txn, rx_decoded_txn) = std::sync::mpsc::channel::<Vec<EthereumTransaction>>();
-
         for (cert, batches) in consensus_output
             .sub_dag
             .certificates
@@ -112,12 +110,10 @@ impl ExecutionState for SimpleConsensusHandler {
                     continue;
                 }
 
-                let _tx_decoded_txn = tx_decoded_txn.clone();
-
                 let _batch = std::sync::Arc::new(batch.clone());
 
-                std::thread::spawn(move || {
-                    let _batch_tx = rayon::ThreadPoolBuilder::new()
+                let _batch_tx = tokio::task::spawn_blocking(move || {
+                    rayon::ThreadPoolBuilder::new()
                         .num_threads(num_cpus::get()*3/4)
                         .build().unwrap()
                         .install(|| {
@@ -127,12 +123,8 @@ impl ExecutionState for SimpleConsensusHandler {
                                     decode_transaction(serialized_transaction, _batch.digest())
                                 })
                                 .collect::<Vec<_>>()
-                        });
-
-                    let _ = _tx_decoded_txn.send(_batch_tx);
-                }).join().expect("fail to decode serialized transaction."); //TODO: tokio yield?
-
-                let _batch_tx = rx_decoded_txn.recv().ok().unwrap();
+                        })
+                }).await.expect("Failed to spawn a thread for decoding transactions.");
                 
                 if !_batch_tx.is_empty() {
                     ethereum_batches.push(ExecutableEthereumBatch::new(_batch_tx, batch.digest()));

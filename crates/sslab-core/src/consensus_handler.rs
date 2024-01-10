@@ -83,11 +83,9 @@ impl ExecutionState for SimpleConsensusHandler {
         cfg_if::cfg_if! {
             if #[cfg(feature = "benchmark")] {
                 // NOTE: This log entry is used to compute performance.
-                tokio::task::spawn_blocking(move || {
-                    consensus_output.batches.iter().for_each(|batches|
-                        batches.par_iter().for_each(|batch| info!("Consensus handler received a batch -> {:?}", batch.digest()))
-                    );
-                }).await.expect("Failed to spawn a thread for logging consensus output.");
+                consensus_output.sub_dag.certificates.iter().for_each(|cert| {
+                    cert.header().payload().keys().for_each(|digest| info!("Consensus handler received a batch -> {:?}", digest));
+                });
                 
                 // NOTE: This log entry is used to compute performance.
                 info!("Received consensus_output has {} batches at subdag_index {}.", consensus_output.sub_dag.num_batches(), consensus_output.sub_dag.sub_dag_index);

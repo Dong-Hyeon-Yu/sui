@@ -17,7 +17,7 @@
     "repo": {
         "name": "sui",
         "url": "https://github.com/Dong-Hyeon-Yu/sui",
-        "branch": "blockstm"
+        "branch": "aws"
     },
     "instances": {
         "type": "m5d.8xlarge",

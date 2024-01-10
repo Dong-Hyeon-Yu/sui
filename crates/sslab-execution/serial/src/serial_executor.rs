@@ -8,9 +8,9 @@ use sslab_execution::{
 use tracing::{warn, info, trace};
 
 
-
+#[async_trait::async_trait]
 impl Executable for SerialExecutor {
-    fn execute(&self, consensus_output: Vec<ExecutableEthereumBatch>) {
+    async fn execute(&self, consensus_output: Vec<ExecutableEthereumBatch>) {
 
         for batch in consensus_output {
             let _ = self._execute(batch);

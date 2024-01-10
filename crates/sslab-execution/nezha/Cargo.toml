@@ -7,7 +7,7 @@ license = "Apache-2.0"
 publish = false
 
 [dependencies]
-criterion.workspace = true
+async-trait.workspace = true
 itertools.workspace = true
 tracing.workspace = true
 tokio = { workspace = true, features = ["full", "tracing", "test-util"] }
@@ -27,7 +27,7 @@ ethers = "^2.0.0"
 ethers-signers = { version = "^2.0.0" }
 ethers-providers = { version = "^2.0.0" }
 rand_distr = "0.4.3"
-
+criterion = {workspace = true, features = ["async_tokio", "default"]}
 
 [[bench]]
 name = "nezha"

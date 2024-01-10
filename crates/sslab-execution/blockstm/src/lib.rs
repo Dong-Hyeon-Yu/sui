@@ -109,8 +109,9 @@ impl BlockSTM {
     }
 }
 
+#[async_trait::async_trait]
 impl Executable for BlockSTM {
-    fn execute(&self, consensus_output: Vec<sslab_execution::types::ExecutableEthereumBatch>) {
+    async fn execute(&self, consensus_output: Vec<sslab_execution::types::ExecutableEthereumBatch>) {
 
         let executor: ParallelTransactionExecutor<EtherTxn, EvmExecutorTask> = ParallelTransactionExecutor::new();
 

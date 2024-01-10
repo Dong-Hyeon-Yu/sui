@@ -5,8 +5,9 @@ use tracing::{debug, warn};
 
 use crate::types::{ExecutableEthereumBatch, ExecutableConsensusOutput}; 
 
+#[async_trait::async_trait]
 pub trait Executable {
-    fn execute(&self, consensus_output: Vec<ExecutableEthereumBatch>);
+    async fn execute(&self, consensus_output: Vec<ExecutableEthereumBatch>);
 }
 
 
@@ -43,7 +44,7 @@ impl<ExecutionModel: Executable + Send + Sync> ExecutionComponent for ParallelEx
                     );
                 }
             }
-            self.execution_model.execute(consensus_output.data().to_owned());
+            self.execution_model.execute(consensus_output.data().to_owned()).await;
             cfg_if::cfg_if! {
                 if #[cfg(feature = "benchmark")] {
                     // NOTE: This log entry is used to compute performance.

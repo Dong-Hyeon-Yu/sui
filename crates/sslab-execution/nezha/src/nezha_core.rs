@@ -19,11 +19,11 @@ use super::{
     address_based_conflict_graph::{Transaction, FastHashMap}
 };
 
-
+#[async_trait::async_trait]
 impl Executable for Nezha {
-    fn execute(&self, consensus_output: Vec<ExecutableEthereumBatch>) {
+    async fn execute(&self, consensus_output: Vec<ExecutableEthereumBatch>) {
 
-        let _ = self.inner.prepare_execution(consensus_output);
+        let _ = self.inner.prepare_execution(consensus_output).await;
     }
 }
 
@@ -56,7 +56,7 @@ impl ConcurrencyLevelManager {
         }
     }
 
-    fn prepare_execution(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> ExecutionResult {
+    async fn prepare_execution(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> ExecutionResult {
 
         let mut result = vec![];
         let mut target = consensus_output;
@@ -65,7 +65,7 @@ impl ConcurrencyLevelManager {
             let split_idx = std::cmp::min(self.concurrency_level, target.len());
             let remains: Vec<ExecutableEthereumBatch> = target.split_off(split_idx);
 
-            result.extend(self._execute(target));
+            result.extend(self._execute(target).await);
 
             target = remains;
         } 
@@ -73,9 +73,9 @@ impl ConcurrencyLevelManager {
         ExecutionResult::new(result)
     }
 
-    fn _execute(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> Vec<BatchDigest> {
+    async fn _execute(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> Vec<BatchDigest> {
         let mut now = Instant::now();
-        let SimulationResult { digests, rw_sets } = self._simulate(consensus_output);
+        let SimulationResult { digests, rw_sets } = self._simulate(consensus_output).await;
         let mut time = now.elapsed().as_millis();
         info!("Simulation took {} ms for {} transactions.", time, rw_sets.len());
 
@@ -96,7 +96,7 @@ impl ConcurrencyLevelManager {
         info!("Parallelism metric: {:?}", scheduled_info.parallism_metric());
 
         now = Instant::now();
-        self._concurrent_commit(scheduled_info, 10);
+        self._concurrent_commit(scheduled_info, 10).await;
         time = now.elapsed().as_millis();
 
         info!("Concurrent commit took {} ms for {} transactions.", time, scheduled_tx_len);
@@ -108,7 +108,7 @@ impl ConcurrencyLevelManager {
     }
     
     //TODO: create Simulator having a thread pool for cpu-bound jobs.
-    pub fn _simulate(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> SimulationResult {
+    pub async fn _simulate(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> SimulationResult {
         let snapshot = self.global_state.snapshot();
         
         let (digests, batches): (Vec<_>, Vec<_>) = consensus_output
@@ -125,10 +125,8 @@ impl ConcurrencyLevelManager {
         // CPU-bound jobs would make the I/O-bound tokio threads starve.
         // To this end, a separated thread pool need to be used for cpu-bound jobs.
         // a new thread is created, and a new thread pool is created on the thread. (specifically, rayon's thread pool is created)
-        let (tx, rx) = std::sync::mpsc::channel::<Vec<SimulatedTransaction>>();
-
-        std::thread::spawn(move || {
-            let result : Vec<SimulatedTransaction> = tx_list
+        let result = tokio::task::spawn_blocking(move || {
+            tx_list
                 .par_iter()
                 .filter_map(|tx| {
                     match crate::evm_utils::simulate_tx(tx, &snapshot) {
@@ -142,12 +140,10 @@ impl ConcurrencyLevelManager {
                         },
                     }
                 })
-                .collect();
+                .collect()
+        }).await;
 
-            let _ = tx.send(result);
-        }).join().expect("fail to join the simulation thread.");
-
-        match rx.recv() {
+        match result {
             Ok(rw_sets) => {
                 SimulationResult { digests, rw_sets }
             },
@@ -158,7 +154,7 @@ impl ConcurrencyLevelManager {
         }
     }
 
-    pub fn _concurrent_commit(&self, scheduled_info: ScheduledInfo, chunk_size: usize) {
+    pub async fn _concurrent_commit(&self, scheduled_info: ScheduledInfo, chunk_size: usize) {
         let storage = self.global_state.clone();
         // let _storage = &storage;
         let scheduled_txs = scheduled_info.scheduled_txs;
@@ -167,7 +163,7 @@ impl ConcurrencyLevelManager {
         // CPU-bound jobs would make the I/O-bound tokio threads starve.
         // To this end, a separated thread pool need to be used for cpu-bound jobs.
         // a new thread is created, and a new thread pool is created on the thread. (specifically, rayon's thread pool is created)
-        std::thread::spawn(move || {
+        let _ = tokio::task::spawn_blocking(move || {
             let _storage = &storage;
             for txs_to_commit in scheduled_txs {
                 txs_to_commit
@@ -177,7 +173,7 @@ impl ConcurrencyLevelManager {
                         _storage.apply_local_effect(effect)
                     })
             }
-        }).join().expect("fail to commit concurrently.");
+        }).await;
 
         // self.global_state.update_from(storage);
     }

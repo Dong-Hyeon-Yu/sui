@@ -22,8 +22,8 @@ fn get_nezha_executor() -> ConcurrencyLevelManager {
 }
 
 /* this test is for debuging nezha algorithm under a smallbank workload */
-#[test]
-fn test_smallbank() {
+#[tokio::test]
+async fn test_smallbank() {
     let nezha = Box::pin(get_nezha_executor());
     let handler = get_smallbank_handler();
 
@@ -43,7 +43,7 @@ fn test_smallbank() {
     //when
     let total = Instant::now();
     let mut now = Instant::now();
-    let SimulationResult { rw_sets, .. } = nezha._simulate(consensus_output);
+    let SimulationResult { rw_sets, .. } = nezha._simulate(consensus_output).await;
     let mut time = now.elapsed().as_millis();
     println!("Simulation took {} ms for {} transactions.", time, rw_sets.len());
 
@@ -60,7 +60,7 @@ fn test_smallbank() {
     let aborted_tx_len =  scheduled_info.aborted_txs_len();
 
     now = Instant::now();
-    nezha._concurrent_commit(scheduled_info, 1);
+    nezha._concurrent_commit(scheduled_info, 1).await;
     time = now.elapsed().as_millis();
 
     println!("Concurrent commit took {} ms for {} transactions.", time, scheduled_tx_len);

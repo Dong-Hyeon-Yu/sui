@@ -15,6 +15,7 @@ edition = "2018"
 # mvhashmap = { path = "../mvhashmap" }
 # diem-workspace-hack = { path = "../../crates/diem-workspace-hack" }
 # diem-infallible = { path = "../../crates/diem-infallible" }
+async-trait.workspace = true
 anyhow = "1.0.52"
 crossbeam-queue = "0.3.1"
 rayon = "1.5.0"

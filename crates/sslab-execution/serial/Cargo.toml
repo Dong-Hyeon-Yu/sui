@@ -7,6 +7,7 @@ license = "Apache-2.0"
 publish = false
 
 [dependencies]
+async-trait.workspace = true
 sui-types.workspace = true
 sslab-execution.workspace = true
 tracing.workspace = true

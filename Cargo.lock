@@ -10560,6 +10560,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "arc-swap",
+ "async-trait",
  "criterion 0.5.1",
  "crossbeam",
  "crossbeam-queue",
@@ -10582,6 +10583,7 @@ dependencies = [
 name = "sslab-execution-nezha"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "criterion 0.4.0",
  "ethers",
  "ethers-core",
@@ -10604,6 +10606,7 @@ dependencies = [
 name = "sslab-execution-serial"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "criterion 0.4.0",
  "ethers",
  "ethers-providers",

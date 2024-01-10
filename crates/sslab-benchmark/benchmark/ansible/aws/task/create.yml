@@ -1,0 +1,89 @@
+
+  
+  - name: upload ec2 keypair
+    ec2_key: "name=sui key_material={{ item }} region={{ region }}"
+    with_file: ~/.ssh/sui.pub
+  
+  - name: security group
+    ec2_group:
+      name: dag
+      description: allow ssh, NodePorts, prometheus
+      region: "{{ region }}"
+      rules:
+        - proto: tcp
+          from_port: 22
+          to_port: 22
+          cidr_ip: 0.0.0.0/0
+        - proto: tcp
+          from_port: 5000
+          to_port: 7000
+          cidr_ip: 0.0.0.0/0
+        - proto: udp
+          from_port: 5000
+          to_port: 7000
+          cidr_ip: 0.0.0.0/0
+        - proto: tcp
+          from_port: 9090
+          to_port: 9090
+          cidr_ip: 0.0.0.0/0
+      state: present
+
+  - name: outbound security group
+    ec2_group:
+      name: outbound
+      description: allow all outbound traffic
+      region: "{{ region }}"
+      rules_egress:
+        - proto: all
+          cidr_ip: 0.0.0.0/0
+
+  - name: Get the ubuntu 22.04 ebs ami
+    ec2_ami_info:
+      region: "{{ region }}"
+      filters: 
+          description: "Canonical, Ubuntu, 22.04 LTS, amd64 jammy image build on 2023-12-07"
+    register: response
+
+  # - name: the ubuntu 22.04 ebs ami
+  #   debug:
+  #     msg: "{{ response.images[0] }}"
+  - set_fact: "ami={{ response.images[0].image_id }}"
+  
+  - name: start the instance
+    ec2_instance:
+      key_name: sui
+      instance_type: "{{ instance_type }}"
+      image_id: "{{ ami }}"
+      security_groups: [dag, outbound]
+      wait: yes
+      region: "{{ region }}"
+      name: dag-node
+      ebs_optimized: yes
+      instance_initiated_shutdown_behavior: terminate
+      volumes:
+        - device_name: /dev/sda1
+          ebs:
+            volume_type: gp2
+            volume_size: 200
+      exact_count: "{{ count }}"
+      state: running
+    register: ec2
+
+  # - name: instance info
+  #   debug:
+  #     var: ec2 
+
+  - name: add instances to host group
+    add_host:
+      hostname: "{{ item.public_dns_name }}"
+      groups: Sui
+    with_items: "{{ ec2.instances }}"
+
+  - name: wait for SSH to come up
+    wait_for:
+      host: "{{ item.public_dns_name }}"
+      port: 22
+      state: started
+      search_regex: OpenSSH
+    with_items: "{{ ec2.instances }}"
+    when: item.public_dns_name is defined

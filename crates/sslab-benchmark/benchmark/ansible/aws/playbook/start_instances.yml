@@ -1,0 +1,26 @@
+#!/usr/bin/env ansible-playbook
+
+- name: stop instances
+  hosts: localhost
+  vars:
+    count: 2 # number of instances per regions to start
+    regions:
+      - us-east-1
+      - eu-north-1
+      - ap-southeast-2
+      - us-west-1
+      - ap-northeast-1
+
+  tasks:
+    - name: Start instances
+      ec2_instance:
+        state: running  #TODO: do not work
+        region: "{{ item }}"
+        name: dag-node
+        exact_count: "{{ count }}"
+      with_items: "{{ regions }}"
+      poll: 0
+
+    # node exporter
+    # prometheus
+

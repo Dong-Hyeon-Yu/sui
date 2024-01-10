@@ -1,0 +1,14 @@
+plugin: aws_ec2
+boto_profile: default
+regions:
+  - us-east-1
+  - eu-north-1
+  - ap-southeast-2
+  - us-west-1
+  - ap-northeast-1
+keyed_groups:
+  - key: tags.Name
+filters:
+  instance-state-name: running
+compose:
+  ansible_host: public_ip_address

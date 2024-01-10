@@ -1,0 +1,18 @@
+#!/usr/bin/env ansible-playbook
+
+- hosts: localhost
+  become: yes
+
+  tasks:
+    - name: install pip
+      apt:
+        name:
+          - python-pip
+          - python3-pip
+        state: latest
+
+    - name: install boto
+      pip:
+        name:
+          - boto
+          - boto3

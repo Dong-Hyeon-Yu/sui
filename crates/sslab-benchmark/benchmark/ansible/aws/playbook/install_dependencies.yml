@@ -1,0 +1,22 @@
+#!/usr/bin/env ansible-playbook
+
+- name: Install dependencies
+  hosts: _dag_node   # ../inventory/aws_ec2
+  
+  tasks:	
+    - name: install all dependencies
+      include_tasks: ../task/install.yml
+
+  roles:
+    - name: prometheus.prometheus.prometheus
+      vars:
+        prometheus_targets:
+          node:
+          - targets: 
+            - localhost:9100
+            - localhost:6000
+            
+    - name: prometheus.prometheus.node_exporter
+      vars:
+        node_exporter_version: "1.7.0"
+        node_exporter_web_listen_address: "0.0.0.0:9100"

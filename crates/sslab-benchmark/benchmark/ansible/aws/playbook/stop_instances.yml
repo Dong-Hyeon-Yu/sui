@@ -1,0 +1,21 @@
+#!/usr/bin/env ansible-playbook
+
+- name: stop instances
+  hosts: localhost
+  strategy: free
+  vars:
+    regions:
+      - us-east-1
+      - eu-north-1
+      - ap-southeast-2
+      - us-west-1
+      - ap-northeast-1
+
+  tasks:
+    - name: Stop instances
+      ec2_instance:
+        state: stopped  #TODO: do not work
+        region: "{{ item }}"
+        name: dag-node
+      with_items: "{{ regions }}"
+

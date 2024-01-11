@@ -141,8 +141,11 @@ async fn main() -> Result<(), eyre::Report> {
             let primary_network_keypair = read_network_keypair_from_file(primary_network_key_file)
                 .expect("Failed to load the node's primary network keypair");
             let worker_key_file = sub_matches.value_of("worker-keys").unwrap();
-            let worker_keypair = read_network_keypair_from_file(worker_key_file)
-                .expect("Failed to load the node's worker keypair");
+
+            let worker_keypair = match read_network_keypair_from_file(worker_key_file) {
+                Ok(keypair) => Some(keypair),
+                Err(_) => None,
+            };
 
             let committee_file = sub_matches.value_of("committee").unwrap();
             let mut committee = Committee::import(committee_file)
@@ -245,7 +248,7 @@ async fn run(
     committee: Committee,
     primary_keypair: KeyPair,
     primary_network_keypair: NetworkKeyPair,
-    worker_keypair: NetworkKeyPair,
+    worker_keypair: Option<NetworkKeyPair>,
     registry: Registry,
 ) -> Result<(), eyre::Report> {
     let workers_file = matches.value_of("workers").unwrap();
@@ -377,7 +380,7 @@ async fn run(
             worker
                 .start(
                     primary_keypair.public().clone(),
-                    worker_keypair,
+                    worker_keypair.expect("Worker keypair must be provided"),
                     committee,
                     worker_cache,
                     client,

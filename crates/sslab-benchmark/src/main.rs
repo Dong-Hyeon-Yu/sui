@@ -78,7 +78,9 @@ async fn main() -> Result<(), eyre::Report> {
         .parse::<f32>()
         .context("The skewness of the distribution must be a float")?;
 
-    info!("Node address: {target}");
+    info!("Target address: {target}");
+
+    info!("Node addresses: {:?}", nodes);
 
     // NOTE: This log entry is used to compute performance.
     info!("Transactions rate: {rate} tx/s");

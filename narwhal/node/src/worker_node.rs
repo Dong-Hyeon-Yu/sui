@@ -76,7 +76,7 @@ impl WorkerNodeInner {
             (metrics, None)
         } else {
             // create a new registry
-            let registry = new_registry();
+            let registry = self.registry_service.default_registry();
 
             (initialise_metrics(&registry), Some(registry))
         };
@@ -108,9 +108,9 @@ impl WorkerNodeInner {
         ).await;
 
         // store the registry
-        if let Some(registry) = registry {
-            self.swap_registry(Some(registry));
-        }
+        // if let Some(registry) = registry {
+        //     self.swap_registry(Some(registry));
+        // }
 
         // now keep the handlers
         self.handles.clear();

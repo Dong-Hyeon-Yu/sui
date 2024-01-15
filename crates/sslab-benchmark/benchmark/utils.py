@@ -1,6 +1,7 @@
 # Copyright (c) 2021, Facebook, Inc. and its affiliates.
 # Copyright (c) Mysten Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
+from concurrent import futures
 import multiaddr
 from multiaddr.protocols import (
     P_DNS, P_DNS4, P_DNS6, P_HTTP, P_HTTPS, P_IP4, P_IP6, P_TCP, P_UDP)
@@ -179,7 +180,21 @@ def progress_bar(iterable, prefix='', suffix='', decimals=1, length=30, fill='â–
         yield item
         printProgressBar(i + 1)
     print()
+    
+def join_with_progress_bar(threads, prefix='', suffix='', decimals=1, length=30, fill='â–ˆ', print_end='\r'):
+    total = len(threads)
+    
+    def printProgressBar(iteration):
+        formatter = '{0:.'+str(decimals)+'f}'
+        percent = formatter.format(100 * (iteration / float(total)))
+        filledLength = int(length * iteration // total)
+        bar = fill * filledLength + '-' * (length - filledLength)
+        print(f'\r{prefix} |{bar}| {percent}% {suffix}', end=print_end)
 
+    printProgressBar(0)
+    for i, _ in enumerate(futures.as_completed(threads)):
+        printProgressBar(i + 1)
+    print()
 
 class AddressError(multiaddr.exceptions.Error):
     """Raised when the provided daemon location Multiaddr does not match any

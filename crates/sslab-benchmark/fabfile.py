@@ -354,51 +354,52 @@ def remote(ctx, debug=False):
         'nodes': [4],
         'workers': 1,
         'collocate': False,
-        'rate': 100000,#[20_000, 40_000, 60_000, 80_000, 100_000, 120_000],
+        'rate': 700_000, #[100_000, 200_000, 300_000, 400_000, 500_000, 600_000],
         'skewness': [0.0],
         'tx_size': 270,
-        'duration': 60,
+        'duration': 100,
         'runs': 1,
-        'execution_model': [ExecutionModel.NEZHA],
+        'execution_model': [ExecutionModel.NEZHA, ExecutionModel.BLOCKSTM],
         'concurrency_level': [1], # only for nezha
     }
-    node_params = {
-        'header_num_of_batches_threshold': 32,
-        'max_header_num_of_batches': 1000,
-        'max_header_delay': '200ms',  # ms
-        'gc_depth': 50,  # rounds
-        'sync_retry_delay': '10_000ms',  # ms
-        'sync_retry_nodes': 3,  # number of nodes
-        'batch_size': 150_000,  # bytes
-        'max_batch_delay': '200ms',  # ms,
-        'block_synchronizer': {
-            'range_synchronize_timeout': '30_000ms',
-            'certificates_synchronize_timeout': '2_000ms',
-            'payload_synchronize_timeout': '2_000ms',
-            'payload_availability_timeout': '2_000ms',
-            'handler_certificate_deliver_timeout': '2_000ms'
-        },
-        "consensus_api_grpc": {
-            "socket_addr": "/ip4/127.0.0.1/tcp/0/http",
-            "get_collections_timeout": "5_000ms",
-            "remove_collections_timeout": "5_000ms"
-        },
-        'max_concurrent_requests': 500_000,
-        'prometheus_metrics': {
-            "socket_addr": "/ip4/0.0.0.0/tcp/6000/http"
-        },
-        "network_admin_server": {
-            # Use a random available local port.
-            "primary_network_admin_server_port": 0,
-            "worker_network_admin_server_base_port": 0
-        },
-    }
-    try:
-        bench = Bench(ctx)
-        bench.manager.print_info()
-        bench.run(bench_params, node_params, debug)
-    except BenchError as e:
-        Print.error(e)
+    for batch_size in [500_000]:
+        node_params = {
+            'header_num_of_batches_threshold': 32,
+            'max_header_num_of_batches': 1000,
+            'max_header_delay': '200ms',  # ms
+            'gc_depth': 50,  # rounds
+            'sync_retry_delay': '10_000ms',  # ms
+            'sync_retry_nodes': 3,  # number of nodes
+            'batch_size': batch_size,  # bytes
+            'max_batch_delay': '200ms',  # ms,
+            'block_synchronizer': {
+                'range_synchronize_timeout': '30_000ms',
+                'certificates_synchronize_timeout': '2_000ms',
+                'payload_synchronize_timeout': '2_000ms',
+                'payload_availability_timeout': '2_000ms',
+                'handler_certificate_deliver_timeout': '2_000ms'
+            },
+            "consensus_api_grpc": {
+                "socket_addr": "/ip4/127.0.0.1/tcp/0/http",
+                "get_collections_timeout": "5_000ms",
+                "remove_collections_timeout": "5_000ms"
+            },
+            'max_concurrent_requests': 500_000,
+            'prometheus_metrics': {
+                "socket_addr": "/ip4/0.0.0.0/tcp/6000/http"
+            },
+            "network_admin_server": {
+                # Use a random available local port.
+                "primary_network_admin_server_port": 0,
+                "worker_network_admin_server_base_port": 6001
+            },
+        }
+        try:
+            bench = Bench(ctx)
+            bench.manager.print_info()
+            bench.run(bench_params, node_params, debug)
+        except BenchError as e:
+            Print.error(e)
 
 
 @task
@@ -409,10 +410,10 @@ def plot(ctx):
         'nodes': [4],
         'workers': [1],
         'collocate': False,
-        'execution_model': [ExecutionModel.BLOCKSTM, ExecutionModel.NEZHA],
-        'concurrency_level': [1],
-        'skewness': 0.0, #[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
-        'rate': [20_000, 40_000, 60_000, 80_000, 100_000, 120_000],
+        'execution_model': [ExecutionModel.NEZHA, ExecutionModel.BLOCKSTM],
+        'concurrency_level': [1, 10000],
+        'skewness': [0.0],
+        'rate': [100_000, 200_000, 300_000, 350_000, 400_000, 500000, 600000, 700000,],
         'tx_size': 270,
         'max_latency': [1_000]
     }

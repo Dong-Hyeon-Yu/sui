@@ -2,6 +2,7 @@
 # Copyright (c) Mysten Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
 from fabric import Connection, ThreadingGroup as Group
 from fabric.exceptions import GroupException
 from paramiko.rsakey import RSAKey
@@ -13,7 +14,7 @@ from copy import deepcopy
 import subprocess
 
 from benchmark.config import Committee, NodeParameters, WorkerCache, BenchParameters, ConfigError
-from benchmark.utils import BenchError, ExecutionModel, Print, PathMaker, progress_bar
+from benchmark.utils import BenchError, ExecutionModel, Print, PathMaker, progress_bar, join_with_progress_bar
 from benchmark.commands import CommandMaker
 from benchmark.logs import LogParser, ParseError
 from benchmark.aws_instance import InstanceManager
@@ -145,6 +146,10 @@ class Bench:
         c.run(CommandMaker.clean_db(), hide=True)
         output = c.run(cmd, hide=True)
         self._check_stderr(output)
+        
+    def _update_single(self, ip, cmd):
+        c = Connection(ip, user=AWS_USER, connect_kwargs=self.connect)
+        c.run(cmd, hide=True)
 
     def _update(self, hosts, bench_parameters, execution_model, include_execution=True):
         if bench_parameters.collocate:
@@ -173,8 +178,22 @@ class Bench:
         cmd += [CommandMaker.alias_binaries(
             f'./{self.settings.repo_name}/target/release/', include_execution
         )]
-        g = Group(*ips, user=AWS_USER, connect_kwargs=self.connect)
-        g.run(' && '.join(cmd), hide=True)
+        cmd = ' && '.join(cmd)
+        with ThreadPoolExecutor() as executor:
+            threads = [executor.submit(self._update_single, ip, cmd) for ip in ips]
+            join_with_progress_bar(threads, prefix='Updating nodes:')
+        
+    def _upload_config(self, i, workers, ip):
+        c = Connection(ip, user=AWS_USER, connect_kwargs=self.connect)
+        c.run(f'{CommandMaker.cleanup()} || true', hide=True)
+        c.put(PathMaker.committee_file(), '.')
+        c.put(PathMaker.workers_file(), '.')
+        c.put(PathMaker.primary_key_file(i), '.')
+        c.put(PathMaker.primary_network_key_file(i), '.')
+        for j in range(workers):
+            c.put(PathMaker.worker_key_file(
+                i*workers + j), '.')
+        c.put(PathMaker.parameters_file(), '.')
 
     def _config(self, hosts, node_parameters, bench_parameters, include_execution=True):
         Print.info('Generating configuration files...')
@@ -246,10 +265,10 @@ class Bench:
         else:
             workers = OrderedDict(
                 (x, OrderedDict(
-                    (worker_names[i*bench_parameters.workers + y], h) for y in range(bench_parameters.workers))
+                    (worker_names[i*bench_parameters.workers + y], h[y]) for y in range(bench_parameters.workers))
                  ) for i, (x, h) in enumerate(zip(primary_names, hosts))
             )
-
+        
         # 2 ports used per authority so add 2 * num authorities to base port
         worker_cache = WorkerCache(
             workers, self.settings.base_port + (2 * len(primary_names)))
@@ -257,22 +276,14 @@ class Bench:
         node_parameters.print(PathMaker.parameters_file())
 
         # Cleanup all nodes and upload configuration files.
-        primary_names = primary_names[:len(
-            primary_names)-bench_parameters.faults]
-        progress = progress_bar(
-            primary_names, prefix='Uploading config files:')
-        for i, name in enumerate(progress):
-            for ip in list(committee.ips(name) | worker_cache.ips(name)):
-                c = Connection(ip, user=AWS_USER, connect_kwargs=self.connect)
-                c.run(f'{CommandMaker.cleanup()} || true', hide=True)
-                c.put(PathMaker.committee_file(), '.')
-                c.put(PathMaker.workers_file(), '.')
-                c.put(PathMaker.primary_key_file(i), '.')
-                c.put(PathMaker.primary_network_key_file(i), '.')
-                for j in range(bench_parameters.workers):
-                    c.put(PathMaker.worker_key_file(
-                        i*bench_parameters.workers + j), '.')
-                c.put(PathMaker.parameters_file(), '.')
+        primary_names = primary_names[:len(primary_names)-bench_parameters.faults]
+        
+        with ThreadPoolExecutor() as executor:
+            upload_configs = [executor.submit(self._upload_config, i, bench_parameters.workers, ip) 
+                              for i, name in enumerate(primary_names) 
+                              for ip in list(committee.ips(name) | worker_cache.ips(name))]
+            join_with_progress_bar(upload_configs, prefix='Uploading config files:')
+                
 
         return (committee, worker_cache)
 
@@ -289,60 +300,91 @@ class Bench:
         Print.info('Booting clients...')
         workers_addresses = worker_cache.workers_addresses(faults)
         rate_share = ceil(rate / worker_cache.workers())
-        for i, addresses in enumerate(workers_addresses):
-            for (id, address) in addresses:
-                host = address.split(':')[1].strip("/")
-                cmd = CommandMaker.run_client(
-                    address,
-                    rate_share,
-                    skewness,
-                    [x for y in workers_addresses for _, x in y]
-                )
-                log_file = PathMaker.client_log_file(i, id)
-                self._background_run(host, cmd, log_file)
+        with ThreadPoolExecutor() as executor:
+            threads = []
+            for i, addresses in enumerate(workers_addresses):
+                for (id, address) in addresses:
+                    host = address.split(':')[1].strip("/")
+                    cmd = CommandMaker.run_client(
+                        address,
+                        rate_share,
+                        skewness,
+                        [x for y in workers_addresses for _, x in y]
+                    )
+                    log_file = PathMaker.client_log_file(i, id)
+                    threads.append(executor.submit(self._background_run, host, cmd, log_file))
+            join_with_progress_bar(threads, prefix='Running clients:')
 
         # Run the primaries (except the faulty ones).
         Print.info('Booting primaries...')
-        for i, address in enumerate(committee.primary_addresses(faults)):
-            host = address.split(':')[1].strip("/")
-            cmd = CommandMaker.run_primary(
-                PathMaker.primary_key_file(i),
-                PathMaker.primary_network_key_file(i),
-                PathMaker.worker_key_file(i),
-                PathMaker.committee_file(),
-                PathMaker.workers_file(),
-                PathMaker.db_path(i),
-                PathMaker.parameters_file(),
-                concurrency_level=concurrency_level,
-                debug=debug
-            )
-            log_file = PathMaker.primary_log_file(i)
-            self._background_run(host, cmd, log_file)
+        with ThreadPoolExecutor() as executor:
+            threads = []
+            for i, address in enumerate(committee.primary_addresses(faults)):
+                host = address.split(':')[1].strip("/")
+                cmd = CommandMaker.run_primary(
+                    PathMaker.primary_key_file(i),
+                    PathMaker.primary_network_key_file(i),
+                    PathMaker.worker_key_file(i),
+                    PathMaker.committee_file(),
+                    PathMaker.workers_file(),
+                    PathMaker.db_path(i),
+                    PathMaker.parameters_file(),
+                    concurrency_level=concurrency_level,
+                    debug=debug
+                )
+                log_file = PathMaker.primary_log_file(i)
+                threads.append(executor.submit(self._background_run, host, cmd, log_file))
+            join_with_progress_bar(threads, prefix='Running primaries:')
 
         # Run the workers (except the faulty ones).
         Print.info('Booting workers...')
-        for i, addresses in enumerate(workers_addresses):
-            for (id, address) in addresses:
-                host = address.split(':')[1].strip("/")
-                cmd = CommandMaker.run_worker(
-                    PathMaker.primary_key_file(i),
-                    PathMaker.primary_network_key_file(i),
-                    PathMaker.worker_key_file(i*bench_parameters.workers + id),
-                    PathMaker.committee_file(),
-                    PathMaker.workers_file(),
-                    PathMaker.db_path(i, id),
-                    PathMaker.parameters_file(),
-                    id,  # The worker's id.
-                    debug=debug
-                )
-                log_file = PathMaker.worker_log_file(i, id)
-                self._background_run(host, cmd, log_file)
-
+        with ThreadPoolExecutor() as executor:
+            threads = []
+            for i, addresses in enumerate(workers_addresses):
+                for (id, address) in addresses:
+                    host = address.split(':')[1].strip("/")
+                    cmd = CommandMaker.run_worker(
+                        PathMaker.primary_key_file(i),
+                        PathMaker.primary_network_key_file(i),
+                        PathMaker.worker_key_file(i*bench_parameters.workers + id),
+                        PathMaker.committee_file(),
+                        PathMaker.workers_file(),
+                        PathMaker.db_path(i, id),
+                        PathMaker.parameters_file(),
+                        id,  # The worker's id.
+                        debug=debug
+                    )
+                    log_file = PathMaker.worker_log_file(i, id)
+                    threads.append(executor.submit(self._background_run, host, cmd, log_file))
+            join_with_progress_bar(threads, prefix='Running workers:')
+            
         # Wait for all transactions to be processed.
         duration = bench_parameters.duration
         for _ in progress_bar(range(20), prefix=f'Running benchmark ({duration} sec):'):
             sleep(ceil(duration / 20))
         self.kill(hosts=hosts, delete_logs=False)
+        
+        
+    def _download_worker_logs(self, i, id, address):
+        host = address.split(':')[1].strip("/")
+        c = Connection(host, user=AWS_USER,
+                        connect_kwargs=self.connect)
+        c.get(
+            PathMaker.client_log_file(i, id),
+            local=PathMaker.client_log_file(i, id)
+        )
+        c.get(
+            PathMaker.worker_log_file(i, id),
+            local=PathMaker.worker_log_file(i, id)
+        )
+        
+    def _download_primary_logs(self, i, address):
+        host = address.split(':')[1].strip("/")
+        c = Connection(host, user=AWS_USER, connect_kwargs=self.connect)
+        c.get(
+            PathMaker.primary_log_file(i),
+            local=PathMaker.primary_log_file(i)
+        )
 
     def _logs(self, committee, worker_cache, faults, execution_model, concurrency_level):
         # Delete local logs (if any).
@@ -351,32 +393,17 @@ class Bench:
 
         # Download log files.
         workers_addresses = worker_cache.workers_addresses(faults)
-        progress = progress_bar(
-            workers_addresses, prefix='Downloading workers logs:')
-        for i, addresses in enumerate(progress):
-            for id, address in addresses:
-                host = address.split(':')[1].strip("/")
-                c = Connection(host, user=AWS_USER,
-                               connect_kwargs=self.connect)
-                c.get(
-                    PathMaker.client_log_file(i, id),
-                    local=PathMaker.client_log_file(i, id)
-                )
-                c.get(
-                    PathMaker.worker_log_file(i, id),
-                    local=PathMaker.worker_log_file(i, id)
-                )
+        with ThreadPoolExecutor() as executor:
+            worker_logs = [executor.submit(self._download_worker_logs, i, id, address) 
+                           for i, addresses in enumerate(workers_addresses) 
+                           for id, address in addresses]
+            join_with_progress_bar(worker_logs, prefix='Downloading workers logs:')
 
-        primary_addresses = committee.primary_addresses(faults)
-        progress = progress_bar(
-            primary_addresses, prefix='Downloading primaries logs:')
-        for i, address in enumerate(progress):
-            host = address.split(':')[1].strip("/")
-            c = Connection(host, user=AWS_USER, connect_kwargs=self.connect)
-            c.get(
-                PathMaker.primary_log_file(i),
-                local=PathMaker.primary_log_file(i)
-            )
+        primary_addresses = committee.primary_addresses(faults)       
+        with ThreadPoolExecutor() as executor:
+            primary_logs = [executor.submit(self._download_primary_logs, i, address) 
+                            for i, address in enumerate(primary_addresses)]
+            join_with_progress_bar(primary_logs, prefix='Downloading primaries logs:')
 
         # Parse logs and return the parser.
         Print.info('Parsing logs and computing performance...')
@@ -391,13 +418,14 @@ class Bench:
         except ConfigError as e:
             raise BenchError('Invalid nodes or bench parameters', e)
 
-        # Select which hosts to use.
-        selected_hosts = self._select_hosts(bench_parameters)
-        if not selected_hosts:
-            Print.warn('There are not enough instances available')
-            return
-
         for execution_model in bench_parameters.execution_model:
+            
+            # Select which hosts to use.
+            selected_hosts = self._select_hosts(bench_parameters)
+            print(selected_hosts)
+            if not selected_hosts:
+                Print.warn('There are not enough instances available')
+                return
 
             # Update nodes.
             try:

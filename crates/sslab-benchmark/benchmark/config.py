@@ -40,28 +40,25 @@ class WorkerCache:
         )
         assert all(isinstance(x, str)
                    for y in workers.values() for x in y.keys())
-        assert all(isinstance(x, list) and len(x) >=
+        assert all(isinstance(x, str) and len(x) >=
                    1 for y in workers.values() for x in y.values())
         assert all(
             isinstance(x, str) for z in workers.values() for y in z.values() for x in y
         )
-        assert len({len(x) for y in workers.values()
-                   for x in y.values()}) == 1
         assert isinstance(base_port, int) and base_port > 1024
 
         port = base_port
         self.json = {'workers': OrderedDict(), 'epoch': 0}
         for primary_name, worker_info in workers.items():
-            for worker_key, hosts in worker_info.items():
-                workers_addr = OrderedDict()
-                for j, host in enumerate(hosts):
-                    workers_addr[j] = {
-                        'name': worker_key,
-                        'worker_address': f'/ip4/{host}/udp/{port}',
-                        'transactions': f'/ip4/{host}/tcp/{port + 1}/http',
-                    }
-                    port += 2
-                self.json['workers'][primary_name] = workers_addr
+            workers_addr = OrderedDict()
+            for j, (worker_key, host) in enumerate(worker_info.items()):
+                workers_addr[j] = {
+                    'name': worker_key,
+                    'worker_address': f'/ip4/{host}/udp/{port}',
+                    'transactions': f'/ip4/{host}/tcp/{port + 1}/http',
+                }
+                port += 2
+            self.json['workers'][primary_name] = workers_addr
 
     def workers_addresses(self, faults=0):
         ''' Returns an ordered list of list of workers' addresses. '''

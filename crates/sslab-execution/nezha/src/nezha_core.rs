@@ -1,4 +1,4 @@
-use std::{sync::Arc, rc::Rc};
+use std::sync::Arc;
 use ethers_core::types::H256;
 use itertools::Itertools;
 use narwhal_types::BatchDigest;
@@ -189,7 +189,7 @@ pub struct ScheduledInfo {
 
 impl ScheduledInfo {
 
-    pub fn from(tx_list: hashbrown::HashMap<H256, Rc<Transaction>>, aborted_txs: Vec<Rc<Transaction>>) -> Self {
+    pub fn from(tx_list: hashbrown::HashMap<H256, Arc<Transaction>>, aborted_txs: Vec<Arc<Transaction>>) -> Self {
         let mut buffer = FastHashMap::default();
 
         // group by sequence.
@@ -221,9 +221,9 @@ impl ScheduledInfo {
         Self { scheduled_txs, aborted_txs }
     }
 
-    fn _unwrap(tx: Rc<Transaction>) -> Transaction {
-        Rc::try_unwrap(tx).unwrap_or_else(|tx| 
-            panic!("fail to unwrap transaction. (strong:{}, weak:{}", Rc::strong_count(&tx), Rc::weak_count(&tx))
+    fn _unwrap(tx: Arc<Transaction>) -> Transaction {
+        Arc::try_unwrap(tx).unwrap_or_else(|tx| 
+            panic!("fail to unwrap transaction. (strong:{}, weak:{}", Arc::strong_count(&tx), Arc::weak_count(&tx))
         )
     }
 

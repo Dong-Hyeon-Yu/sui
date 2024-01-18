@@ -15,6 +15,9 @@ sui-types.workspace = true
 narwhal-types.workspace = true
 sslab-execution.workspace = true
 evm.workspace = true
+num_cpus.workspace = true
+parking_lot.workspace = true
+# flurry = {version = "0.4.0", features = ["rayon"]}
 
 ethers-core = { version = "^2.0.0" }
 rayon = "1.8.0"

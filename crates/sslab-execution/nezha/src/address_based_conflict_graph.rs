@@ -1,7 +1,10 @@
-use std::{cell::{Cell, RefCell, Ref}, rc::Rc, collections::{BTreeMap, HashMap}};
+use std::{sync::Arc, collections::{BTreeMap, HashMap}};
 use ethers_core::types::{H256, H160};
 use evm::backend::{Apply, Log};
 use itertools::Itertools;
+
+use parking_lot::{RwLock, RwLockReadGuard};
+use rayon::prelude::*;
 
 use super::{types::SimulatedTransaction, nezha_core::ScheduledInfo};
 
@@ -11,8 +14,8 @@ pub(crate) type FastHashSet<K> = hashbrown::HashSet<K, nohash_hasher::BuildNoHas
 
 pub struct AddressBasedConflictGraph {
     addresses: hashbrown::HashMap<H256, Address>,
-    tx_list: hashbrown::HashMap<H256, Rc<Transaction>>, // tx_id -> transaction
-    aborted_txs: Vec<Rc<Transaction>>, // optimization for reordering.
+    tx_list: hashbrown::HashMap<H256, Arc<Transaction>>, // tx_id -> transaction
+    aborted_txs: Vec<Arc<Transaction>>, // optimization for reordering.
 }
 
 impl AddressBasedConflictGraph {
@@ -32,7 +35,7 @@ impl AddressBasedConflictGraph {
 
         for tx in simulation_result {
             let (id, rw_set, effects, logs) = tx.deconstruct();
-            let tx_metadata = &Rc::new(Transaction::new(id, effects, logs));
+            let tx_metadata = &Arc::new(Transaction::new(id, effects, logs));
 
             let (read_set, write_set) = rw_set.unwrap().destruct();
             let mut read_units = Self::_convert_to_units(tx_metadata, UnitType::Read, read_set);
@@ -43,12 +46,109 @@ impl AddressBasedConflictGraph {
 
             tx_metadata.set_write_units(write_units.clone());
 
-            acg.tx_list.insert(tx_metadata.id(), Rc::clone(tx_metadata));
+            acg.tx_list.insert(tx_metadata.id(), Arc::clone(tx_metadata));
             acg._add_units_to_address([read_units, write_units].concat());
         }
 
         acg
     }
+
+    pub async fn par_construct(simulation_result: Vec<SimulatedTransaction>) -> Self {
+        let num_of_txn = simulation_result.len();
+        let ncpu = num_cpus::get();
+
+        let (send, recv) = tokio::sync::oneshot::channel();
+        rayon::spawn(move || {
+            let mut sub_graphs = simulation_result
+                .par_chunks(std::cmp::max(num_of_txn / ncpu, 1))
+                .map(|chunk| {
+                    Self::construct(chunk.to_vec())
+                })
+                .collect::<Vec<Self>>();
+
+            while sub_graphs.len() > 1 {
+                sub_graphs = sub_graphs
+                    .into_par_iter()
+                    .chunks(2)
+                    .map(|chuck| {
+                        if chuck.len() == 1 {
+                            chuck.into_iter().next().unwrap()
+                        } else {
+                            let (mut left, right) = chuck.into_iter().next_tuple().unwrap();
+                            left.merge(right);
+                            left
+                        }
+                    })
+                    .collect::<Vec<Self>>();
+            }
+            
+            let result = sub_graphs.into_iter().next().unwrap();
+            let _ = send.send(result);
+        });
+
+        recv.await.unwrap()
+    }
+
+    // pub async fn concurrent_construct(simulation_result: Vec<SimulatedTransaction>) -> Self {
+    //     let num_of_txn = simulation_result.len();
+    //     let ncpu = num_cpus::get();
+
+    //     Self::_devide_into_chunks(simulation_result, ncpu).await
+    // }
+
+    // async fn _devide_into_chunks(mut list: Vec<SimulatedTransaction>, num_threads: usize) -> Box<Self> {
+    //     if num_threads > 1 {
+
+    //         let left_num_threads = num_threads / 2;
+    //         let pivot: usize = list.len() / 2;
+    
+    //         let right_half = list.split_off(pivot);
+
+    //         let left = async {
+    //             Self::_devide_into_chunks(list, left_num_threads).await
+    //         };
+    //         let right = async{
+    //             Self::_devide_into_chunks(right_half, num_threads - left_num_threads).await
+    //         };
+
+    //         let (mut left, right) = tokio::join!(left, right);
+
+    //         left.merge(*right);
+    //         left
+    //     } else {
+    //         Box::new(Self::construct(list))
+    //     }
+    // }
+
+    // fn _devide_into_chunks(mut list: Vec<SimulatedTransaction>, num_threads: u16) -> Self {
+    //     if num_threads > 1 {
+    //         let left_num_threads = num_threads / 2;
+    //         let pivot: usize = list.len() / 2;
+    
+    //         let right_half = list.split_off(pivot);
+
+    //         let (mut left, right) = thread::scope(|s| {
+    //             let left = s.spawn(|| {
+    //                 Self::_devide_into_chunks(list, left_num_threads)
+    //             });
+
+    //             let right = s.spawn(|| {
+    //                 Self::_devide_into_chunks(right_half, num_threads - left_num_threads)
+    //             });
+
+    //             let left = left.join().unwrap();
+    //             let right = right.join().unwrap();
+                
+    //             (left, right)
+    //         });
+
+
+    //         left.merge(right);
+    //         left
+    //     } else {
+    //         Self::construct(list)
+    //     }
+    // }
 
 
     pub fn hierarchcial_sort(&mut self) -> &mut Self {  //? Radix sort?
@@ -137,7 +237,7 @@ impl AddressBasedConflictGraph {
     }
 
 
-    fn _add_units_to_address(&mut self, units: Vec<Rc<Unit>>) {
+    fn _add_units_to_address(&mut self, units: Vec<Arc<Unit>>) {
         
         units.into_iter()
             .for_each(|unit| {
@@ -155,7 +255,7 @@ impl AddressBasedConflictGraph {
     }
 
 
-    fn _convert_to_units(tx: &Rc<Transaction>, unit_type: UnitType, read_or_write_set: BTreeMap<H160, HashMap<H256, H256>>) -> Vec<Rc<Unit>> {
+    fn _convert_to_units(tx: &Arc<Transaction>, unit_type: UnitType, read_or_write_set: BTreeMap<H160, HashMap<H256, H256>>) -> Vec<Arc<Unit>> {
         read_or_write_set
             .into_iter()
             .map(|(_, state_items)| {
@@ -167,7 +267,7 @@ impl AddressBasedConflictGraph {
                         // hasher.update(address.as_bytes());
                         // hasher.update(key.as_bytes());
                         // let key = H256::from_slice(hasher.finalize().as_ref())
-                        Rc::new(Unit::new(Rc::clone(tx), unit_type.clone(), key))
+                        Arc::new(Unit::new(Arc::clone(tx), unit_type.clone(), key))
                     })
                     .collect_vec()
             })
@@ -175,7 +275,7 @@ impl AddressBasedConflictGraph {
             .collect_vec()
     }
 
-    fn _set_wr_dependencies(read_units: &mut Vec<Rc<Unit>>, write_units: &mut Vec<Rc<Unit>>) {
+    fn _set_wr_dependencies(read_units: &mut Vec<Arc<Unit>>, write_units: &mut Vec<Arc<Unit>>) {
         // 동일한 tx의 read/write set 을 넘겨받기 때문에, 모든 write->read dependency 추가해야함. (단 같은 address 내에서는 제외)
         write_units.into_iter().for_each(|write_unit| {
             let address = write_unit.address();
@@ -192,7 +292,7 @@ impl AddressBasedConflictGraph {
         });
     }
 
-    fn _aborted_txs(&mut self) -> Vec<Rc<Transaction>> {
+    fn _aborted_txs(&mut self) -> Vec<Arc<Transaction>> {
         let aborted_tx_indice = self.tx_list.iter()
             .filter(|(_, tx)| tx.aborted())
             .map(|(tx_id, _)| tx_id.to_owned())
@@ -206,16 +306,32 @@ impl AddressBasedConflictGraph {
 
         self.aborted_txs.clone()
     }
+
+    fn merge(&mut self, other: Self)  {
+        other.addresses
+            .iter()
+            .for_each(|(addr, address)| {
+                match self.addresses.get_mut(addr) {
+                    Some(my_address) => {
+                        my_address.merge(address.to_owned());
+                    },
+                    None => {
+                        self.addresses.insert(*addr, address.to_owned());
+                    }
+                }
+        });
+        self.tx_list.extend(other.tx_list);
+    }
 }
 
 
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Transaction {
     tx_id: H256, 
-    sequence: Cell<u64>,  // 0 represents that this transaction havn't been ordered yet.
-    aborted: Cell<bool>,
-    write_units: RefCell<Vec<Rc<Unit>>>,
+    sequence: RwLock<u64>,  // 0 represents that this transaction havn't been ordered yet.
+    aborted: RwLock<bool>,
+    write_units: RwLock<Vec<Arc<Unit>>>,
 
     effects: Vec<Apply>,
     logs: Vec<Log>,
@@ -223,7 +339,14 @@ pub struct Transaction {
 
 impl Transaction {
     fn new(tx_id: H256, effects: Vec<Apply>, logs: Vec<Log>) -> Self {
-        Self { tx_id, sequence: Cell::new(0), aborted: Cell::new(false), write_units: RefCell::new(Vec::new()), effects, logs }
+        Self { 
+            tx_id,
+            sequence: RwLock::new(0), 
+            aborted: RwLock::new(false), 
+            write_units: RwLock::new(Vec::new()), 
+            effects, 
+            logs 
+        }
     }
 
     pub fn id(&self) -> H256 {
@@ -231,69 +354,71 @@ impl Transaction {
     }
 
     pub fn sequence(&self) -> u64 {
-        self.sequence.get()
+        self.sequence.read().to_owned()
     }
 
     pub fn simulation_result(self) -> (Vec<Apply>, Vec<Log>) {
         (self.effects, self.logs)
     }
 
-    fn set_write_units(&self, write_units: Vec<Rc<Unit>>) {
-        write_units.into_iter().for_each(|u| self.write_units.borrow_mut().push(u));
+    fn set_write_units(&self, write_units: Vec<Arc<Unit>>) {
+        let mut my_units = self.write_units.write();
+        write_units.into_iter().for_each(|u| my_units.push(u));
     }
 
     fn clear_write_units(&self) {
-        self.write_units.borrow_mut().clear();
-        self.write_units.borrow_mut().shrink_to_fit();
+        let mut my_units = self.write_units.write();
+        my_units.clear();
+        my_units.shrink_to_fit();
     }
 
     fn abort(&self) {
-        self.aborted.set(true);
+        *self.aborted.write() = true;
     }
 
     fn aborted(&self) -> bool {
-        self.aborted.get()
+        self.aborted.read().to_owned()
     }
 
     fn set_sequence(&self, sequence: u64) {
-        self.sequence.set(sequence);
+        *self.sequence.write() = sequence;
     }
 
     fn is_sorted(&self) -> bool {
-        self.sequence.get() != 0
+        *self.sequence.read() != 0
     }
 
     fn reorderable(&self) -> bool {
-        self._is_write_only() && (self.write_units.borrow().len() > 1)
+        self._is_write_only() && (self.write_units.read().len() > 1)
     }
 
     fn _is_write_only(&self) -> bool {
-        self.write_units.borrow().iter().all(|unit| unit.degree() == 0 && !unit.co_located())
+        self.write_units.read().iter().all(|unit| unit.degree() == 0 && !unit.co_located())
     }
 
-    fn write_units(&self) -> Ref<Vec<Rc<Unit>>> {
-        self.write_units.borrow()
+    fn write_units(&self) -> RwLockReadGuard<Vec<Arc<Unit>>> {
+        self.write_units.read()
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Copy)]
 enum UnitType {
     Read,
     Write,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 struct Unit {
-    tx: Rc<Transaction>,
+    tx: Arc<Transaction>,
     unit_type: UnitType,
     address: H256,
-    wr_dependencies: Cell<u32>, // Vec<Rc<Unit>> is not necessary, but the degree is only used for sorting.  
-    co_located: Cell<bool>,  // True if the read unit and write unit are in the same address.
+    wr_dependencies: RwLock<u32>, // Vec<Arc<Unit>> is not necessary, but the degree is only used for sorting.  
+    co_located: RwLock<bool>  // True if the read unit and write unit are in the same address.
 }
 
 impl Unit {
-    fn new(tx: Rc<Transaction>, unit_type: UnitType, address: H256) -> Self {
-        Self { tx, unit_type, address, wr_dependencies: Cell::new(0), co_located: Cell::new(false) }
+    fn new(tx: Arc<Transaction>, unit_type: UnitType, address: H256) -> Self {
+        Self { tx, unit_type, address, wr_dependencies: RwLock::new(0), co_located: RwLock::new(false) }
     }
 
     fn unit_type(&self) -> &UnitType {
@@ -305,11 +430,12 @@ impl Unit {
     }
 
     fn degree(&self) -> u32 {
-        self.wr_dependencies.get()
+        *self.wr_dependencies.read()
     }
 
     fn add_dependency(&self) {
-        self.wr_dependencies.set(self.wr_dependencies.get() + 1);
+        let mut degree = self.wr_dependencies.write();
+        *degree += 1;
     }
 
     fn is_sorted(&self) -> bool {
@@ -329,17 +455,17 @@ impl Unit {
     }
 
     fn set_co_located(&self) {
-        self.co_located.set(true);
+        *self.co_located.write() = true;
     }
 
     fn co_located(&self) -> bool {
-        self.co_located.get()
+        *self.co_located.read()
     }
 }
 
 #[derive(Clone, Debug)]
 struct ReadUnits {
-    units: Vec<Rc<Unit>>,
+    units: Vec<Arc<Unit>>,
     max_seq: u64,
 }
 
@@ -351,7 +477,7 @@ impl ReadUnits {
         }
     }
 
-    fn push(&mut self, unit: Rc<Unit>) {
+    fn push(&mut self, unit: Arc<Unit>) {
         self.units.push(unit);
     }
 
@@ -360,7 +486,7 @@ impl ReadUnits {
 
         /* (Algorithm2) line 3*/
         let units = std::mem::replace(&mut self.units, Vec::new());
-        let (sorted, remaining): (Vec<Rc<Unit>>, Vec<Rc<Unit>>) = units.into_iter().partition(|unit| unit.is_sorted());
+        let (sorted, remaining): (Vec<Arc<Unit>>, Vec<Arc<Unit>>) = units.into_iter().partition(|unit| unit.is_sorted());
 
         let min_seq;
 
@@ -396,7 +522,7 @@ impl ReadUnits {
 
 #[derive(Clone, Debug)]
 struct WriteUnits {
-    units: Vec<Rc<Unit>>,
+    units: Vec<Arc<Unit>>,
     max_seq: u64
 }
 
@@ -408,7 +534,7 @@ impl WriteUnits {
         }
     }
 
-    fn push(&mut self, unit: Rc<Unit>) {
+    fn push(&mut self, unit: Arc<Unit>) {
         self.units.push(unit);
     }
 
@@ -417,7 +543,7 @@ impl WriteUnits {
 
         /* (Algorithm2) line 16 */
         let units = std::mem::replace(&mut self.units, Vec::new());
-        let (sorted, mut remaining): (Vec<Rc<Unit>>, Vec<Rc<Unit>>) = units.into_iter().partition(|unit| unit.is_sorted());
+        let (sorted, mut remaining): (Vec<Arc<Unit>>, Vec<Arc<Unit>>) = units.into_iter().partition(|unit| unit.is_sorted());
 
         /* (Algorithm2) line 17 ~ 19 */
         sorted.iter().for_each(|unit|{
@@ -492,7 +618,7 @@ impl Address {
         &self.address
     }
 
-    fn add_unit(&mut self, unit: Rc<Unit>) {
+    fn add_unit(&mut self, unit: Arc<Unit>) {
 
         match unit.unit_type() {
             UnitType::Read => { 
@@ -512,5 +638,12 @@ impl Address {
 
     fn sort_write_units(&mut self) {
         self.write_units.sort(&mut self.read_units);
+    }
+
+    fn merge(&mut self, other: Self) {
+        self.in_degree += other.in_degree;
+        self.out_degree += other.out_degree;
+        self.read_units.units.extend(other.read_units.units);
+        self.write_units.units.extend(other.write_units.units);
     }
 }

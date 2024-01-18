@@ -61,10 +61,11 @@ fn nezha_test(input_txs: Vec<SimulatedTransaction>, answer: Vec<Vec<u64>>, print
 }
 
 async fn nezha_par_test(input_txs: Vec<SimulatedTransaction>, answer: Vec<Vec<u64>>, print_result: bool) {
-    let scheduled_info = AddressBasedConflictGraph::par_construct(input_txs.clone()).await
-            .hierarchcial_sort()
-            .reorder()
-            .extract_schedule();
+    let mut acg = AddressBasedConflictGraph::par_construct(input_txs.clone()).await;
+    acg
+        .hierarchcial_sort()
+        .reorder();
+    let scheduled_info = acg.extract_schedule();
     
     if print_result {
         println!("Scheduled Transactions:");

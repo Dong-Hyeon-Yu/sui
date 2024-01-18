@@ -11,7 +11,6 @@ use sslab_execution::{
 use tokio::time::Instant;
 use tracing::{info, debug, warn, error};
 
-
 use crate::{SimulationResult, AddressBasedConflictGraph};
 
 use super::{

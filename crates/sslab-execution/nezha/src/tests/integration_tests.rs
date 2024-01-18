@@ -78,7 +78,7 @@ async fn test_par_smallbank() {
     //given
     let skewness = 0.6;
     let batch_size = 200;
-    let block_concurrency = 30;
+    let block_concurrency = 2;
     let mut consensus_output = Vec::new();
     for _ in 0..block_concurrency {
         let mut tmp = Vec::new();
@@ -97,10 +97,11 @@ async fn test_par_smallbank() {
 
 
     now = Instant::now();
-    let scheduled_info = AddressBasedConflictGraph::par_construct(rw_sets).await
+    let mut acg = AddressBasedConflictGraph::par_construct(rw_sets).await;
+    acg
         .hierarchcial_sort()
-        .reorder()
-        .extract_schedule();
+        .reorder();
+    let scheduled_info = acg.extract_schedule();
     time = now.elapsed().as_millis();
     println!("Scheduling took {} ms.", time);
 

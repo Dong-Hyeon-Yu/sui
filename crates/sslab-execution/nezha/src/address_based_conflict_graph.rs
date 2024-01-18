@@ -12,6 +12,7 @@ use super::{types::SimulatedTransaction, nezha_core::ScheduledInfo};
 pub(crate) type FastHashMap<K, V> = hashbrown::HashMap<K, V, nohash_hasher::BuildNoHashHasher<K>>;
 pub(crate) type FastHashSet<K> = hashbrown::HashSet<K, nohash_hasher::BuildNoHashHasher<K>>;
 
+
 pub struct AddressBasedConflictGraph {
     addresses: hashbrown::HashMap<H256, Address>,
     tx_list: hashbrown::HashMap<H256, Arc<Transaction>>, // tx_id -> transaction
@@ -38,8 +39,8 @@ impl AddressBasedConflictGraph {
             let tx_metadata = &Arc::new(Transaction::new(id, effects, logs));
 
             let (read_set, write_set) = rw_set.unwrap().destruct();
-            let mut read_units = Self::_convert_to_units(tx_metadata, UnitType::Read, read_set);
-            let mut write_units = Self::_convert_to_units(tx_metadata, UnitType::Write, write_set);
+            let mut write_units = Self::_convert_to_units(tx_metadata, UnitType::Write, write_set, Some(&read_set));
+            let mut read_units = Self::_convert_to_units(tx_metadata, UnitType::Read, read_set, None);
 
             // before inserting the units, wr-dependencies must be created b/w RW units.
             Self::_set_wr_dependencies(&mut read_units, &mut write_units);
@@ -88,68 +89,7 @@ impl AddressBasedConflictGraph {
 
         recv.await.unwrap()
     }
-
-    // pub async fn concurrent_construct(simulation_result: Vec<SimulatedTransaction>) -> Self {
-    //     let num_of_txn = simulation_result.len();
-    //     let ncpu = num_cpus::get();
-
-    //     Self::_devide_into_chunks(simulation_result, ncpu).await
-    // }
-
-    // async fn _devide_into_chunks(mut list: Vec<SimulatedTransaction>, num_threads: usize) -> Box<Self> {
-    //     if num_threads > 1 {
-
-    //         let left_num_threads = num_threads / 2;
-    //         let pivot: usize = list.len() / 2;
     
-    //         let right_half = list.split_off(pivot);
-
-    //         let left = async {
-    //             Self::_devide_into_chunks(list, left_num_threads).await
-    //         };
-    //         let right = async{
-    //             Self::_devide_into_chunks(right_half, num_threads - left_num_threads).await
-    //         };
-
-    //         let (mut left, right) = tokio::join!(left, right);
-
-    //         left.merge(*right);
-    //         left
-    //     } else {
-    //         Box::new(Self::construct(list))
-    //     }
-    // }
-
-    // fn _devide_into_chunks(mut list: Vec<SimulatedTransaction>, num_threads: u16) -> Self {
-    //     if num_threads > 1 {
-    //         let left_num_threads = num_threads / 2;
-    //         let pivot: usize = list.len() / 2;
-    
-    //         let right_half = list.split_off(pivot);
-
-    //         let (mut left, right) = thread::scope(|s| {
-    //             let left = s.spawn(|| {
-    //                 Self::_devide_into_chunks(list, left_num_threads)
-    //             });
-
-    //             let right = s.spawn(|| {
-    //                 Self::_devide_into_chunks(right_half, num_threads - left_num_threads)
-    //             });
-
-    //             let left = left.join().unwrap();
-    //             let right = right.join().unwrap();
-                
-    //             (left, right)
-    //         });
-
-
-    //         left.merge(right);
-    //         left
-    //     } else {
-    //         Self::construct(list)
-    //     }
-    // }
-
 
     pub fn hierarchcial_sort(&mut self) -> &mut Self {  //? Radix sort?
 
@@ -255,10 +195,10 @@ impl AddressBasedConflictGraph {
     }
 
 
-    fn _convert_to_units(tx: &Arc<Transaction>, unit_type: UnitType, read_or_write_set: BTreeMap<H160, HashMap<H256, H256>>) -> Vec<Arc<Unit>> {
+    fn _convert_to_units(tx: &Arc<Transaction>, unit_type: UnitType, read_or_write_set: BTreeMap<H160, HashMap<H256, H256>>, read_set: Option<&BTreeMap<H160, HashMap<H256, H256>>>) -> Vec<Arc<Unit>> {
         read_or_write_set
             .into_iter()
-            .map(|(_, state_items)| {
+            .map(|(contract_addr, state_items)| {
 
                 state_items.into_iter()
                     .map(|(key, _)| {
@@ -267,7 +207,17 @@ impl AddressBasedConflictGraph {
                         // hasher.update(address.as_bytes());
                         // hasher.update(key.as_bytes());
                         // let key = H256::from_slice(hasher.finalize().as_ref())
-                        Arc::new(Unit::new(Arc::clone(tx), unit_type.clone(), key))
+
+                        let co_locate = if let Some(read_set) = read_set {
+                            match read_set.get(&contract_addr) {
+                                Some(states) => {
+                                    states.get(&key).is_some()
+                                },
+                                None => false
+                            }
+                        } else { false };
+
+                        Arc::new(Unit::new(Arc::clone(tx), unit_type.clone(), key, co_locate))
                     })
                     .collect_vec()
             })
@@ -284,9 +234,6 @@ impl AddressBasedConflictGraph {
                 if read_unit.address() != address {
                     read_unit.add_dependency();
                     write_unit.add_dependency();
-                } else {
-                    read_unit.set_co_located();
-                    write_unit.set_co_located();
                 }
             });
         });
@@ -413,12 +360,12 @@ struct Unit {
     unit_type: UnitType,
     address: H256,
     wr_dependencies: RwLock<u32>, // Vec<Arc<Unit>> is not necessary, but the degree is only used for sorting.  
-    co_located: RwLock<bool>  // True if the read unit and write unit are in the same address.
+    co_located: bool  // True if the read unit and write unit are in the same address.
 }
 
 impl Unit {
-    fn new(tx: Arc<Transaction>, unit_type: UnitType, address: H256) -> Self {
-        Self { tx, unit_type, address, wr_dependencies: RwLock::new(0), co_located: RwLock::new(false) }
+    fn new(tx: Arc<Transaction>, unit_type: UnitType, address: H256, co_located: bool) -> Self {
+        Self { tx, unit_type, address, wr_dependencies: RwLock::new(0), co_located }
     }
 
     fn unit_type(&self) -> &UnitType {
@@ -454,12 +401,8 @@ impl Unit {
         self.tx.abort();
     }
 
-    fn set_co_located(&self) {
-        *self.co_located.write() = true;
-    }
-
     fn co_located(&self) -> bool {
-        *self.co_located.read()
+        self.co_located
     }
 }
 

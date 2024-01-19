@@ -15,7 +15,7 @@ use crate::{SimulationResult, AddressBasedConflictGraph};
 
 use super::{
     types::SimulatedTransaction, 
-    address_based_conflict_graph::{Transaction, FastHashMap}
+    address_based_conflict_graph::Transaction,
 };
 
 #[async_trait::async_trait]
@@ -131,7 +131,7 @@ impl ConcurrencyLevelManager {
                     match crate::evm_utils::simulate_tx(tx, &snapshot) {
                         Ok(Some((effect, log, rw_set))) => {
                             
-                            Some(SimulatedTransaction::new(tx.digest(), Some(rw_set), effect, log))
+                            Some(SimulatedTransaction::new(0, tx.digest(), Some(rw_set), effect, log))
                         },
                         _ => {
                             warn!("fail to execute a transaction {}", tx.id());
@@ -189,28 +189,27 @@ pub struct ScheduledInfo {
 impl ScheduledInfo {
 
     pub fn from(tx_list: hashbrown::HashMap<H256, Arc<Transaction>>, aborted_txs: Vec<Arc<Transaction>>) -> Self {
-        let mut buffer = FastHashMap::default();
 
         // group by sequence.
-        tx_list.into_iter()
-            .for_each(|(_, tx)| {
+        let mut list = tx_list.into_par_iter()
+            .map(|(_, tx)| {
                 let tx = Self::_unwrap(tx);
                 let tx_id = tx.id();
                 let sequence = tx.sequence().to_owned();
                 let (effects, logs) = tx.simulation_result();
 
-                let tx: SimulatedTransaction = SimulatedTransaction::new(tx_id, None, effects, logs);
-                buffer.entry(sequence).or_insert_with(Vec::new)
-                    .push(tx);
-            });
+                SimulatedTransaction::new(sequence, tx_id, None, effects, logs)
+            })
+            .collect::<Vec<SimulatedTransaction>>();
 
         // sort groups by sequence.
-        let scheduled_txs = buffer.keys().sorted()
-            .map(|seq| {
-                buffer.get(seq).unwrap().to_owned()
-            })
-            .collect_vec();
-        let aborted_txs = aborted_txs.into_iter().map(|tx| tx.id()).collect_vec();
+        list.sort_unstable_by_key(|tx| tx.seq());
+        let mut scheduled_txs = Vec::<Vec<SimulatedTransaction>>::new(); 
+        for (_key, txns) in &list.into_iter().group_by(|tx| tx.seq()) {
+            scheduled_txs.push(txns.collect_vec());
+        }
+        
+        let aborted_txs = aborted_txs.into_par_iter().map(|tx| tx.id()).collect::<Vec<H256>>();
         
         let mut count=0;
         scheduled_txs.iter().for_each(|vec| count += vec.len());

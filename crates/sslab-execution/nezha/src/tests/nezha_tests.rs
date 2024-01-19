@@ -16,7 +16,7 @@ fn transaction_with_rw(tx_id: u64, read_addr: u64, write_addr: u64) -> Simulated
         H160::from_low_u64_be(CONTRACT_ADDR), 
         H256::from_low_u64_be(write_addr), 
         H256::from_low_u64_be(1));
-    SimulatedTransaction::new(H256::from_low_u64_be(tx_id), Some(set), Vec::new(), Vec::new())
+    SimulatedTransaction::new(0, H256::from_low_u64_be(tx_id), Some(set), Vec::new(), Vec::new())
 }
 
 fn transaction_with_multiple_rw(tx_id: u64, read_addr: Vec<u64>, write_addr: Vec<u64>) -> SimulatedTransaction {
@@ -33,7 +33,7 @@ fn transaction_with_multiple_rw(tx_id: u64, read_addr: Vec<u64>, write_addr: Vec
             H256::from_low_u64_be(*addr), 
             H256::from_low_u64_be(1));
     });
-    SimulatedTransaction::new(H256::from_low_u64_be(tx_id), Some(set), Vec::new(), Vec::new())
+    SimulatedTransaction::new(0, H256::from_low_u64_be(tx_id), Some(set), Vec::new(), Vec::new())
 }
 
 fn nezha_test(input_txs: Vec<SimulatedTransaction>, answer: Vec<Vec<u64>>, print_result: bool) {
@@ -65,7 +65,7 @@ async fn nezha_par_test(input_txs: Vec<SimulatedTransaction>, answer: Vec<Vec<u6
     acg
         .hierarchcial_sort()
         .reorder();
-    let scheduled_info = acg.extract_schedule();
+    let scheduled_info = acg.par_extract_schedule().await;
     
     if print_result {
         println!("Scheduled Transactions:");

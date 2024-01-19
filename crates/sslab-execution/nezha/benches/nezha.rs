@@ -150,7 +150,7 @@ fn block_concurrency_scheduling(c: &mut Criterion) {
                         
 
                         let now = tokio::time::Instant::now();
-                        let _result = acg.extract_schedule();
+                        let _result = acg.par_extract_schedule().await;
                         let extraction = now.elapsed().as_micros() as f64/1000f64;
                         
                         metrics.write().unwrap().push((construction, sorting, reordering, extraction))

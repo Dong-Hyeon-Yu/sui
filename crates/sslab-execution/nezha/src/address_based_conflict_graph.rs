@@ -9,7 +9,7 @@ use rayon::prelude::*;
 use super::{types::SimulatedTransaction, nezha_core::ScheduledInfo};
 
 
-pub(crate) type FastHashMap<K, V> = hashbrown::HashMap<K, V, nohash_hasher::BuildNoHashHasher<K>>;
+// pub(crate) type FastHashMap<K, V> = hashbrown::HashMap<K, V, nohash_hasher::BuildNoHashHasher<K>>;
 pub(crate) type FastHashSet<K> = hashbrown::HashSet<K, nohash_hasher::BuildNoHashHasher<K>>;
 
 
@@ -145,6 +145,24 @@ impl AddressBasedConflictGraph {
         self.addresses.shrink_to_fit();
 
         ScheduledInfo::from(tx_list, aborted_txs)
+    }
+
+    pub async fn par_extract_schedule(&mut self) -> ScheduledInfo {
+        let tx_list = std::mem::replace(&mut self.tx_list, hashbrown::HashMap::default());
+        let aborted_txs = std::mem::replace(&mut self.aborted_txs, Vec::new());
+
+        self.addresses.clear();
+        self.addresses.shrink_to_fit();
+
+        let (send, recv) = tokio::sync::oneshot::channel();
+        rayon::spawn(move || {
+            tx_list.par_iter().for_each(|(_, tx)| tx.clear_write_units());
+            aborted_txs.par_iter().for_each(|tx| tx.clear_write_units());
+
+            let result = ScheduledInfo::from(tx_list, aborted_txs);
+            let _ = send.send(result);
+        });
+        recv.await.unwrap()
     }
 
 

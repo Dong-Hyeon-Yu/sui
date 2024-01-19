@@ -78,7 +78,7 @@ async fn test_par_smallbank() {
     //given
     let skewness = 0.6;
     let batch_size = 200;
-    let block_concurrency = 2;
+    let block_concurrency = 30;
     let mut consensus_output = Vec::new();
     for _ in 0..block_concurrency {
         let mut tmp = Vec::new();
@@ -101,7 +101,7 @@ async fn test_par_smallbank() {
     acg
         .hierarchcial_sort()
         .reorder();
-    let scheduled_info = acg.extract_schedule();
+    let scheduled_info = acg.par_extract_schedule().await;
     time = now.elapsed().as_millis();
     println!("Scheduling took {} ms.", time);
 

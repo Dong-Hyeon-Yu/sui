@@ -37,7 +37,8 @@ sslab-execution = {workspace = true, features = ["blockstm"]}
 evm = {workspace = true, features = ["mvcc"] }
 
 [dev-dependencies]
-criterion = "0.5.1"
+criterion = {workspace = true, features = ["async_tokio", "default"]}
+tokio.workspace = true
 rand = "0.8.3"
 proptest = "1.0.0"
 proptest-derive = "0.4.0"

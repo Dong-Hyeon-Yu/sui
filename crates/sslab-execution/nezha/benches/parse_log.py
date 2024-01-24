@@ -5,16 +5,7 @@ import sys
 MICRO = "µs"
 MILLI = "ms"
 
-def _parse_criterion(log):
-    tmp = findall(r'time:   \[\d+\.\d+ [µ|m]s (\d+\.\d+) ([µ|m]s) \d+\.\d+ [µ|m]s\]', log)
-    
-    total = []
-    for duration, unit in tmp:
-        duration = float(duration)
-        if unit == MICRO:
-            duration /= 1000
-        total.append(duration)
-        
+def _parse_scheduling(log): 
     tmp = findall(r'ACG construct: (\d+\.\d+)', log)
     construct = [float(t) for t in tmp]
     
@@ -27,31 +18,82 @@ def _parse_criterion(log):
     tmp = findall(r'Extract schedule: (\d+\.\d+)', log)
     extraction = [float(t) for t in tmp]
         
-    return total, construct, sort, reorder, extraction
+    return construct, sort, reorder, extraction
+
+def _parse_effective_throughput(log):
+    tmp = findall(r'committed: (\d+\.\d+)', log)
+    committed = [float(t) for t in tmp]
+    
+    return committed
+
+def _parse_total(log):
+    tmp = findall(r'time:   \[\d+\.\d+ [µ|m]s (\d+\.\d+) ([µ|m]s) \d+\.\d+ [µ|m]s\]', log)
+    
+    total = []
+    for duration, unit in tmp:
+        duration = float(duration)
+        if unit == MICRO:
+            duration /= 1000
+        total.append(duration)
+        
+    return total
+        
+def _parse_nezha(log):
+    tmp = findall(r'Simulation: (\d+\.\d+)', log)
+    simulation = [float(t) for t in tmp]
+    
+    tmp = findall(r'Scheduling: (\d+\.\d+)', log)
+    scheduling = [float(t) for t in tmp]
+    
+    tmp = findall(r'Commit: (\d+\.\d+)', log)
+    commit = [float(t) for t in tmp]
+    
+    return simulation, scheduling, commit
 
 def result(log):
     
-    total, construct, sort, reorder, extraction = _parse_criterion(log)
-    
+    total = _parse_total(log)
     result = "[total]\n"
     for duration in total:
         result += f"{duration} \n"
         
-    result += "\n[ACG construction]\n"
-    for duration in construct:
-        result += f"{duration} \n"
+    simulation, scheduling, commit = _parse_nezha(log)
+    if simulation:
+        result += "\n[Simulation]\n"
+        for duration in simulation:
+            result += f"{duration} \n"
         
-    result += "\n[Hierarchical sorting]\n"
-    for duration in sort:
-        result += f"{duration} \n"
+        result += "\n[Scheduling]\n"
+        for duration in scheduling:
+            result += f"{duration} \n"
+            
+        result += "\n[Commit]\n"
+        for duration in commit:
+            result += f"{duration} \n"
+    
+    construct, sort, reorder, extraction = _parse_scheduling(log)
+    if construct:
+        result += "\n[ACG construction]\n"
+        for duration in construct:
+            result += f"{duration} \n"
         
-    result += "\n[Reordering]\n"
-    for duration in reorder:
-        result += f"{duration} \n"
-        
-    result += "\n[Schedule extraction]\n"
-    for duration in extraction:
-        result += f"{duration} \n"
+        result += "\n[Hierarchical sorting]\n"
+        for duration in sort:
+            result += f"{duration} \n"
+            
+        result += "\n[Reordering]\n"
+        for duration in reorder:
+            result += f"{duration} \n"
+            
+        result += "\n[Schedule extraction]\n"
+        for duration in extraction:
+            result += f"{duration} \n"
+            
+    committed = _parse_effective_throughput(log)
+    if committed:
+        result += "\n[Committed txn]\n"
+        for c in committed:
+            result += f"{c:.3f} \n"
         
     return result
 

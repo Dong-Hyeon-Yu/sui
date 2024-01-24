@@ -13,7 +13,7 @@ use sslab_execution_blockstm::utils::smallbank_contract_benchmark::concurrent_ev
 
 const DEFAULT_BATCH_SIZE: usize = 200;
 // const DEFAULT_BLOCK_CONCURRENCY: u64 = 12;
-const DEFAULT_SKEWNESS: f32 = 0.5;
+const DEFAULT_SKEWNESS: f32 = 0.0;
 const DEFAULT_CHAIN_ID: u64 = 9;
 
 fn _get_smallbank_handler() -> SmallBankTransactionHandler {
@@ -31,33 +31,8 @@ fn _create_random_smallbank_workload(skewness: f32, batch_size: usize, block_con
     handler.create_batches(batch_size, block_concurrency, skewness, 10_000)
 }
 
-fn block_concurrency(c: &mut Criterion) {
-    let param = 1..41;
-    let mut group = c.benchmark_group("BlockSTM Benchmark according to block concurrency");
-    for i in param {
-        group.throughput(Throughput::Elements((DEFAULT_BATCH_SIZE*i) as u64));
-        group.bench_with_input(
-            criterion::BenchmarkId::new("blockstm with #block:", i),
-            &i,
-            |b, i| {
-                b.iter_batched(
-                    || {
-                        let consensus_output = _create_random_smallbank_workload(DEFAULT_SKEWNESS, DEFAULT_BATCH_SIZE, *i);
-                        let blockstm = _get_blockstm_executor();
-                        (blockstm, consensus_output)
-                    },
-                    |(blockstm, consensus_output)| {
-                        blockstm.execute(consensus_output);
-                    },
-                    BatchSize::SmallInput
-                );
-            }
-        );
-    }
-}
-
 fn batch_size(c: &mut Criterion) {
-    let param = 1..41;
+    let param = 1..81;
     let mut group = c.benchmark_group("BlockSTM Benchmark according to batch size");
     for i in param {
         group.throughput(Throughput::Elements((DEFAULT_BATCH_SIZE*i) as u64));
@@ -65,14 +40,14 @@ fn batch_size(c: &mut Criterion) {
             criterion::BenchmarkId::new("blockstm with #batch", i),
             &i,
             |b, i| {
-                b.iter_batched(
+                b.to_async(tokio::runtime::Runtime::new().unwrap()).iter_batched(
                     || {
                         let consensus_output = _create_random_smallbank_workload(DEFAULT_SKEWNESS, DEFAULT_BATCH_SIZE*i, 1);
                         let blockstm = _get_blockstm_executor();
                         (blockstm, consensus_output)
                     },
-                    |(blockstm, consensus_output)| {
-                        blockstm.execute(consensus_output);
+                    |(blockstm, consensus_output)| async move {
+                        let _ = blockstm.execute(consensus_output).await;
                     },
                     BatchSize::SmallInput
                 );
@@ -81,5 +56,5 @@ fn batch_size(c: &mut Criterion) {
     }
 }
 
-criterion_group!(benches, block_concurrency, batch_size);
+criterion_group!(benches, batch_size);
 criterion_main!(benches);

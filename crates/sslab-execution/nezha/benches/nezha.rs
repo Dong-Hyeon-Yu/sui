@@ -1,10 +1,9 @@
 #![allow(dead_code)]
-use std::sync::RwLock;
-
 use criterion::Throughput;
 use criterion::{criterion_group, criterion_main, Criterion, BatchSize};
 use ethers_providers::{Provider, MockProvider};
 
+use parking_lot::RwLock;
 use sslab_execution::{
     types::ExecutableEthereumBatch,
     utils::smallbank_contract_benchmark::concurrent_evm_storage,
@@ -46,15 +45,16 @@ fn _get_rw_sets(nezha: std::sync::Arc<ConcurrencyLevelManager>, consensus_output
 }
 
 fn block_concurrency(c: &mut Criterion) {
-    let param = 1..41;
+    let param = 1..81;
     let mut group = c.benchmark_group("Nezha Benchmark according to block concurrency");
     for i in param {
         group.throughput(Throughput::Elements((DEFAULT_BATCH_SIZE*i) as u64));
-        // let effective_tps: std::rc::Rc<RwLock<Vec<(_,_)>>> =  std::rc::Rc::new(RwLock::new(Vec::new()));
+        let effective_tps: std::rc::Rc<RwLock<Vec<(_,_)>>> =  std::rc::Rc::new(RwLock::new(Vec::new()));
+        let duration_metrics = std::sync::Arc::new(RwLock::new(Vec::new()));
         group.bench_with_input(
             criterion::BenchmarkId::new("nezha", i),
-            &i,
-            |b, i| {
+            &(i, duration_metrics.clone(), effective_tps.clone()),
+            |b, (i, duration_metrics, effective_tps)| {
                 b.to_async(tokio::runtime::Runtime::new().unwrap()).iter_batched(
                     || {
                         let consensus_output = _create_random_smallbank_workload(DEFAULT_SKEWNESS, DEFAULT_BATCH_SIZE, *i);
@@ -62,25 +62,50 @@ fn block_concurrency(c: &mut Criterion) {
                         (nezha, consensus_output)
                     },
                     |(nezha, consensus_output)| async move {
+
+                        let now = tokio::time::Instant::now();
                         let SimulationResult { rw_sets, .. } = nezha._simulate(consensus_output).await;
-                        let scheduled_info = AddressBasedConflictGraph::construct(rw_sets)
-                            .hierarchcial_sort()
-                            .reorder()
-                            .extract_schedule();
-                        // effective_tps.write().unwrap().push((scheduled_info.scheduled_txs_len(), scheduled_info.aborted_txs_len()+scheduled_info.scheduled_txs_len()));
-                        nezha._concurrent_commit(scheduled_info, 1).await
+                        let simulation = now.elapsed().as_micros() as f64/1000f64;
+
+                        let now = tokio::time::Instant::now();
+                        let mut acg = AddressBasedConflictGraph::par_construct(rw_sets).await;
+                        acg.hierarchcial_sort().reorder();
+                        let scheduled_info = acg.par_extract_schedule().await;
+                        let scheduling = now.elapsed().as_micros() as f64/1000f64;
+
+                        effective_tps.write().push((scheduled_info.scheduled_txs_len(), scheduled_info.aborted_txs_len()+scheduled_info.scheduled_txs_len()));
+
+                        let now = tokio::time::Instant::now();
+                        nezha._concurrent_commit(scheduled_info, 1).await;
+                        let commit = now.elapsed().as_micros() as f64/1000f64;
+
+                        duration_metrics.write().push((simulation, scheduling, commit));
                     },
                     BatchSize::SmallInput
                 );
             }
         );
-        // let (mut committed, mut total) = (0, 0);
-        // let len = effective_tps.read().unwrap().len();
-        // for (a, b) in effective_tps.read().unwrap().iter() {
-        //     committed += a;
-        //     total += b;
-        // }
-        // println!("committed: {:?} / total: {:?}", committed as f64/ len as f64, total as f64/ len as f64);
+
+        let (mut simulation, mut scheduling, mut commit) = (0 as f64, 0 as f64,0 as f64);
+        let len = duration_metrics.read().len() as f64;
+
+        for (a1, a2, a3) in duration_metrics.read().iter() {
+            simulation += a1;
+            scheduling += a2;
+            commit += a3;
+        };
+
+        println!("Simulation: {:.4}", simulation/len);
+        println!("Scheduling: {:.4}", scheduling/len);
+        println!("Commit: {:.4}", commit/len);
+
+        let (mut committed, mut total) = (0, 0);
+        let len = effective_tps.read().len();
+        for (a, b) in effective_tps.read().iter() {
+            committed += a;
+            total += b;
+        }
+        println!("committed: {:?} / total: {:?}", committed as f64/ len as f64, total as f64/ len as f64);
     }
 }
 
@@ -153,7 +178,7 @@ fn block_concurrency_scheduling(c: &mut Criterion) {
                         let _result = acg.par_extract_schedule().await;
                         let extraction = now.elapsed().as_micros() as f64/1000f64;
                         
-                        metrics.write().unwrap().push((construction, sorting, reordering, extraction))
+                        metrics.write().push((construction, sorting, reordering, extraction))
                         // metrics.write().unwrap().push(result.parallism_metric())
                     },
                     BatchSize::SmallInput
@@ -162,9 +187,9 @@ fn block_concurrency_scheduling(c: &mut Criterion) {
         );
 
         let (mut construction, mut sorting, mut reordering, mut extraction) = (0 as f64, 0 as f64,0 as f64, 0 as f64);
-        let len = duration_metrics.read().unwrap().len() as f64;
+        let len = duration_metrics.read().len() as f64;
 
-        for (a1, a2, a3, a4) in duration_metrics.read().unwrap().iter() {
+        for (a1, a2, a3, a4) in duration_metrics.read().iter() {
             construction += a1;
             sorting += a2;
             reordering += a3;
@@ -253,6 +278,6 @@ fn chunk_size(c: &mut Criterion) {
     }
 }
 
-criterion_group!(benches, block_concurrency_scheduling);
+criterion_group!(benches, block_concurrency);
 // criterion_group!(benches, block_concurrency_simulation, block_concurrency_commit);
 criterion_main!(benches);

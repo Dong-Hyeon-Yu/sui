@@ -468,7 +468,6 @@ impl ReadUnits {
             .for_each(|unit| unit.set_sequence(min_seq));
 
         self.units = [sorted, remaining].concat();
-        self.units.sort_by(|a, b| a.sequence().cmp(&b.sequence()))
     }
 
     fn increment_and_get_max_seq(&mut self) -> u64 {
@@ -537,7 +536,6 @@ impl WriteUnits {
         self.max_seq = write_seq;  // for reordering.
 
         self.units = [sorted, remaining].concat();
-        self.units.sort_by(|a, b| a.sequence().cmp(&b.sequence()))
     }
 
     fn max_seq(&self) -> &u64 {

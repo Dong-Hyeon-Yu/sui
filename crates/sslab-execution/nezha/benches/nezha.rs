@@ -38,10 +38,35 @@ fn _create_random_smallbank_workload(skewness: f32, batch_size: usize, block_con
 fn _get_rw_sets(nezha: std::sync::Arc<ConcurrencyLevelManager>, consensus_output: Vec<ExecutableEthereumBatch>) -> Vec<SimulatedTransaction> {
     let (tx, rx) = std::sync::mpsc::channel();
     let _ = tokio::runtime::Handle::current().spawn(async move {
-        let SimulationResult { rw_sets, .. } = nezha._simulate(consensus_output).await;
+        let SimulationResult { rw_sets, .. } = nezha.simulate(consensus_output).await;
         tx.send(rw_sets).unwrap();
     });
     rx.recv().unwrap()
+}
+fn block_concurrency_no_abort(c: &mut Criterion) {
+    let param = 1..81;
+    let mut group = c.benchmark_group("Nezha No Abort Benchmark according to block concurrency");
+    for i in param {
+        group.throughput(Throughput::Elements((DEFAULT_BATCH_SIZE*i) as u64));
+        group.bench_with_input(
+            criterion::BenchmarkId::new("nezha", i),
+            &i,
+            |b, i| {
+                b.to_async(tokio::runtime::Runtime::new().unwrap()).iter_batched(
+                    || {
+                        let consensus_output = _create_random_smallbank_workload(DEFAULT_SKEWNESS, DEFAULT_BATCH_SIZE, *i);
+                        let nezha = _get_nezha_executor(*i);
+                        (nezha, consensus_output)
+                    },
+                    |(nezha, consensus_output)| async move {
+
+                        nezha._execute(consensus_output).await
+                    },
+                    BatchSize::SmallInput
+                );
+            }
+        );
+    }
 }
 
 fn block_concurrency(c: &mut Criterion) {
@@ -64,13 +89,14 @@ fn block_concurrency(c: &mut Criterion) {
                     |(nezha, consensus_output)| async move {
 
                         let now = tokio::time::Instant::now();
-                        let SimulationResult { rw_sets, .. } = nezha._simulate(consensus_output).await;
+                        let SimulationResult { rw_sets, .. } = nezha.simulate(consensus_output).await;
                         let simulation = now.elapsed().as_micros() as f64/1000f64;
 
                         let now = tokio::time::Instant::now();
-                        let mut acg = AddressBasedConflictGraph::par_construct(rw_sets).await;
-                        acg.hierarchcial_sort().reorder();
-                        let scheduled_info = acg.par_extract_schedule().await;
+                        let (scheduled_info, _) = AddressBasedConflictGraph::par_construct(rw_sets).await
+                            .hierarchcial_sort()
+                            .reorder()
+                            .par_extract_schedule().await;
                         let scheduling = now.elapsed().as_micros() as f64/1000f64;
 
                         effective_tps.write().push((scheduled_info.scheduled_txs_len(), scheduled_info.aborted_txs_len()+scheduled_info.scheduled_txs_len()));
@@ -126,7 +152,7 @@ fn block_concurrency_simulation(c: &mut Criterion) {
                         (nezha, consensus_output)
                     },
                     |(nezha, consensus_output)| async move {
-                        let _ = nezha._simulate(consensus_output).await;
+                        let _ = nezha.simulate(consensus_output).await;
                         // let scheduled_info = AddressBasedConflictGraph::construct(rw_sets)
                         //     .hierarchcial_sort()
                         //     .reorder()
@@ -264,7 +290,7 @@ fn chunk_size(c: &mut Criterion) {
                         (nezha, consensus_output)
                     },
                     |(nezha, consensus_output)| async move {
-                        let SimulationResult { rw_sets, .. } = nezha._simulate(consensus_output).await;
+                        let SimulationResult { rw_sets, .. } = nezha.simulate(consensus_output).await;
                         let scheduled_info = AddressBasedConflictGraph::construct(rw_sets)
                             .hierarchcial_sort()
                             .reorder()

@@ -43,7 +43,7 @@ async fn test_smallbank() {
     //when
     let total = Instant::now();
     let mut now = Instant::now();
-    let SimulationResult { rw_sets, .. } = nezha._simulate(consensus_output).await;
+    let SimulationResult { rw_sets, .. } = nezha.simulate(consensus_output).await;
     let mut time = now.elapsed().as_millis();
     println!("Simulation took {} ms for {} transactions.", time, rw_sets.len());
 
@@ -91,13 +91,13 @@ async fn test_par_smallbank() {
     //when
     let total = Instant::now();
     let mut now = Instant::now();
-    let SimulationResult { rw_sets, .. } = nezha._simulate(consensus_output).await;
+    let SimulationResult { rw_sets, .. } = nezha.simulate(consensus_output).await;
     let mut time = now.elapsed().as_millis();
     println!("Simulation took {} ms for {} transactions.", time, rw_sets.len());
 
 
     now = Instant::now();
-    let scheduled_info = AddressBasedConflictGraph::par_construct(rw_sets).await
+    let (scheduled_info, _) = AddressBasedConflictGraph::par_construct(rw_sets).await
             .hierarchcial_sort()
             .reorder()
             .par_extract_schedule().await;

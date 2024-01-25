@@ -4,13 +4,13 @@ use itertools::Itertools;
 use narwhal_types::BatchDigest;
 use rayon::prelude::*;
 use sslab_execution::{
-    types::{ExecutableEthereumBatch, ExecutionResult}, 
+    types::{ExecutableEthereumBatch, ExecutionResult, EthereumTransaction}, 
     executor::Executable, 
     evm_storage::{ConcurrentEVMStorage, backend::ExecutionBackend}
 };
-use tracing::{info, debug, warn};
+use tracing::warn;
 
-use crate::{SimulationResult, AddressBasedConflictGraph};
+use crate::{SimulationResult, AddressBasedConflictGraph, types::ScheduledTransaction};
 
 use super::{
     types::SimulatedTransaction, 
@@ -71,27 +71,66 @@ impl ConcurrencyLevelManager {
         ExecutionResult::new(result)
     }
 
-    async fn _execute(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> Vec<BatchDigest> {
+    async fn _unpack_batches(consensus_output: Vec<ExecutableEthereumBatch>) -> (Vec<BatchDigest>, Vec<EthereumTransaction>){
 
-        let SimulationResult { digests, rw_sets } = self._simulate(consensus_output).await;
+        let (send, recv) = tokio::sync::oneshot::channel();
+
+        rayon::spawn(move || {
+
+            let (digests, batches): (Vec<_>, Vec<_>) = consensus_output
+                .par_iter()
+                .map(|batch| {
+                    // let txs = batch.data()
+                    //     .into_iter()
+                    //     .map(|tx| Arc::new(tx.to_owned()))
+                    //     .collect_vec();
+
+                    (batch.digest().to_owned(), batch.data().to_owned())
+                })
+                .unzip();
+
+            let tx_list = batches
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>();
+
+            let _ = send.send((digests, tx_list)).unwrap();
+        });
+
+        recv.await.unwrap()
+    }
+
+    pub async fn _execute(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> Vec<BatchDigest> {
         
-        let scheduled_info = AddressBasedConflictGraph::par_construct(rw_sets).await
-            .hierarchcial_sort()
-            .reorder()
-            .par_extract_schedule().await;
+        let (digests, mut tx_list) = Self::_unpack_batches(consensus_output).await;
 
-        let scheduled_tx_len = scheduled_info.scheduled_txs_len();
-        let aborted_tx_len =  scheduled_info.aborted_txs_len();
-        info!("Abort rate: {:.2} ({}/{} aborted)", (aborted_tx_len as f64) * 100.0 / (scheduled_tx_len+aborted_tx_len) as f64, aborted_tx_len, scheduled_tx_len+aborted_tx_len);
+        while tx_list.len() > 0 {
+            let rw_sets = self._simulate(tx_list).await;
+        
+            let (scheduled_info, aborted_txs) = AddressBasedConflictGraph::par_construct(rw_sets).await
+                .hierarchcial_sort()
+                .reorder()
+                .par_extract_schedule().await;
+    
+            self._concurrent_commit(scheduled_info, 1).await;
 
-        self._concurrent_commit(scheduled_info, 1).await;
+            tx_list = aborted_txs;
+        }
+        
 
         digests
     }
+
+    pub async fn simulate(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> SimulationResult {
+        let (digests, tx_list) = Self::_unpack_batches(consensus_output).await;
+        let rw_sets = self._simulate(tx_list).await;
+
+        SimulationResult {digests, rw_sets}
+    }
     
 
-    pub async fn _simulate(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> SimulationResult {
-        let snapshot = self.global_state.snapshot();
+    async fn _simulate(&self, tx_list: Vec<EthereumTransaction>) -> Vec<SimulatedTransaction> {
+        let snapshot = self.global_state.clone();
 
         // Parallel simulation requires heavy cpu usages. 
         // CPU-bound jobs would make the I/O-bound tokio threads starve.
@@ -99,23 +138,14 @@ impl ConcurrencyLevelManager {
         // a new thread is created, and a new thread pool is created on the thread. (specifically, rayon's thread pool is created)
         let (send, recv) = tokio::sync::oneshot::channel();
         rayon::spawn(move || {
-            let (digests, batches): (Vec<_>, Vec<_>) = consensus_output
-                .par_iter()
-                .map(|batch| (batch.digest().to_owned(), batch.data().to_owned()))
-                .unzip();
-
-            let tx_list = batches
-                .into_iter()
-                .flatten()
-                .collect_vec();
 
             let result = tx_list
-                .par_iter()
+                .into_par_iter()
                 .filter_map(|tx| {
-                    match crate::evm_utils::simulate_tx(tx, &snapshot) {
+                    match crate::evm_utils::simulate_tx(&tx, snapshot.as_ref()) {
                         Ok(Some((effect, log, rw_set))) => {
                             
-                            Some(SimulatedTransaction::new(0, tx.digest(), Some(rw_set), effect, log))
+                            Some(SimulatedTransaction::new(tx.digest(), Some(rw_set), effect, log, tx))
                         },
                         _ => {
                             warn!("fail to execute a transaction {}", tx.id());
@@ -125,12 +155,12 @@ impl ConcurrencyLevelManager {
                 })
                 .collect();
 
-                let _ = send.send((digests, result)).unwrap();
+                let _ = send.send(result).unwrap();
         });
 
         match recv.await {
-            Ok((digests, rw_sets)) => {
-                SimulationResult { digests, rw_sets }
+            Ok(rw_sets) => {
+                rw_sets 
             },
             Err(e) => {
                 panic!("fail to receive simulation result from the worker thread. {:?}", e);
@@ -168,41 +198,34 @@ impl ConcurrencyLevelManager {
 
 
 pub struct ScheduledInfo {
-    pub scheduled_txs: Vec<Vec<SimulatedTransaction>>,  
-    pub aborted_txs: Vec<H256>
+    pub scheduled_txs: Vec<Vec<ScheduledTransaction>>,  
+    pub aborted_tx_num: usize,
 }
 
 impl ScheduledInfo {
 
-    pub fn from(tx_list: hashbrown::HashMap<H256, Arc<Transaction>>, aborted_txs: Vec<Arc<Transaction>>) -> Self {
+    pub fn from(tx_list: hashbrown::HashMap<H256, Arc<Transaction>>, aborted_tx_num: usize) -> Self {
 
         // group by sequence.
         let mut list = tx_list.into_par_iter()
             .map(|(_, tx)| {
                 let tx = Self::_unwrap(tx);
                 let tx_id = tx.id();
-                let sequence = tx.sequence().to_owned();
+                let seq = tx.sequence().to_owned();
                 let (effects, logs) = tx.simulation_result();
 
-                SimulatedTransaction::new(sequence, tx_id, None, effects, logs)
+                ScheduledTransaction {seq, tx_id, effects, logs }
             })
-            .collect::<Vec<SimulatedTransaction>>();
+            .collect::<Vec<ScheduledTransaction>>();
 
         // sort groups by sequence.
         list.sort_unstable_by_key(|tx| tx.seq());
-        let mut scheduled_txs = Vec::<Vec<SimulatedTransaction>>::new(); 
+        let mut scheduled_txs = Vec::<Vec<ScheduledTransaction>>::new(); 
         for (_key, txns) in &list.into_iter().group_by(|tx| tx.seq()) {
             scheduled_txs.push(txns.collect_vec());
         }
         
-        let aborted_txs = aborted_txs.into_par_iter().map(|tx| tx.id()).collect::<Vec<H256>>();
-        
-        let mut count=0;
-        scheduled_txs.iter().for_each(|vec| count += vec.len());
-        debug!("{} scheduled transactions are scheduled group by {}", count, scheduled_txs.len());
-        debug!("{} aborted transactions: {:?}", aborted_txs.len(), aborted_txs);
-
-        Self { scheduled_txs, aborted_txs }
+        Self { scheduled_txs, aborted_tx_num }
     }
 
     fn _unwrap(tx: Arc<Transaction>) -> Transaction {
@@ -216,7 +239,7 @@ impl ScheduledInfo {
     }
 
     pub fn aborted_txs_len(&self) -> usize {
-        self.aborted_txs.len()
+        self.aborted_tx_num
     }
 
     pub fn parallism_metric(&self) -> (usize, f64, f64, usize, usize) {
@@ -229,6 +252,4 @@ impl ScheduledInfo {
         (total_tx, average_width, std_width, max_width, depth)
     }
 }
-
-
 

@@ -1,10 +1,11 @@
 use std::{sync::Arc, collections::{BTreeMap, HashMap}};
 use ethers_core::types::{H256, H160};
-use evm::backend::{Apply, Log};
+use evm::{backend::{Apply, Log}, executor::stack::RwSet};
 use itertools::Itertools;
 
 use parking_lot::{RwLock, RwLockReadGuard};
 use rayon::prelude::*;
+use sslab_execution::types::EthereumTransaction;
 
 use super::{types::SimulatedTransaction, nezha_core::ScheduledInfo};
 
@@ -35,19 +36,20 @@ impl AddressBasedConflictGraph {
         let mut acg = Self::new();
 
         for tx in simulation_result {
-            let (id, rw_set, effects, logs) = tx.deconstruct();
-            let tx_metadata = &Arc::new(Transaction::new(id, effects, logs));
 
-            let (read_set, write_set) = rw_set.unwrap().destruct();
-            let mut write_units = Self::_convert_to_units(tx_metadata, UnitType::Write, write_set, Some(&read_set));
-            let mut read_units = Self::_convert_to_units(tx_metadata, UnitType::Read, read_set, None);
+            let (_tx, rw_set) = Transaction::from(tx);
+            let tx_metadata = Arc::new(_tx);
+
+            let (read_set, write_set) = rw_set.destruct();
+            let mut write_units = Self::_convert_to_units(&tx_metadata, UnitType::Write, write_set, Some(&read_set));
+            let mut read_units = Self::_convert_to_units(&tx_metadata, UnitType::Read, read_set, None);
 
             // before inserting the units, wr-dependencies must be created b/w RW units.
             Self::_set_wr_dependencies(&mut read_units, &mut write_units);
 
             tx_metadata.set_write_units(write_units.clone());
 
-            acg.tx_list.insert(tx_metadata.id(), Arc::clone(tx_metadata));
+            acg.tx_list.insert(tx_metadata.id(), tx_metadata);
             acg._add_units_to_address([read_units, write_units].concat());
         }
 
@@ -107,11 +109,11 @@ impl AddressBasedConflictGraph {
 
     pub fn reorder(&mut self) -> &mut Self {
 
-        let (mut reorder_targets, aborted) = self._aborted_txs().into_iter().partition(|tx| tx.reorderable());
+        let (reorder_targets, aborted) = self._aborted_txs().into_iter().partition(|tx| tx.reorderable());
 
         self.aborted_txs = aborted;
 
-        reorder_targets.iter_mut()
+        reorder_targets.iter()
             .for_each(|tx| {
                 let seq = tx.write_units().iter()
                     .map(|unit| unit.address())
@@ -137,30 +139,37 @@ impl AddressBasedConflictGraph {
     #[must_use]
     pub fn extract_schedule(&mut self) -> ScheduledInfo {
         let tx_list = std::mem::replace(&mut self.tx_list, hashbrown::HashMap::default());
-        let aborted_txs = std::mem::replace(&mut self.aborted_txs, Vec::new());
+        // let aborted_txs = std::mem::replace(&mut self.aborted_txs, Vec::new());
 
         tx_list.iter().for_each(|(_, tx)| tx.clear_write_units());
-        aborted_txs.iter().for_each(|tx| tx.clear_write_units());
+        // aborted_txs.iter().for_each(|tx| tx.clear_write_units());
         self.addresses.clear();
         self.addresses.shrink_to_fit();
 
-        ScheduledInfo::from(tx_list, aborted_txs)
+        ScheduledInfo::from(tx_list, self._aborted_txs().len())
     }
 
-    pub async fn par_extract_schedule(&mut self) -> ScheduledInfo {
+    pub async fn par_extract_schedule(&mut self) -> (ScheduledInfo, Vec<EthereumTransaction>) {
         let tx_list = std::mem::replace(&mut self.tx_list, hashbrown::HashMap::default());
+        let aborted_num = self._aborted_txs().len();
         let aborted_txs = std::mem::replace(&mut self.aborted_txs, Vec::new());
-
+        
         self.addresses.clear();
         self.addresses.shrink_to_fit();
 
         let (send, recv) = tokio::sync::oneshot::channel();
         rayon::spawn(move || {
             tx_list.par_iter().for_each(|(_, tx)| tx.clear_write_units());
-            aborted_txs.par_iter().for_each(|tx| tx.clear_write_units());
+            let aborted_txs = aborted_txs
+                .par_iter()
+                .map(|tx| {
+                    tx.clear_write_units();
+                    tx.raw_tx.clone()
+                })
+                .collect::<Vec<_>>();
 
-            let result = ScheduledInfo::from(tx_list, aborted_txs);
-            let _ = send.send(result);
+            let schedule = ScheduledInfo::from(tx_list, aborted_num);
+            let _ = send.send((schedule, aborted_txs));
         });
         recv.await.unwrap()
     }
@@ -300,18 +309,24 @@ pub struct Transaction {
 
     effects: Vec<Apply>,
     logs: Vec<Log>,
+    raw_tx: EthereumTransaction
 }
 
 impl Transaction {
-    fn new(tx_id: H256, effects: Vec<Apply>, logs: Vec<Log>) -> Self {
-        Self { 
+
+    fn from(tx: SimulatedTransaction) -> (Self, RwSet) {
+        let (tx_id, rw_set, effects, logs, raw_tx ) = tx.deconstruct();
+        let tx = Self { 
             tx_id,
             sequence: RwLock::new(0), 
             aborted: RwLock::new(false), 
             write_units: RwLock::new(Vec::new()), 
             effects, 
-            logs 
-        }
+            logs, 
+            raw_tx 
+        };
+
+        (tx, rw_set.unwrap())
     }
 
     pub fn id(&self) -> H256 {

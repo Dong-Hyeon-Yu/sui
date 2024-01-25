@@ -97,11 +97,10 @@ async fn test_par_smallbank() {
 
 
     now = Instant::now();
-    let mut acg = AddressBasedConflictGraph::par_construct(rw_sets).await;
-    acg
-        .hierarchcial_sort()
-        .reorder();
-    let scheduled_info = acg.par_extract_schedule().await;
+    let scheduled_info = AddressBasedConflictGraph::par_construct(rw_sets).await
+            .hierarchcial_sort()
+            .reorder()
+            .par_extract_schedule().await;
     time = now.elapsed().as_millis();
     println!("Scheduling took {} ms.", time);
 

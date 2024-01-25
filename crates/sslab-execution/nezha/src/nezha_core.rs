@@ -8,7 +8,6 @@ use sslab_execution::{
     executor::Executable, 
     evm_storage::{ConcurrentEVMStorage, backend::ExecutionBackend}
 };
-use tokio::time::Instant;
 use tracing::{info, debug, warn, error};
 
 use crate::{SimulationResult, AddressBasedConflictGraph};
@@ -73,40 +72,24 @@ impl ConcurrencyLevelManager {
     }
 
     async fn _execute(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> Vec<BatchDigest> {
-        let mut now = Instant::now();
-        let SimulationResult { digests, rw_sets } = self._simulate(consensus_output).await;
-        let mut time = now.elapsed().as_millis();
-        info!("Simulation took {} ms for {} transactions.", time, rw_sets.len());
 
-        // rw_sets.clone().iter().for_each(|rw_set| {
-        //     println!("rw_set: {:?}\n", rw_set);
-        // });
+        let SimulationResult { digests, rw_sets } = self._simulate(consensus_output).await;
         
-        now = Instant::now();
-        let scheduled_info = AddressBasedConflictGraph::construct(rw_sets)
+        let scheduled_info = AddressBasedConflictGraph::par_construct(rw_sets).await
             .hierarchcial_sort()
             .reorder()
-            .extract_schedule();
-        time = now.elapsed().as_millis();
-        info!("Scheduling took {} ms.", time);
+            .par_extract_schedule().await;
 
         let scheduled_tx_len = scheduled_info.scheduled_txs_len();
         let aborted_tx_len =  scheduled_info.aborted_txs_len();
-        info!("Parallelism metric: {:?}", scheduled_info.parallism_metric());
-
-        now = Instant::now();
-        self._concurrent_commit(scheduled_info, 10).await;
-        time = now.elapsed().as_millis();
-
-        info!("Concurrent commit took {} ms for {} transactions.", time, scheduled_tx_len);
         info!("Abort rate: {:.2} ({}/{} aborted)", (aborted_tx_len as f64) * 100.0 / (scheduled_tx_len+aborted_tx_len) as f64, aborted_tx_len, scheduled_tx_len+aborted_tx_len);
 
-        // println!("{} transactions are aborted.", aborted_tx_len);
+        self._concurrent_commit(scheduled_info, 10).await;
 
         digests
     }
     
-    //TODO: create Simulator having a thread pool for cpu-bound jobs.
+
     pub async fn _simulate(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> SimulationResult {
         let snapshot = self.global_state.snapshot();
         
@@ -124,8 +107,9 @@ impl ConcurrencyLevelManager {
         // CPU-bound jobs would make the I/O-bound tokio threads starve.
         // To this end, a separated thread pool need to be used for cpu-bound jobs.
         // a new thread is created, and a new thread pool is created on the thread. (specifically, rayon's thread pool is created)
-        let result = tokio::task::spawn_blocking(move || {
-            tx_list
+        let (send, recv) = tokio::sync::oneshot::channel();
+        rayon::spawn(move || {
+            let result = tx_list
                 .par_iter()
                 .filter_map(|tx| {
                     match crate::evm_utils::simulate_tx(tx, &snapshot) {
@@ -139,10 +123,12 @@ impl ConcurrencyLevelManager {
                         },
                     }
                 })
-                .collect()
-        }).await;
+                .collect();
 
-        match result {
+                let _ = send.send(result).unwrap();
+        });
+
+        match recv.await {
             Ok(rw_sets) => {
                 SimulationResult { digests, rw_sets }
             },
@@ -155,14 +141,14 @@ impl ConcurrencyLevelManager {
 
     pub async fn _concurrent_commit(&self, scheduled_info: ScheduledInfo, chunk_size: usize) {
         let storage = self.global_state.clone();
-        // let _storage = &storage;
         let scheduled_txs = scheduled_info.scheduled_txs;
 
         // Parallel simulation requires heavy cpu usages. 
         // CPU-bound jobs would make the I/O-bound tokio threads starve.
         // To this end, a separated thread pool need to be used for cpu-bound jobs.
         // a new thread is created, and a new thread pool is created on the thread. (specifically, rayon's thread pool is created)
-        let _ = tokio::task::spawn_blocking(move || {
+        let (send, recv) = tokio::sync::oneshot::channel();
+        rayon::spawn(move || {
             let _storage = &storage;
             for txs_to_commit in scheduled_txs {
                 txs_to_commit
@@ -172,9 +158,10 @@ impl ConcurrencyLevelManager {
                         _storage.apply_local_effect(effect)
                     })
             }
-        }).await;
+            let _ = send.send(());
+        });
 
-        // self.global_state.update_from(storage);
+        let _ = recv.await;
     }
     
 }

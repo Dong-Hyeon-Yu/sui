@@ -84,7 +84,7 @@ impl ConcurrencyLevelManager {
         let aborted_tx_len =  scheduled_info.aborted_txs_len();
         info!("Abort rate: {:.2} ({}/{} aborted)", (aborted_tx_len as f64) * 100.0 / (scheduled_tx_len+aborted_tx_len) as f64, aborted_tx_len, scheduled_tx_len+aborted_tx_len);
 
-        self._concurrent_commit(scheduled_info, 10).await;
+        self._concurrent_commit(scheduled_info, 1).await;
 
         digests
     }

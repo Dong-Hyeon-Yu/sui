@@ -8,7 +8,7 @@ use sslab_execution::{
     executor::Executable, 
     evm_storage::{ConcurrentEVMStorage, backend::ExecutionBackend}
 };
-use tracing::{info, debug, warn, error};
+use tracing::{info, debug, warn};
 
 use crate::{SimulationResult, AddressBasedConflictGraph};
 
@@ -92,16 +92,6 @@ impl ConcurrencyLevelManager {
 
     pub async fn _simulate(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> SimulationResult {
         let snapshot = self.global_state.snapshot();
-        
-        let (digests, batches): (Vec<_>, Vec<_>) = consensus_output
-            .iter()
-            .map(|batch| (batch.digest().to_owned(), batch.data().to_owned()))
-            .unzip();
-
-        let tx_list = batches
-            .into_iter()
-            .flatten()
-            .collect_vec();
 
         // Parallel simulation requires heavy cpu usages. 
         // CPU-bound jobs would make the I/O-bound tokio threads starve.
@@ -109,6 +99,16 @@ impl ConcurrencyLevelManager {
         // a new thread is created, and a new thread pool is created on the thread. (specifically, rayon's thread pool is created)
         let (send, recv) = tokio::sync::oneshot::channel();
         rayon::spawn(move || {
+            let (digests, batches): (Vec<_>, Vec<_>) = consensus_output
+                .par_iter()
+                .map(|batch| (batch.digest().to_owned(), batch.data().to_owned()))
+                .unzip();
+
+            let tx_list = batches
+                .into_iter()
+                .flatten()
+                .collect_vec();
+
             let result = tx_list
                 .par_iter()
                 .filter_map(|tx| {
@@ -125,16 +125,15 @@ impl ConcurrencyLevelManager {
                 })
                 .collect();
 
-                let _ = send.send(result).unwrap();
+                let _ = send.send((digests, result)).unwrap();
         });
 
         match recv.await {
-            Ok(rw_sets) => {
+            Ok((digests, rw_sets)) => {
                 SimulationResult { digests, rw_sets }
             },
             Err(e) => {
-                error!("fail to receive simulation result from the worker thread. {:?}", e);
-                SimulationResult { digests, rw_sets: Vec::new() }
+                panic!("fail to receive simulation result from the worker thread. {:?}", e);
             }
         }
     }

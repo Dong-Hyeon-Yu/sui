@@ -6,7 +6,7 @@ use itertools::Itertools;
 use super::{types::SimulatedTransaction, nezha_core::ScheduledInfo};
 
 
-pub(crate) type FastHashMap<K, V> = hashbrown::HashMap<K, V, nohash_hasher::BuildNoHashHasher<K>>;
+// pub(crate) type FastHashMap<K, V> = hashbrown::HashMap<K, V, nohash_hasher::BuildNoHashHasher<K>>;
 pub(crate) type FastHashSet<K> = hashbrown::HashSet<K, nohash_hasher::BuildNoHashHasher<K>>;
 
 pub struct AddressBasedConflictGraph {

@@ -11,6 +11,7 @@ pub struct SimulationResult {
 
 #[derive(Clone, Debug, Default)]
 pub struct SimulatedTransaction {
+    seq: u64,
     tx_id: H256,
     rw_set: Option<RwSet>,
     effects: Vec<Apply>,
@@ -18,8 +19,8 @@ pub struct SimulatedTransaction {
 }
 
 impl SimulatedTransaction {
-    pub fn new(tx_id: H256, rw_set: Option<RwSet>, effects: Vec<Apply>, logs: Vec<Log>) -> Self {
-        Self { tx_id, rw_set, effects, logs }
+    pub fn new(seq: u64, tx_id: H256, rw_set: Option<RwSet>, effects: Vec<Apply>, logs: Vec<Log>) -> Self {
+        Self { seq, tx_id, rw_set, effects, logs }
     }
 
     pub fn deconstruct(self) -> (H256, Option<RwSet>, Vec<Apply>, Vec<Log>) {
@@ -33,5 +34,9 @@ impl SimulatedTransaction {
     #[allow(dead_code)] // this function is used in unit tests.
     pub(crate) fn id(&self) -> &H256 {
         &self.tx_id
+    }
+
+    pub fn seq(&self) -> u64 {
+        self.seq
     }
 }

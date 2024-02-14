@@ -1,0 +1,891 @@
+
+running 8 tests
+test tests::integration_tests::test_par_smallbank ... ignored
+test tests::integration_tests::test_smallbank ... ignored
+test tests::nezha_tests::test_reordering ... ignored
+test tests::nezha_tests::test_scenario_1 ... ignored
+test tests::nezha_tests::test_scenario_2 ... ignored
+test tests::nezha_tests::test_scenario_3 ... ignored
+test tests::nezha_tests::test_scenario_4 ... ignored
+test tests::nezha_tests::test_scenario_5 ... ignored
+
+test result: ok. 0 passed; 0 failed; 8 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+Nezha No Abort Benchmark according to block concurrency/nezha/1, 0.9
+                        time:   [2.1283 ms 2.1723 ms 2.2186 ms]
+                        thrpt:  [90.145 Kelem/s 92.066 Kelem/s 93.972 Kelem/s]
+Found 8 outliers among 100 measurements (8.00%)
+  1 (1.00%) low mild
+  6 (6.00%) high mild
+  1 (1.00%) high severe
+num of retry: 7.831932773109243
+Nezha No Abort Benchmark according to block concurrency/nezha/2, 0.9
+                        time:   [4.4608 ms 4.5130 ms 4.5646 ms]
+                        thrpt:  [87.630 Kelem/s 88.634 Kelem/s 89.670 Kelem/s]
+num of retry: 15.207020702070206
+Nezha No Abort Benchmark according to block concurrency/nezha/3, 0.9
+                        time:   [7.2575 ms 7.3589 ms 7.4606 ms]
+                        thrpt:  [80.423 Kelem/s 81.534 Kelem/s 82.673 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 22.619847328244276
+Nezha No Abort Benchmark according to block concurrency/nezha/4, 0.9
+                        time:   [10.175 ms 10.320 ms 10.470 ms]
+                        thrpt:  [76.406 Kelem/s 77.516 Kelem/s 78.623 Kelem/s]
+Found 2 outliers among 100 measurements (2.00%)
+  2 (2.00%) high mild
+num of retry: 30.05045045045045
+Nezha No Abort Benchmark according to block concurrency/nezha/5, 0.9
+                        time:   [13.505 ms 13.720 ms 13.933 ms]
+                        thrpt:  [71.772 Kelem/s 72.887 Kelem/s 74.047 Kelem/s]
+num of retry: 36.86544342507645
+Nezha No Abort Benchmark according to block concurrency/nezha/6, 0.9
+                        time:   [17.328 ms 17.596 ms 17.870 ms]
+                        thrpt:  [67.150 Kelem/s 68.198 Kelem/s 69.253 Kelem/s]
+num of retry: 44.89908256880734
+Nezha No Abort Benchmark according to block concurrency/nezha/7, 0.9
+                        time:   [21.343 ms 21.666 ms 21.995 ms]
+                        thrpt:  [63.650 Kelem/s 64.616 Kelem/s 65.597 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 52.28440366972477
+Nezha No Abort Benchmark according to block concurrency/nezha/8, 0.9
+                        time:   [26.066 ms 26.430 ms 26.802 ms]
+                        thrpt:  [59.698 Kelem/s 60.538 Kelem/s 61.382 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 60.1651376146789
+Nezha No Abort Benchmark according to block concurrency/nezha/9, 0.9
+                        time:   [30.298 ms 30.857 ms 31.413 ms]
+                        thrpt:  [57.302 Kelem/s 58.334 Kelem/s 59.409 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 67.16564417177914
+Nezha No Abort Benchmark according to block concurrency/nezha/10, 0.9
+                        time:   [35.809 ms 36.462 ms 37.131 ms]
+                        thrpt:  [53.863 Kelem/s 54.851 Kelem/s 55.852 Kelem/s]
+Found 3 outliers among 100 measurements (3.00%)
+  3 (3.00%) high mild
+num of retry: 75
+Nezha No Abort Benchmark according to block concurrency/nezha/11, 0.9
+                        time:   [40.773 ms 41.591 ms 42.411 ms]
+                        thrpt:  [51.873 Kelem/s 52.896 Kelem/s 53.957 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 82.31901840490798
+Nezha No Abort Benchmark according to block concurrency/nezha/12, 0.9
+                        time:   [46.615 ms 47.514 ms 48.427 ms]
+                        thrpt:  [49.559 Kelem/s 50.511 Kelem/s 51.486 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 89.25153374233129
+Nezha No Abort Benchmark according to block concurrency/nezha/13, 0.9
+                        time:   [53.390 ms 54.324 ms 55.262 ms]
+                        thrpt:  [47.049 Kelem/s 47.861 Kelem/s 48.698 Kelem/s]
+num of retry: 95.93865030674847
+Nezha No Abort Benchmark according to block concurrency/nezha/14, 0.9
+                        time:   [62.353 ms 63.734 ms 65.193 ms]
+                        thrpt:  [42.949 Kelem/s 43.932 Kelem/s 44.906 Kelem/s]
+Found 7 outliers among 100 measurements (7.00%)
+  7 (7.00%) high mild
+num of retry: 105.29007633587786
+Nezha No Abort Benchmark according to block concurrency/nezha/15, 0.9
+                        time:   [68.993 ms 70.621 ms 72.303 ms]
+                        thrpt:  [41.492 Kelem/s 42.481 Kelem/s 43.482 Kelem/s]
+Found 8 outliers among 100 measurements (8.00%)
+  7 (7.00%) high mild
+  1 (1.00%) high severe
+num of retry: 111.90839694656489
+Nezha No Abort Benchmark according to block concurrency/nezha/16, 0.9
+                        time:   [78.371 ms 80.056 ms 81.835 ms]
+                        thrpt:  [39.103 Kelem/s 39.972 Kelem/s 40.831 Kelem/s]
+Found 4 outliers among 100 measurements (4.00%)
+  3 (3.00%) high mild
+  1 (1.00%) high severe
+num of retry: 119.93129770992367
+Nezha No Abort Benchmark according to block concurrency/nezha/17, 0.9
+                        time:   [88.827 ms 91.140 ms 93.661 ms]
+                        thrpt:  [36.301 Kelem/s 37.305 Kelem/s 38.277 Kelem/s]
+Found 3 outliers among 100 measurements (3.00%)
+  2 (2.00%) high mild
+  1 (1.00%) high severe
+num of retry: 127.66412213740458
+Nezha No Abort Benchmark according to block concurrency/nezha/18, 0.9
+                        time:   [97.097 ms 99.554 ms 102.12 ms]
+                        thrpt:  [35.253 Kelem/s 36.161 Kelem/s 37.076 Kelem/s]
+Found 6 outliers among 100 measurements (6.00%)
+  4 (4.00%) high mild
+  2 (2.00%) high severe
+num of retry: 134.16030534351145
+Nezha No Abort Benchmark according to block concurrency/nezha/19, 0.9
+                        time:   [108.15 ms 110.90 ms 113.78 ms]
+                        thrpt:  [33.398 Kelem/s 34.264 Kelem/s 35.137 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high severe
+num of retry: 142.38931297709922
+Nezha No Abort Benchmark according to block concurrency/nezha/20, 0.9
+                        time:   [120.36 ms 123.78 ms 127.42 ms]
+                        thrpt:  [31.393 Kelem/s 32.315 Kelem/s 33.233 Kelem/s]
+Found 7 outliers among 100 measurements (7.00%)
+  7 (7.00%) high mild
+num of retry: 149.41221374045801
+Nezha No Abort Benchmark according to block concurrency/nezha/21, 0.9
+                        time:   [132.30 ms 135.88 ms 139.56 ms]
+                        thrpt:  [30.095 Kelem/s 30.909 Kelem/s 31.746 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 156.0381679389313
+Nezha No Abort Benchmark according to block concurrency/nezha/22, 0.9
+                        time:   [144.27 ms 148.60 ms 153.04 ms]
+                        thrpt:  [28.750 Kelem/s 29.609 Kelem/s 30.498 Kelem/s]
+num of retry: 162.9618320610687
+Nezha No Abort Benchmark according to block concurrency/nezha/23, 0.9
+                        time:   [165.24 ms 169.68 ms 174.18 ms]
+                        thrpt:  [26.409 Kelem/s 27.110 Kelem/s 27.839 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 172.02608695652174
+Nezha No Abort Benchmark according to block concurrency/nezha/24, 0.9
+                        time:   [175.29 ms 180.14 ms 185.12 ms]
+                        thrpt:  [25.930 Kelem/s 26.647 Kelem/s 27.384 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 178.9217391304348
+Nezha No Abort Benchmark according to block concurrency/nezha/25, 0.9
+                        time:   [191.48 ms 196.71 ms 202.22 ms]
+                        thrpt:  [24.726 Kelem/s 25.418 Kelem/s 26.112 Kelem/s]
+Found 3 outliers among 100 measurements (3.00%)
+  3 (3.00%) high mild
+num of retry: 187.42608695652174
+Nezha No Abort Benchmark according to block concurrency/nezha/26, 0.9
+                        time:   [200.54 ms 206.31 ms 212.21 ms]
+                        thrpt:  [24.504 Kelem/s 25.205 Kelem/s 25.930 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 194.17391304347825
+Nezha No Abort Benchmark according to block concurrency/nezha/27, 0.9
+                        time:   [222.77 ms 229.06 ms 235.40 ms]
+                        thrpt:  [22.940 Kelem/s 23.575 Kelem/s 24.240 Kelem/s]
+num of retry: 201.35652173913044
+Nezha No Abort Benchmark according to block concurrency/nezha/28, 0.9
+                        time:   [240.87 ms 246.06 ms 251.33 ms]
+                        thrpt:  [22.281 Kelem/s 22.758 Kelem/s 23.249 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 207.61739130434782
+Nezha No Abort Benchmark according to block concurrency/nezha/29, 0.9
+                        time:   [252.97 ms 259.00 ms 265.13 ms]
+                        thrpt:  [21.876 Kelem/s 22.394 Kelem/s 22.927 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 218.7826086956522
+Nezha No Abort Benchmark according to block concurrency/nezha/30, 0.9
+                        time:   [274.49 ms 281.49 ms 288.55 ms]
+                        thrpt:  [20.794 Kelem/s 21.315 Kelem/s 21.859 Kelem/s]
+num of retry: 222.9391304347826
+Nezha No Abort Benchmark according to block concurrency/nezha/31, 0.9
+                        time:   [282.61 ms 289.24 ms 295.99 ms]
+                        thrpt:  [20.947 Kelem/s 21.435 Kelem/s 21.938 Kelem/s]
+Found 2 outliers among 100 measurements (2.00%)
+  2 (2.00%) high mild
+num of retry: 230.17391304347825
+Nezha No Abort Benchmark according to block concurrency/nezha/32, 0.9
+                        time:   [312.67 ms 319.70 ms 326.80 ms]
+                        thrpt:  [19.584 Kelem/s 20.019 Kelem/s 20.469 Kelem/s]
+Found 3 outliers among 100 measurements (3.00%)
+  1 (1.00%) low mild
+  2 (2.00%) high mild
+num of retry: 241.69565217391303
+Nezha No Abort Benchmark according to block concurrency/nezha/33, 0.9
+                        time:   [335.91 ms 344.42 ms 353.06 ms]
+                        thrpt:  [18.694 Kelem/s 19.163 Kelem/s 19.648 Kelem/s]
+Found 2 outliers among 100 measurements (2.00%)
+  2 (2.00%) high mild
+num of retry: 246.4608695652174
+Nezha No Abort Benchmark according to block concurrency/nezha/34, 0.9
+                        time:   [359.29 ms 369.46 ms 380.00 ms]
+                        thrpt:  [17.895 Kelem/s 18.405 Kelem/s 18.926 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 257.9906542056075
+Nezha No Abort Benchmark according to block concurrency/nezha/35, 0.9
+                        time:   [366.22 ms 374.05 ms 382.16 ms]
+                        thrpt:  [18.317 Kelem/s 18.714 Kelem/s 19.114 Kelem/s]
+Found 2 outliers among 100 measurements (2.00%)
+  2 (2.00%) high mild
+num of retry: 259.4766355140187
+Nezha No Abort Benchmark according to block concurrency/nezha/36, 0.9
+                        time:   [397.73 ms 406.20 ms 414.90 ms]
+                        thrpt:  [17.354 Kelem/s 17.725 Kelem/s 18.103 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 269.14953271028037
+Nezha No Abort Benchmark according to block concurrency/nezha/37, 0.9
+                        time:   [419.41 ms 429.78 ms 440.22 ms]
+                        thrpt:  [16.810 Kelem/s 17.218 Kelem/s 17.644 Kelem/s]
+num of retry: 278.30841121495325
+Nezha No Abort Benchmark according to block concurrency/nezha/38, 0.9
+                        time:   [441.94 ms 452.69 ms 463.57 ms]
+                        thrpt:  [16.395 Kelem/s 16.789 Kelem/s 17.197 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) low mild
+num of retry: 283.38317757009344
+Nezha No Abort Benchmark according to block concurrency/nezha/39, 0.9
+                        time:   [471.73 ms 482.84 ms 494.24 ms]
+                        thrpt:  [15.782 Kelem/s 16.154 Kelem/s 16.535 Kelem/s]
+num of retry: 291.0841121495327
+Nezha No Abort Benchmark according to block concurrency/nezha/40, 0.9
+                        time:   [483.10 ms 495.11 ms 507.08 ms]
+                        thrpt:  [15.776 Kelem/s 16.158 Kelem/s 16.560 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 295.1121495327103
+Nezha No Abort Benchmark according to block concurrency/nezha/41, 0.9
+                        time:   [525.70 ms 538.72 ms 551.97 ms]
+                        thrpt:  [14.856 Kelem/s 15.221 Kelem/s 15.598 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 305.13084112149534
+Nezha No Abort Benchmark according to block concurrency/nezha/42, 0.9
+                        time:   [563.46 ms 576.72 ms 590.07 ms]
+                        thrpt:  [14.235 Kelem/s 14.565 Kelem/s 14.908 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 315.2056074766355
+Nezha No Abort Benchmark according to block concurrency/nezha/43, 0.9
+                        time:   [596.59 ms 609.90 ms 623.26 ms]
+                        thrpt:  [13.798 Kelem/s 14.101 Kelem/s 14.415 Kelem/s]
+num of retry: 319.77570093457945
+Nezha No Abort Benchmark according to block concurrency/nezha/44, 0.9
+                        time:   [622.32 ms 635.82 ms 649.63 ms]
+                        thrpt:  [13.546 Kelem/s 13.840 Kelem/s 14.141 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 330.8878504672897
+Nezha No Abort Benchmark according to block concurrency/nezha/45, 0.9
+                        time:   [646.53 ms 658.41 ms 670.60 ms]
+                        thrpt:  [13.421 Kelem/s 13.669 Kelem/s 13.920 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 335.30841121495325
+Nezha No Abort Benchmark according to block concurrency/nezha/46, 0.9
+                        time:   [689.89 ms 706.30 ms 723.03 ms]
+                        thrpt:  [12.724 Kelem/s 13.026 Kelem/s 13.336 Kelem/s]
+num of retry: 342.32710280373834
+Nezha No Abort Benchmark according to block concurrency/nezha/47, 0.9
+                        time:   [729.69 ms 748.75 ms 768.68 ms]
+                        thrpt:  [12.229 Kelem/s 12.554 Kelem/s 12.882 Kelem/s]
+Found 2 outliers among 100 measurements (2.00%)
+  2 (2.00%) high mild
+num of retry: 351.85046728971963
+Nezha No Abort Benchmark according to block concurrency/nezha/48, 0.9
+                        time:   [751.88 ms 768.43 ms 785.23 ms]
+                        thrpt:  [12.226 Kelem/s 12.493 Kelem/s 12.768 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 358.6448598130841
+Nezha No Abort Benchmark according to block concurrency/nezha/49, 0.9
+                        time:   [790.19 ms 806.80 ms 823.68 ms]
+                        thrpt:  [11.898 Kelem/s 12.147 Kelem/s 12.402 Kelem/s]
+Found 2 outliers among 100 measurements (2.00%)
+  2 (2.00%) high mild
+num of retry: 363.5420560747664
+Nezha No Abort Benchmark according to block concurrency/nezha/50, 0.9
+                        time:   [840.48 ms 861.09 ms 881.98 ms]
+                        thrpt:  [11.338 Kelem/s 11.613 Kelem/s 11.898 Kelem/s]
+Found 2 outliers among 100 measurements (2.00%)
+  2 (2.00%) high mild
+num of retry: 372.4485981308411
+Nezha No Abort Benchmark according to block concurrency/nezha/51, 0.9
+                        time:   [866.77 ms 886.53 ms 906.31 ms]
+                        thrpt:  [11.254 Kelem/s 11.505 Kelem/s 11.768 Kelem/s]
+num of retry: 379.9126213592233
+Nezha No Abort Benchmark according to block concurrency/nezha/52, 0.9
+                        time:   [899.94 ms 921.73 ms 943.91 ms]
+                        thrpt:  [11.018 Kelem/s 11.283 Kelem/s 11.556 Kelem/s]
+Found 3 outliers among 100 measurements (3.00%)
+  3 (3.00%) high mild
+num of retry: 385.7864077669903
+Nezha No Abort Benchmark according to block concurrency/nezha/53, 0.9
+                        time:   [962.61 ms 983.29 ms 1.0043 s]
+                        thrpt:  [10.555 Kelem/s 10.780 Kelem/s 11.012 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 394.5533980582524
+Nezha No Abort Benchmark according to block concurrency/nezha/54, 0.9
+                        time:   [1.0095 s 1.0296 s 1.0498 s]
+                        thrpt:  [10.288 Kelem/s 10.490 Kelem/s 10.698 Kelem/s]
+Found 4 outliers among 100 measurements (4.00%)
+  2 (2.00%) low mild
+  2 (2.00%) high mild
+num of retry: 400.00970873786406
+Nezha No Abort Benchmark according to block concurrency/nezha/55, 0.9
+                        time:   [1.0472 s 1.0679 s 1.0892 s]
+                        thrpt:  [10.099 Kelem/s 10.301 Kelem/s 10.504 Kelem/s]
+num of retry: 408.8252427184466
+Nezha No Abort Benchmark according to block concurrency/nezha/56, 0.9
+                        time:   [1.1017 s 1.1213 s 1.1412 s]
+                        thrpt:  [9.8138 Kelem/s 9.9882 Kelem/s 10.166 Kelem/s]
+num of retry: 417.09708737864077
+Nezha No Abort Benchmark according to block concurrency/nezha/57, 0.9
+                        time:   [1.1419 s 1.1659 s 1.1901 s]
+                        thrpt:  [9.5791 Kelem/s 9.7781 Kelem/s 9.9837 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 427.9514563106796
+Nezha No Abort Benchmark according to block concurrency/nezha/58, 0.9
+                        time:   [1.1694 s 1.1934 s 1.2176 s]
+                        thrpt:  [9.5266 Kelem/s 9.7202 Kelem/s 9.9200 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 435.24271844660194
+Nezha No Abort Benchmark according to block concurrency/nezha/59, 0.9
+                        time:   [1.2327 s 1.2572 s 1.2818 s]
+                        thrpt:  [9.2055 Kelem/s 9.3860 Kelem/s 9.5722 Kelem/s]
+num of retry: 438.6407766990291
+Nezha No Abort Benchmark according to block concurrency/nezha/60, 0.9
+                        time:   [1.2713 s 1.2960 s 1.3204 s]
+                        thrpt:  [9.0881 Kelem/s 9.2595 Kelem/s 9.4395 Kelem/s]
+num of retry: 446.1067961165049
+Nezha No Abort Benchmark according to block concurrency/nezha/61, 0.9
+                        time:   [1.3123 s 1.3372 s 1.3620 s]
+                        thrpt:  [8.9574 Kelem/s 9.1234 Kelem/s 9.2967 Kelem/s]
+Found 2 outliers among 100 measurements (2.00%)
+  1 (1.00%) low mild
+  1 (1.00%) high mild
+num of retry: 453.50485436893206
+Nezha No Abort Benchmark according to block concurrency/nezha/62, 0.9
+                        time:   [1.3887 s 1.4213 s 1.4549 s]
+                        thrpt:  [8.5228 Kelem/s 8.7246 Kelem/s 8.9294 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high severe
+num of retry: 463.59223300970876
+Nezha No Abort Benchmark according to block concurrency/nezha/63, 0.9
+                        time:   [1.4103 s 1.4356 s 1.4610 s]
+                        thrpt:  [8.6242 Kelem/s 8.7770 Kelem/s 8.9345 Kelem/s]
+num of retry: 466.77669902912623
+Nezha No Abort Benchmark according to block concurrency/nezha/64, 0.9
+                        time:   [1.4648 s 1.4904 s 1.5171 s]
+                        thrpt:  [8.4374 Kelem/s 8.5885 Kelem/s 8.7384 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 479.1456310679612
+Nezha No Abort Benchmark according to block concurrency/nezha/65, 0.9
+                        time:   [1.5192 s 1.5460 s 1.5726 s]
+                        thrpt:  [8.2665 Kelem/s 8.4087 Kelem/s 8.5571 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) low mild
+num of retry: 485.33009708737865
+Nezha No Abort Benchmark according to block concurrency/nezha/66, 0.9
+                        time:   [1.5316 s 1.5571 s 1.5832 s]
+                        thrpt:  [8.3374 Kelem/s 8.4770 Kelem/s 8.6184 Kelem/s]
+Found 2 outliers among 100 measurements (2.00%)
+  2 (2.00%) high mild
+num of retry: 486.56310679611653
+Nezha No Abort Benchmark according to block concurrency/nezha/67, 0.9
+                        time:   [1.6345 s 1.6631 s 1.6919 s]
+                        thrpt:  [7.9201 Kelem/s 8.0574 Kelem/s 8.1984 Kelem/s]
+num of retry: 503.0388349514563
+Nezha No Abort Benchmark according to block concurrency/nezha/68, 0.9
+                        time:   [1.6805 s 1.7094 s 1.7385 s]
+                        thrpt:  [7.8228 Kelem/s 7.9561 Kelem/s 8.0930 Kelem/s]
+Found 4 outliers among 100 measurements (4.00%)
+  2 (2.00%) low mild
+  2 (2.00%) high mild
+num of retry: 502.63106796116506
+Nezha No Abort Benchmark according to block concurrency/nezha/69, 0.9
+                        time:   [1.7050 s 1.7355 s 1.7658 s]
+                        thrpt:  [7.8151 Kelem/s 7.9516 Kelem/s 8.0937 Kelem/s]
+num of retry: 514.2621359223301
+Nezha No Abort Benchmark according to block concurrency/nezha/70, 0.9
+                        time:   [1.7761 s 1.8059 s 1.8366 s]
+                        thrpt:  [7.6226 Kelem/s 7.7523 Kelem/s 7.8823 Kelem/s]
+Found 2 outliers among 100 measurements (2.00%)
+  2 (2.00%) high mild
+num of retry: 524.8058252427185
+Nezha No Abort Benchmark according to block concurrency/nezha/71, 0.9
+                        time:   [1.8248 s 1.8545 s 1.8846 s]
+                        thrpt:  [7.5346 Kelem/s 7.6572 Kelem/s 7.7815 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 528.4854368932039
+Nezha No Abort Benchmark according to block concurrency/nezha/72, 0.9
+                        time:   [1.8828 s 1.9158 s 1.9491 s]
+                        thrpt:  [7.3882 Kelem/s 7.5166 Kelem/s 7.6480 Kelem/s]
+Found 2 outliers among 100 measurements (2.00%)
+  2 (2.00%) high mild
+num of retry: 537.0970873786408
+Nezha No Abort Benchmark according to block concurrency/nezha/73, 0.9
+                        time:   [1.9576 s 1.9899 s 2.0226 s]
+                        thrpt:  [7.2183 Kelem/s 7.3370 Kelem/s 7.4580 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 547.5922330097087
+Nezha No Abort Benchmark according to block concurrency/nezha/74, 0.9
+                        time:   [1.9628 s 1.9895 s 2.0161 s]
+                        thrpt:  [7.3410 Kelem/s 7.4390 Kelem/s 7.5404 Kelem/s]
+Found 3 outliers among 100 measurements (3.00%)
+  2 (2.00%) low mild
+  1 (1.00%) high mild
+num of retry: 546.6990291262136
+Nezha No Abort Benchmark according to block concurrency/nezha/75, 0.9
+                        time:   [2.0647 s 2.0990 s 2.1340 s]
+                        thrpt:  [7.0289 Kelem/s 7.1462 Kelem/s 7.2651 Kelem/s]
+Found 4 outliers among 100 measurements (4.00%)
+  2 (2.00%) low mild
+  2 (2.00%) high mild
+num of retry: 561.0485436893204
+Nezha No Abort Benchmark according to block concurrency/nezha/76, 0.9
+                        time:   [2.1147 s 2.1466 s 2.1786 s]
+                        thrpt:  [6.9770 Kelem/s 7.0810 Kelem/s 7.1878 Kelem/s]
+num of retry: 567.4563106796116
+Nezha No Abort Benchmark according to block concurrency/nezha/77, 0.9
+                        time:   [2.1846 s 2.2177 s 2.2511 s]
+                        thrpt:  [6.8412 Kelem/s 6.9441 Kelem/s 7.0494 Kelem/s]
+Found 2 outliers among 100 measurements (2.00%)
+  2 (2.00%) high mild
+num of retry: 573.3786407766991
+Nezha No Abort Benchmark according to block concurrency/nezha/78, 0.9
+                        time:   [2.2550 s 2.2881 s 2.3211 s]
+                        thrpt:  [6.7209 Kelem/s 6.8180 Kelem/s 6.9178 Kelem/s]
+Found 2 outliers among 100 measurements (2.00%)
+  2 (2.00%) low mild
+num of retry: 583.0485436893204
+Nezha No Abort Benchmark according to block concurrency/nezha/79, 0.9
+                        time:   [2.3098 s 2.3459 s 2.3831 s]
+                        thrpt:  [6.6300 Kelem/s 6.7352 Kelem/s 6.8403 Kelem/s]
+Found 3 outliers among 100 measurements (3.00%)
+  1 (1.00%) low mild
+  2 (2.00%) high mild
+num of retry: 588.2621359223301
+Nezha No Abort Benchmark according to block concurrency/nezha/80, 0.9
+                        time:   [2.4162 s 2.4517 s 2.4881 s]
+                        thrpt:  [6.4307 Kelem/s 6.5261 Kelem/s 6.6219 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 596.9514563106796
+Nezha No Abort Benchmark according to block concurrency/nezha/1, 1
+                        time:   [3.3864 ms 3.4341 ms 3.4838 ms]
+                        thrpt:  [57.408 Kelem/s 58.239 Kelem/s 59.060 Kelem/s]
+Found 4 outliers among 100 measurements (4.00%)
+  4 (4.00%) high mild
+num of retry: 13.979405034324943
+Nezha No Abort Benchmark according to block concurrency/nezha/2, 1
+                        time:   [8.1735 ms 8.2931 ms 8.4137 ms]
+                        thrpt:  [47.542 Kelem/s 48.233 Kelem/s 48.938 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 27.598473282442747
+Nezha No Abort Benchmark according to block concurrency/nezha/3, 1
+                        time:   [13.769 ms 13.978 ms 14.192 ms]
+                        thrpt:  [42.278 Kelem/s 42.924 Kelem/s 43.576 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 41.064864864864866
+Nezha No Abort Benchmark according to block concurrency/nezha/4, 1
+                        time:   [20.539 ms 20.882 ms 21.228 ms]
+                        thrpt:  [37.686 Kelem/s 38.311 Kelem/s 38.951 Kelem/s]
+Found 3 outliers among 100 measurements (3.00%)
+  2 (2.00%) low mild
+  1 (1.00%) high mild
+num of retry: 54.55045871559633
+Nezha No Abort Benchmark according to block concurrency/nezha/5, 1
+                        time:   [28.763 ms 29.227 ms 29.696 ms]
+                        thrpt:  [33.675 Kelem/s 34.215 Kelem/s 34.767 Kelem/s]
+num of retry: 68.33639143730886
+Nezha No Abort Benchmark according to block concurrency/nezha/6, 1
+                        time:   [37.593 ms 38.463 ms 39.343 ms]
+                        thrpt:  [30.501 Kelem/s 31.199 Kelem/s 31.921 Kelem/s]
+num of retry: 80.8159509202454
+Nezha No Abort Benchmark according to block concurrency/nezha/7, 1
+                        time:   [48.432 ms 49.463 ms 50.523 ms]
+                        thrpt:  [27.710 Kelem/s 28.304 Kelem/s 28.906 Kelem/s]
+num of retry: 95.95705521472392
+Nezha No Abort Benchmark according to block concurrency/nezha/8, 1
+                        time:   [60.509 ms 61.769 ms 63.047 ms]
+                        thrpt:  [25.378 Kelem/s 25.903 Kelem/s 26.442 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 109.44171779141104
+Nezha No Abort Benchmark according to block concurrency/nezha/9, 1
+                        time:   [73.324 ms 74.917 ms 76.671 ms]
+                        thrpt:  [23.477 Kelem/s 24.027 Kelem/s 24.549 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high severe
+num of retry: 122.22137404580153
+Nezha No Abort Benchmark according to block concurrency/nezha/10, 1
+                        time:   [88.532 ms 90.433 ms 92.329 ms]
+                        thrpt:  [21.662 Kelem/s 22.116 Kelem/s 22.591 Kelem/s]
+num of retry: 135.0916030534351
+Nezha No Abort Benchmark according to block concurrency/nezha/11, 1
+                        time:   [107.30 ms 109.52 ms 111.78 ms]
+                        thrpt:  [19.682 Kelem/s 20.087 Kelem/s 20.503 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 150.3206106870229
+Nezha No Abort Benchmark according to block concurrency/nezha/12, 1
+                        time:   [123.71 ms 126.55 ms 129.50 ms]
+                        thrpt:  [18.533 Kelem/s 18.964 Kelem/s 19.400 Kelem/s]
+Found 4 outliers among 100 measurements (4.00%)
+  4 (4.00%) high mild
+num of retry: 163.19847328244273
+Nezha No Abort Benchmark according to block concurrency/nezha/13, 1
+                        time:   [145.38 ms 148.60 ms 151.95 ms]
+                        thrpt:  [17.110 Kelem/s 17.497 Kelem/s 17.884 Kelem/s]
+Found 3 outliers among 100 measurements (3.00%)
+  3 (3.00%) high mild
+num of retry: 176.00763358778627
+Nezha No Abort Benchmark according to block concurrency/nezha/14, 1
+                        time:   [171.91 ms 175.62 ms 179.46 ms]
+                        thrpt:  [15.602 Kelem/s 15.944 Kelem/s 16.288 Kelem/s]
+Found 2 outliers among 100 measurements (2.00%)
+  2 (2.00%) high mild
+num of retry: 190.5391304347826
+Nezha No Abort Benchmark according to block concurrency/nezha/15, 1
+                        time:   [192.23 ms 196.33 ms 200.43 ms]
+                        thrpt:  [14.968 Kelem/s 15.280 Kelem/s 15.606 Kelem/s]
+num of retry: 203.02608695652174
+Nezha No Abort Benchmark according to block concurrency/nezha/16, 1
+                        time:   [228.64 ms 234.03 ms 239.62 ms]
+                        thrpt:  [13.355 Kelem/s 13.673 Kelem/s 13.996 Kelem/s]
+Found 3 outliers among 100 measurements (3.00%)
+  3 (3.00%) high mild
+num of retry: 217.37391304347827
+Nezha No Abort Benchmark according to block concurrency/nezha/17, 1
+                        time:   [258.37 ms 265.31 ms 272.57 ms]
+                        thrpt:  [12.474 Kelem/s 12.815 Kelem/s 13.159 Kelem/s]
+Found 3 outliers among 100 measurements (3.00%)
+  3 (3.00%) high mild
+num of retry: 233.30434782608697
+Nezha No Abort Benchmark according to block concurrency/nezha/18, 1
+                        time:   [293.47 ms 300.60 ms 307.88 ms]
+                        thrpt:  [11.693 Kelem/s 11.976 Kelem/s 12.267 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 247.37391304347827
+Nezha No Abort Benchmark according to block concurrency/nezha/19, 1
+                        time:   [333.89 ms 342.67 ms 351.76 ms]
+                        thrpt:  [10.803 Kelem/s 11.090 Kelem/s 11.381 Kelem/s]
+Found 2 outliers among 100 measurements (2.00%)
+  2 (2.00%) high mild
+num of retry: 261.23478260869564
+Nezha No Abort Benchmark according to block concurrency/nezha/20, 1
+                        time:   [363.95 ms 373.40 ms 383.02 ms]
+                        thrpt:  [10.443 Kelem/s 10.712 Kelem/s 10.990 Kelem/s]
+num of retry: 271.8086956521739
+Nezha No Abort Benchmark according to block concurrency/nezha/21, 1
+                        time:   [409.17 ms 418.51 ms 428.07 ms]
+                        thrpt:  [9.8114 Kelem/s 10.036 Kelem/s 10.265 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 285.2897196261682
+Nezha No Abort Benchmark according to block concurrency/nezha/22, 1
+                        time:   [446.83 ms 457.12 ms 467.74 ms]
+                        thrpt:  [9.4069 Kelem/s 9.6254 Kelem/s 9.8472 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 297.58878504672896
+Nezha No Abort Benchmark according to block concurrency/nezha/23, 1
+                        time:   [493.98 ms 504.90 ms 515.91 ms]
+                        thrpt:  [8.9162 Kelem/s 9.1107 Kelem/s 9.3122 Kelem/s]
+num of retry: 312.0841121495327
+Nezha No Abort Benchmark according to block concurrency/nezha/24, 1
+                        time:   [543.60 ms 555.57 ms 567.56 ms]
+                        thrpt:  [8.4573 Kelem/s 8.6397 Kelem/s 8.8300 Kelem/s]
+num of retry: 325.8317757009346
+Nezha No Abort Benchmark according to block concurrency/nezha/25, 1
+                        time:   [595.76 ms 610.22 ms 624.88 ms]
+                        thrpt:  [8.0015 Kelem/s 8.1937 Kelem/s 8.3927 Kelem/s]
+num of retry: 341.7383177570093
+Nezha No Abort Benchmark according to block concurrency/nezha/26, 1
+                        time:   [652.24 ms 664.69 ms 677.17 ms]
+                        thrpt:  [7.6790 Kelem/s 7.8232 Kelem/s 7.9725 Kelem/s]
+Found 2 outliers among 100 measurements (2.00%)
+  2 (2.00%) high mild
+num of retry: 353.1588785046729
+Nezha No Abort Benchmark according to block concurrency/nezha/27, 1
+                        time:   [708.27 ms 722.98 ms 738.20 ms]
+                        thrpt:  [7.3151 Kelem/s 7.4691 Kelem/s 7.6242 Kelem/s]
+Found 3 outliers among 100 measurements (3.00%)
+  3 (3.00%) high mild
+num of retry: 368.5981308411215
+Nezha No Abort Benchmark according to block concurrency/nezha/28, 1
+                        time:   [772.71 ms 791.11 ms 809.37 ms]
+                        thrpt:  [6.9189 Kelem/s 7.0787 Kelem/s 7.2472 Kelem/s]
+num of retry: 382.29906542056074
+Nezha No Abort Benchmark according to block concurrency/nezha/29, 1
+                        time:   [847.92 ms 866.06 ms 884.85 ms]
+                        thrpt:  [6.5548 Kelem/s 6.6970 Kelem/s 6.8403 Kelem/s]
+Found 2 outliers among 100 measurements (2.00%)
+  2 (2.00%) high mild
+num of retry: 396.22429906542055
+Nezha No Abort Benchmark according to block concurrency/nezha/30, 1
+                        time:   [904.80 ms 922.97 ms 941.06 ms]
+                        thrpt:  [6.3758 Kelem/s 6.5008 Kelem/s 6.6313 Kelem/s]
+Found 2 outliers among 100 measurements (2.00%)
+  1 (1.00%) low mild
+  1 (1.00%) high mild
+num of retry: 408.7281553398058
+Nezha No Abort Benchmark according to block concurrency/nezha/31, 1
+                        time:   [972.41 ms 993.25 ms 1.0147 s]
+                        thrpt:  [6.1102 Kelem/s 6.2421 Kelem/s 6.3759 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 419.621359223301
+Nezha No Abort Benchmark according to block concurrency/nezha/32, 1
+                        time:   [1.0869 s 1.1131 s 1.1393 s]
+                        thrpt:  [5.6175 Kelem/s 5.7499 Kelem/s 5.8882 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 437.19417475728153
+Nezha No Abort Benchmark according to block concurrency/nezha/33, 1
+                        time:   [1.1400 s 1.1611 s 1.1829 s]
+                        thrpt:  [5.5795 Kelem/s 5.6845 Kelem/s 5.7896 Kelem/s]
+num of retry: 447.99029126213594
+Nezha No Abort Benchmark according to block concurrency/nezha/34, 1
+                        time:   [1.2350 s 1.2598 s 1.2853 s]
+                        thrpt:  [5.2904 Kelem/s 5.3976 Kelem/s 5.5060 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 463.41747572815535
+Nezha No Abort Benchmark according to block concurrency/nezha/35, 1
+                        time:   [1.3085 s 1.3293 s 1.3502 s]
+                        thrpt:  [5.1845 Kelem/s 5.2657 Kelem/s 5.3496 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 474.0873786407767
+Nezha No Abort Benchmark according to block concurrency/nezha/36, 1
+                        time:   [1.3582 s 1.3839 s 1.4100 s]
+                        thrpt:  [5.1064 Kelem/s 5.2025 Kelem/s 5.3013 Kelem/s]
+num of retry: 489.94174757281553
+Nezha No Abort Benchmark according to block concurrency/nezha/37, 1
+                        time:   [1.4601 s 1.4852 s 1.5103 s]
+                        thrpt:  [4.8996 Kelem/s 4.9825 Kelem/s 5.0682 Kelem/s]
+num of retry: 502.6019417475728
+Nezha No Abort Benchmark according to block concurrency/nezha/38, 1
+                        time:   [1.5030 s 1.5304 s 1.5585 s]
+                        thrpt:  [4.8764 Kelem/s 4.9660 Kelem/s 5.0566 Kelem/s]
+Found 2 outliers among 100 measurements (2.00%)
+  2 (2.00%) high mild
+num of retry: 513.3203883495146
+Nezha No Abort Benchmark according to block concurrency/nezha/39, 1
+                        time:   [1.5995 s 1.6262 s 1.6530 s]
+                        thrpt:  [4.7187 Kelem/s 4.7963 Kelem/s 4.8764 Kelem/s]
+num of retry: 532.6699029126214
+Nezha No Abort Benchmark according to block concurrency/nezha/40, 1
+                        time:   [1.6866 s 1.7133 s 1.7409 s]
+                        thrpt:  [4.5954 Kelem/s 4.6693 Kelem/s 4.7433 Kelem/s]
+Found 3 outliers among 100 measurements (3.00%)
+  3 (3.00%) high mild
+num of retry: 543.1747572815534
+Nezha No Abort Benchmark according to block concurrency/nezha/41, 1
+                        time:   [1.7977 s 1.8268 s 1.8554 s]
+                        thrpt:  [4.4196 Kelem/s 4.4887 Kelem/s 4.5615 Kelem/s]
+num of retry: 559.2815533980582
+Nezha No Abort Benchmark according to block concurrency/nezha/42, 1
+                        time:   [1.8677 s 1.8967 s 1.9262 s]
+                        thrpt:  [4.3608 Kelem/s 4.4286 Kelem/s 4.4975 Kelem/s]
+num of retry: 568.3883495145631
+Nezha No Abort Benchmark according to block concurrency/nezha/43, 1
+                        time:   [1.9539 s 1.9886 s 2.0244 s]
+                        thrpt:  [4.2482 Kelem/s 4.3246 Kelem/s 4.4015 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 579.5145631067961
+Nezha No Abort Benchmark according to block concurrency/nezha/44, 1
+                        time:   [2.0577 s 2.0857 s 2.1145 s]
+                        thrpt:  [4.1617 Kelem/s 4.2192 Kelem/s 4.2766 Kelem/s]
+Found 3 outliers among 100 measurements (3.00%)
+  1 (1.00%) low mild
+  2 (2.00%) high mild
+num of retry: 598.3300970873786
+Nezha No Abort Benchmark according to block concurrency/nezha/45, 1
+                        time:   [2.1240 s 2.1565 s 2.1888 s]
+                        thrpt:  [4.1119 Kelem/s 4.1735 Kelem/s 4.2372 Kelem/s]
+num of retry: 606.6601941747573
+Nezha No Abort Benchmark according to block concurrency/nezha/46, 1
+                        time:   [2.2161 s 2.2435 s 2.2709 s]
+                        thrpt:  [4.0513 Kelem/s 4.1006 Kelem/s 4.1514 Kelem/s]
+num of retry: 623.2912621359224
+Nezha No Abort Benchmark according to block concurrency/nezha/47, 1
+                        time:   [2.3567 s 2.3916 s 2.4261 s]
+                        thrpt:  [3.8746 Kelem/s 3.9304 Kelem/s 3.9886 Kelem/s]
+num of retry: 642.2135922330098
+Nezha No Abort Benchmark according to block concurrency/nezha/48, 1
+                        time:   [2.4255 s 2.4601 s 2.4955 s]
+                        thrpt:  [3.8470 Kelem/s 3.9022 Kelem/s 3.9579 Kelem/s]
+Found 3 outliers among 100 measurements (3.00%)
+  3 (3.00%) high mild
+num of retry: 647.2912621359224
+Nezha No Abort Benchmark according to block concurrency/nezha/49, 1
+                        time:   [2.5551 s 2.5903 s 2.6258 s]
+                        thrpt:  [3.7322 Kelem/s 3.7833 Kelem/s 3.8355 Kelem/s]
+Found 2 outliers among 100 measurements (2.00%)
+  1 (1.00%) low mild
+  1 (1.00%) high mild
+num of retry: 663.0776699029126
+Nezha No Abort Benchmark according to block concurrency/nezha/50, 1
+                        time:   [2.6880 s 2.7233 s 2.7589 s]
+                        thrpt:  [3.6246 Kelem/s 3.6720 Kelem/s 3.7203 Kelem/s]
+Found 2 outliers among 100 measurements (2.00%)
+  1 (1.00%) low mild
+  1 (1.00%) high mild
+num of retry: 680.9306930693069
+Nezha No Abort Benchmark according to block concurrency/nezha/51, 1
+                        time:   [2.8087 s 2.8444 s 2.8805 s]
+                        thrpt:  [3.5410 Kelem/s 3.5860 Kelem/s 3.6316 Kelem/s]
+Found 2 outliers among 100 measurements (2.00%)
+  2 (2.00%) high mild
+num of retry: 694.5643564356436
+Nezha No Abort Benchmark according to block concurrency/nezha/52, 1
+                        time:   [2.9381 s 2.9769 s 3.0155 s]
+                        thrpt:  [3.4488 Kelem/s 3.4935 Kelem/s 3.5397 Kelem/s]
+num of retry: 708.1456310679612
+Nezha No Abort Benchmark according to block concurrency/nezha/53, 1
+                        time:   [3.0529 s 3.0899 s 3.1279 s]
+                        thrpt:  [3.3889 Kelem/s 3.4305 Kelem/s 3.4721 Kelem/s]
+Found 3 outliers among 100 measurements (3.00%)
+  1 (1.00%) high mild
+  2 (2.00%) high severe
+num of retry: 722.1188118811881
+Nezha No Abort Benchmark according to block concurrency/nezha/54, 1
+                        time:   [3.1800 s 3.2228 s 3.2658 s]
+                        thrpt:  [3.3070 Kelem/s 3.3511 Kelem/s 3.3963 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 734.8019801980198
+Nezha No Abort Benchmark according to block concurrency/nezha/55, 1
+                        time:   [3.2910 s 3.3299 s 3.3686 s]
+                        thrpt:  [3.2654 Kelem/s 3.3034 Kelem/s 3.3424 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) low mild
+num of retry: 746.7326732673267
+Nezha No Abort Benchmark according to block concurrency/nezha/56, 1
+                        time:   [3.4574 s 3.4977 s 3.5378 s]
+                        thrpt:  [3.1658 Kelem/s 3.2021 Kelem/s 3.2394 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 757.019801980198
+Nezha No Abort Benchmark according to block concurrency/nezha/57, 1
+                        time:   [3.6113 s 3.6528 s 3.6949 s]
+                        thrpt:  [3.0853 Kelem/s 3.1209 Kelem/s 3.1568 Kelem/s]
+num of retry: 773.7227722772277
+Nezha No Abort Benchmark according to block concurrency/nezha/58, 1
+                        time:   [3.7289 s 3.7660 s 3.8040 s]
+                        thrpt:  [3.0495 Kelem/s 3.0802 Kelem/s 3.1108 Kelem/s]
+Found 3 outliers among 100 measurements (3.00%)
+  3 (3.00%) high mild
+num of retry: 784.8514851485148
+Nezha No Abort Benchmark according to block concurrency/nezha/59, 1
+                        time:   [3.8942 s 3.9410 s 3.9872 s]
+                        thrpt:  [2.9595 Kelem/s 2.9941 Kelem/s 3.0301 Kelem/s]
+num of retry: 800.4554455445544
+Nezha No Abort Benchmark according to block concurrency/nezha/60, 1
+                        time:   [4.0365 s 4.0813 s 4.1263 s]
+                        thrpt:  [2.9082 Kelem/s 2.9402 Kelem/s 2.9729 Kelem/s]
+Found 3 outliers among 100 measurements (3.00%)
+  2 (2.00%) low mild
+  1 (1.00%) high mild
+num of retry: 816.8613861386139
+Nezha No Abort Benchmark according to block concurrency/nezha/61, 1
+                        time:   [4.1462 s 4.1871 s 4.2281 s]
+                        thrpt:  [2.8854 Kelem/s 2.9137 Kelem/s 2.9425 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 829.3762376237623
+Nezha No Abort Benchmark according to block concurrency/nezha/62, 1
+                        time:   [4.3184 s 4.3623 s 4.4056 s]
+                        thrpt:  [2.8146 Kelem/s 2.8425 Kelem/s 2.8714 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) low mild
+num of retry: 842.4752475247525
+Nezha No Abort Benchmark according to block concurrency/nezha/63, 1
+                        time:   [4.4348 s 4.4798 s 4.5259 s]
+                        thrpt:  [2.7840 Kelem/s 2.8126 Kelem/s 2.8412 Kelem/s]
+Found 2 outliers among 100 measurements (2.00%)
+  2 (2.00%) high mild
+num of retry: 861.2772277227723
+Nezha No Abort Benchmark according to block concurrency/nezha/64, 1
+                        time:   [4.6449 s 4.6902 s 4.7369 s]
+                        thrpt:  [2.7022 Kelem/s 2.7291 Kelem/s 2.7557 Kelem/s]
+num of retry: 875.0297029702971
+Nezha No Abort Benchmark according to block concurrency/nezha/65, 1
+                        time:   [4.7086 s 4.7561 s 4.8029 s]
+                        thrpt:  [2.7067 Kelem/s 2.7333 Kelem/s 2.7609 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) low mild
+num of retry: 880.5643564356436
+Nezha No Abort Benchmark according to block concurrency/nezha/66, 1
+                        time:   [4.9106 s 4.9606 s 5.0105 s]
+                        thrpt:  [2.6345 Kelem/s 2.6610 Kelem/s 2.6881 Kelem/s]
+num of retry: 898.7425742574258
+Nezha No Abort Benchmark according to block concurrency/nezha/67, 1
+                        time:   [5.0224 s 5.0691 s 5.1167 s]
+                        thrpt:  [2.6189 Kelem/s 2.6435 Kelem/s 2.6681 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 908.6138613861386
+Nezha No Abort Benchmark according to block concurrency/nezha/68, 1
+                        time:   [5.1667 s 5.2181 s 5.2690 s]
+                        thrpt:  [2.5811 Kelem/s 2.6063 Kelem/s 2.6323 Kelem/s]
+Found 4 outliers among 100 measurements (4.00%)
+  3 (3.00%) low mild
+  1 (1.00%) high mild
+num of retry: 927.9009900990098
+Nezha No Abort Benchmark according to block concurrency/nezha/69, 1
+                        time:   [5.3293 s 5.3786 s 5.4283 s]
+                        thrpt:  [2.5422 Kelem/s 2.5657 Kelem/s 2.5895 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 940.3960396039604
+Nezha No Abort Benchmark according to block concurrency/nezha/70, 1
+                        time:   [5.4394 s 5.4904 s 5.5415 s]
+                        thrpt:  [2.5264 Kelem/s 2.5499 Kelem/s 2.5738 Kelem/s]
+num of retry: 949.5445544554456
+Nezha No Abort Benchmark according to block concurrency/nezha/71, 1
+                        time:   [5.6353 s 5.6836 s 5.7323 s]
+                        thrpt:  [2.4772 Kelem/s 2.4984 Kelem/s 2.5198 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 961.9306930693069
+Nezha No Abort Benchmark according to block concurrency/nezha/72, 1
+                        time:   [5.6955 s 5.7495 s 5.8041 s]
+                        thrpt:  [2.4810 Kelem/s 2.5046 Kelem/s 2.5283 Kelem/s]
+num of retry: 976.2970297029703
+Nezha No Abort Benchmark according to block concurrency/nezha/73, 1
+                        time:   [5.8989 s 5.9547 s 6.0107 s]
+                        thrpt:  [2.4290 Kelem/s 2.4518 Kelem/s 2.4750 Kelem/s]
+num of retry: 989.5841584158416
+Nezha No Abort Benchmark according to block concurrency/nezha/74, 1
+                        time:   [6.0857 s 6.1360 s 6.1868 s]
+                        thrpt:  [2.3922 Kelem/s 2.4120 Kelem/s 2.4320 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+num of retry: 1006.7821782178218
+Nezha No Abort Benchmark according to block concurrency/nezha/75, 1
+                        time:   [6.2571 s 6.3124 s 6.3672 s]
+                        thrpt:  [2.3558 Kelem/s 2.3763 Kelem/s 2.3973 Kelem/s]
+num of retry: 1019.1980198019802
+Nezha No Abort Benchmark according to block concurrency/nezha/76, 1
+                        time:   [6.3746 s 6.4306 s 6.4848 s]
+                        thrpt:  [2.3440 Kelem/s 2.3637 Kelem/s 2.3845 Kelem/s]
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) low mild
+num of retry: 1030.1287128712872
+Nezha No Abort Benchmark according to block concurrency/nezha/77, 1
+                        time:   [6.5967 s 6.6515 s 6.7058 s]
+                        thrpt:  [2.2965 Kelem/s 2.3153 Kelem/s 2.3345 Kelem/s]
+num of retry: 1049.8019801980197
+Nezha No Abort Benchmark according to block concurrency/nezha/78, 1
+                        time:   [6.8300 s 6.8891 s 6.9481 s]
+                        thrpt:  [2.2452 Kelem/s 2.2644 Kelem/s 2.2840 Kelem/s]
+num of retry: 1065.920792079208
+Nezha No Abort Benchmark according to block concurrency/nezha/79, 1
+                        time:   [6.9622 s 7.0197 s 7.0772 s]
+                        thrpt:  [2.2325 Kelem/s 2.2508 Kelem/s 2.2694 Kelem/s]
+num of retry: 1076.6435643564357
+Nezha No Abort Benchmark according to block concurrency/nezha/80, 1
+                        time:   [7.1297 s 7.1926 s 7.2550 s]
+                        thrpt:  [2.2054 Kelem/s 2.2245 Kelem/s 2.2441 Kelem/s]
+num of retry: 1087.1089108910892
+

@@ -44,28 +44,40 @@ fn _get_rw_sets(nezha: std::sync::Arc<ConcurrencyLevelManager>, consensus_output
     rx.recv().unwrap()
 }
 fn block_concurrency_no_abort(c: &mut Criterion) {
+    let skewness_list = [0.9, 1.0 as f32];
     let param = 1..81;
     let mut group = c.benchmark_group("Nezha No Abort Benchmark according to block concurrency");
-    for i in param {
-        group.throughput(Throughput::Elements((DEFAULT_BATCH_SIZE*i) as u64));
-        group.bench_with_input(
-            criterion::BenchmarkId::new("nezha", i),
-            &i,
-            |b, i| {
-                b.to_async(tokio::runtime::Runtime::new().unwrap()).iter_batched(
-                    || {
-                        let consensus_output = _create_random_smallbank_workload(DEFAULT_SKEWNESS, DEFAULT_BATCH_SIZE, *i);
-                        let nezha = _get_nezha_executor(*i);
-                        (nezha, consensus_output)
-                    },
-                    |(nezha, consensus_output)| async move {
 
-                        nezha._execute(consensus_output).await
-                    },
-                    BatchSize::SmallInput
-                );
-            }
-        );
+    
+    for skewness in skewness_list {
+        for i in param.clone() {
+            group.throughput(Throughput::Elements((DEFAULT_BATCH_SIZE*i) as u64));
+
+            let num_of_retries = std::sync::Arc::new(RwLock::new(Vec::new()));
+
+            group.bench_with_input(
+                criterion::BenchmarkId::new("nezha", format!("{}, {}", i, skewness)),
+                &(i, skewness, num_of_retries.clone()),
+                |b, (i, skewness, num_of_retries)| {
+                    b.to_async(tokio::runtime::Runtime::new().unwrap()).iter_batched(
+                        || {
+                            let consensus_output = _create_random_smallbank_workload(*skewness, DEFAULT_BATCH_SIZE, *i);
+                            let nezha = _get_nezha_executor(*i);
+                            (nezha, consensus_output)
+                        },
+                        |(nezha, consensus_output)| async move {
+    
+                            let (_, num_of_retry) = nezha._execute(consensus_output).await;
+                            
+                            num_of_retries.write().push(num_of_retry);
+                        },
+                        BatchSize::SmallInput
+                    );
+                }
+            );
+
+            println!("num of retry: {}", num_of_retries.read().iter().sum::<u64>() as f64 / num_of_retries.read().len() as f64);
+        }
     }
 }
 

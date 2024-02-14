@@ -4,6 +4,7 @@ import sys
 
 MICRO = "µs"
 MILLI = "ms"
+SEC = "s"
 
 def _parse_scheduling(log): 
     tmp = findall(r'ACG construct: (\d+\.\d+)', log)
@@ -27,13 +28,15 @@ def _parse_effective_throughput(log):
     return committed
 
 def _parse_total(log):
-    tmp = findall(r'time:   \[\d+\.\d+ [µ|m]s (\d+\.\d+) ([µ|m]s) \d+\.\d+ [µ|m]s\]', log)
+    tmp = findall(r'time:   \[\d+\.\d+ [µs|ms|s]+ (\d+\.\d+) ([µs|ms|s]+) \d+\.\d+ [µs|ms|s]+\]', log)
     
     total = []
     for duration, unit in tmp:
         duration = float(duration)
         if unit == MICRO:
             duration /= 1000
+        elif unit == SEC:
+            duration *= 1000
         total.append(duration)
         
     return total
@@ -49,6 +52,12 @@ def _parse_nezha(log):
     commit = [float(t) for t in tmp]
     
     return simulation, scheduling, commit
+
+def _parse_nezha_without_abort(log):
+    tmp = findall(r'num of retry: (\d+\.*\d*)', log)
+    num_of_retry = [float(t) for t in tmp]
+
+    return num_of_retry
 
 def result(log):
     
@@ -70,6 +79,12 @@ def result(log):
         result += "\n[Commit]\n"
         for duration in commit:
             result += f"{duration} \n"
+            
+    num_of_retry = _parse_nezha_without_abort(log)
+    if num_of_retry:
+        result += "\n[Num of Retry]\n"
+        for num in num_of_retry:
+            result += f"{num} \n"
     
     construct, sort, reorder, extraction = _parse_scheduling(log)
     if construct:

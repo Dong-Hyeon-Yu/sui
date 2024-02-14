@@ -63,7 +63,7 @@ impl ConcurrencyLevelManager {
             let split_idx = std::cmp::min(self.concurrency_level, target.len());
             let remains: Vec<ExecutableEthereumBatch> = target.split_off(split_idx);
 
-            result.extend(self._execute(target).await);
+            result.extend(self._execute(target).await.0);
 
             target = remains;
         } 
@@ -100,11 +100,14 @@ impl ConcurrencyLevelManager {
         recv.await.unwrap()
     }
 
-    pub async fn _execute(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> Vec<BatchDigest> {
+    pub async fn _execute(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> (Vec<BatchDigest>, u64) {
         
         let (digests, mut tx_list) = Self::_unpack_batches(consensus_output).await;
 
+        let mut num_of_retry = 0u64;
         while tx_list.len() > 0 {
+            num_of_retry += 1;
+
             let rw_sets = self._simulate(tx_list).await;
         
             let (scheduled_info, aborted_txs) = AddressBasedConflictGraph::par_construct(rw_sets).await
@@ -117,8 +120,7 @@ impl ConcurrencyLevelManager {
             tx_list = aborted_txs;
         }
         
-
-        digests
+        (digests, num_of_retry)
     }
 
     pub async fn simulate(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> SimulationResult {

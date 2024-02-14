@@ -207,6 +207,31 @@ impl ScheduledInfo {
     pub fn from(tx_list: hashbrown::HashMap<H256, Arc<Transaction>>, aborted_tx_num: usize) -> Self {
 
         // group by sequence.
+        let mut list = tx_list.into_iter()
+            .map(|(_, tx)| {
+                let tx = Self::_unwrap(tx);
+                let tx_id = tx.id();
+                let seq = tx.sequence().to_owned();
+                let (effects, logs) = tx.simulation_result();
+
+                ScheduledTransaction {seq, tx_id, effects, logs }
+            })
+            .collect::<Vec<ScheduledTransaction>>();
+
+        // sort groups by sequence.
+        list.sort_unstable_by_key(|tx| tx.seq());
+        let mut scheduled_txs = Vec::<Vec<ScheduledTransaction>>::new(); 
+        for (_key, txns) in &list.into_iter().group_by(|tx| tx.seq()) {
+            scheduled_txs.push(txns.collect_vec());
+        }
+        
+        Self { scheduled_txs, aborted_tx_num }
+    }
+
+
+    pub fn par_from(tx_list: hashbrown::HashMap<H256, Arc<Transaction>>, aborted_tx_num: usize) -> Self {
+
+        // group by sequence.
         let mut list = tx_list.into_par_iter()
             .map(|(_, tx)| {
                 let tx = Self::_unwrap(tx);

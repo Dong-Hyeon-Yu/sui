@@ -146,12 +146,12 @@ impl AddressBasedConflictGraph {
         self.addresses.clear();
         self.addresses.shrink_to_fit();
 
-        ScheduledInfo::from(tx_list, self._aborted_txs().len())
+        ScheduledInfo::from(tx_list, self.aborted_txs.len())
     }
 
     pub async fn par_extract_schedule(&mut self) -> (ScheduledInfo, Vec<EthereumTransaction>) {
         let tx_list = std::mem::replace(&mut self.tx_list, hashbrown::HashMap::default());
-        let aborted_num = self._aborted_txs().len();
+        let aborted_num = self.aborted_txs.len();
         let aborted_txs = std::mem::replace(&mut self.aborted_txs, Vec::new());
         
         self.addresses.clear();
@@ -168,7 +168,7 @@ impl AddressBasedConflictGraph {
                 })
                 .collect::<Vec<_>>();
 
-            let schedule = ScheduledInfo::from(tx_list, aborted_num);
+            let schedule = ScheduledInfo::par_from(tx_list, aborted_num);
             let _ = send.send((schedule, aborted_txs));
         });
         recv.await.unwrap()

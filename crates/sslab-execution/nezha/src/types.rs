@@ -1,5 +1,6 @@
 use ethers_core::types::H256;
 use evm::{backend::{Apply, Log}, executor::stack::RwSet};
+use itertools::Itertools;
 use narwhal_types::BatchDigest;
 use sslab_execution::types::EthereumTransaction;
 
@@ -27,6 +28,18 @@ impl SimulatedTransaction {
     pub fn deconstruct(self) -> (H256, Option<RwSet>, Vec<Apply>, Vec<Log>, EthereumTransaction) {
         (self.tx_id, self.rw_set, self.effects, self.logs, self.raw_tx)
     }
+
+    pub fn write_set(&self) -> Option<hashbrown::HashSet<H256>> {
+        match self.rw_set {
+            Some(ref set) => {
+                Some(set.writes()
+                    .iter()
+                    .flat_map(|(_, state)| state.keys().cloned().collect_vec())
+                    .collect())
+            },
+            None => None
+        }
+    }
 }
 
 
@@ -49,5 +62,12 @@ impl ScheduledTransaction {
     #[allow(dead_code)] // this function is used in unit tests.
     pub(crate) fn id(&self) -> &H256 {
         &self.tx_id
+    }
+}
+
+impl From<SimulatedTransaction> for ScheduledTransaction {
+    fn from(tx: SimulatedTransaction) -> Self {
+        let (tx_id, _, effects, logs, _) = tx.deconstruct();
+        Self { seq: 0, tx_id, effects, logs }
     }
 }

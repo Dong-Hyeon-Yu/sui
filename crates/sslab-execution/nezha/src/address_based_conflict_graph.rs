@@ -1,6 +1,7 @@
 use std::{sync::Arc, collections::{BTreeMap, HashMap}};
 use ethers_core::types::{H256, H160};
 use evm::{backend::{Apply, Log}, executor::stack::RwSet};
+use hashbrown::HashSet;
 use itertools::Itertools;
 
 use parking_lot::{RwLock, RwLockReadGuard};
@@ -139,37 +140,24 @@ impl AddressBasedConflictGraph {
     #[must_use]
     pub fn extract_schedule(&mut self) -> ScheduledInfo {
         let tx_list = std::mem::replace(&mut self.tx_list, hashbrown::HashMap::default());
-        // let aborted_txs = std::mem::replace(&mut self.aborted_txs, Vec::new());
+        let aborted_txs = std::mem::take(&mut self.aborted_txs);
 
-        tx_list.iter().for_each(|(_, tx)| tx.clear_write_units());
-        // aborted_txs.iter().for_each(|tx| tx.clear_write_units());
         self.addresses.clear();
         self.addresses.shrink_to_fit();
 
-        ScheduledInfo::from(tx_list, self.aborted_txs.len())
+        ScheduledInfo::from(tx_list, aborted_txs)
     }
 
-    pub async fn par_extract_schedule(&mut self) -> (ScheduledInfo, Vec<EthereumTransaction>) {
-        let tx_list = std::mem::replace(&mut self.tx_list, hashbrown::HashMap::default());
-        let aborted_num = self.aborted_txs.len();
-        let aborted_txs = std::mem::replace(&mut self.aborted_txs, Vec::new());
+    pub async fn par_extract_schedule(&mut self) -> ScheduledInfo {
+        let tx_list = std::mem::take(&mut self.tx_list);
+        let aborted_txs = std::mem::take(&mut self.aborted_txs);
         
         self.addresses.clear();
         self.addresses.shrink_to_fit();
 
         let (send, recv) = tokio::sync::oneshot::channel();
         rayon::spawn(move || {
-            tx_list.par_iter().for_each(|(_, tx)| tx.clear_write_units());
-            let aborted_txs = aborted_txs
-                .par_iter()
-                .map(|tx| {
-                    tx.clear_write_units();
-                    tx.raw_tx.clone()
-                })
-                .collect::<Vec<_>>();
-
-            let schedule = ScheduledInfo::par_from(tx_list, aborted_num);
-            let _ = send.send((schedule, aborted_txs));
+            let _ = send.send(ScheduledInfo::par_from(tx_list, aborted_txs));
         });
         recv.await.unwrap()
     }
@@ -189,7 +177,7 @@ impl AddressBasedConflictGraph {
                             std::cmp::Ordering::Equal => {
 
                                 // 3rd priority
-                                a.address().cmp(b.address())  //TODO: 여기에 해당하는 address들간 in_degree가 가장 작고, out_degree가 가장 큰 순서대로 정렬하는게 best. (overhead?)
+                                a.address().cmp(b.address())
                             },
                             other => other
                         }
@@ -267,10 +255,12 @@ impl AddressBasedConflictGraph {
     }
 
     fn _aborted_txs(&mut self) -> Vec<Arc<Transaction>> {
-        let aborted_tx_indice = self.tx_list.iter()
+        let mut aborted_tx_indice = self.tx_list.iter()
             .filter(|(_, tx)| tx.aborted())
             .map(|(tx_id, _)| tx_id.to_owned())
             .collect_vec();
+
+        aborted_tx_indice.sort();
 
         aborted_tx_indice.iter()
             .for_each(|idx| {
@@ -298,13 +288,47 @@ impl AddressBasedConflictGraph {
     }
 }
 
+#[derive(Debug)]
+pub struct AbortInfo {
+    aborted: bool,
+    next_epoch: u64, // next epoch to be scheduled.
+    prev_write_keys: HashSet<H256>,
+    prev_read_keys: HashSet<H256>,
+}
+
+impl AbortInfo {
+    fn new(read_keys: HashSet<H256>) -> Self {
+        Self { 
+            aborted: false, 
+            next_epoch: 0u64, 
+            prev_write_keys: Default::default(), 
+            prev_read_keys: read_keys
+        }
+    }
+
+    pub fn set_epoch(&mut self, epoch: u64) {
+        self.next_epoch = epoch;
+    }
+
+    pub fn write_keys(&self) -> &HashSet<H256> {
+        &self.prev_write_keys
+    }
+
+    pub fn read_keys(&self) -> &HashSet<H256> {
+        &self.prev_read_keys
+    }
+
+    pub fn epoch(&self) -> u64 {
+        self.next_epoch
+    }
+}
 
 
 #[derive(Debug)]
 pub struct Transaction {
     tx_id: H256, 
     sequence: RwLock<u64>,  // 0 represents that this transaction havn't been ordered yet.
-    aborted: RwLock<bool>,
+    pub abort_info: RwLock<AbortInfo>,
     write_units: RwLock<Vec<Arc<Unit>>>,
 
     effects: Vec<Apply>,
@@ -316,10 +340,16 @@ impl Transaction {
 
     fn from(tx: SimulatedTransaction) -> (Self, RwSet) {
         let (tx_id, rw_set, effects, logs, raw_tx ) = tx.deconstruct();
+
+        let read_keys = match &rw_set {
+            Some(rw_set) => rw_set.reads().values().flat_map(|state| state.keys().cloned()).collect(),
+            None => Default::default()
+        };
+        
         let tx = Self { 
             tx_id,
             sequence: RwLock::new(0), 
-            aborted: RwLock::new(false), 
+            abort_info: RwLock::new(AbortInfo::new(read_keys)), 
             write_units: RwLock::new(Vec::new()), 
             effects, 
             logs, 
@@ -346,18 +376,21 @@ impl Transaction {
         write_units.into_iter().for_each(|u| my_units.push(u));
     }
 
-    fn clear_write_units(&self) {
+    pub(crate) fn clear_write_units(&self) {
         let mut my_units = self.write_units.write();
         my_units.clear();
         my_units.shrink_to_fit();
     }
 
     fn abort(&self) {
-        *self.aborted.write() = true;
+        let mut info = self.abort_info.write();
+        info.aborted = true;
+
+        info.prev_write_keys = self.write_units.write().iter().map(|unit| unit.address().clone()).collect();
     }
 
     fn aborted(&self) -> bool {
-        self.aborted.read().to_owned()
+        self.abort_info.read().aborted
     }
 
     fn set_sequence(&self, sequence: u64) {
@@ -365,7 +398,7 @@ impl Transaction {
     }
 
     fn is_sorted(&self) -> bool {
-        *self.sequence.read() != 0
+        *self.sequence.read() != 0 || self.aborted()
     }
 
     fn reorderable(&self) -> bool {
@@ -378,6 +411,10 @@ impl Transaction {
 
     fn write_units(&self) -> RwLockReadGuard<Vec<Arc<Unit>>> {
         self.write_units.read()
+    }
+
+    pub fn raw_tx(&self) -> &EthereumTransaction {
+        &self.raw_tx
     }
 }
 
@@ -461,19 +498,25 @@ impl ReadUnits {
     fn sort(&mut self) {
 
         /* (Algorithm2) line 3*/
-        let units = std::mem::replace(&mut self.units, Vec::new());
+        let units = std::mem::take(&mut self.units);
         let (sorted, remaining): (Vec<Arc<Unit>>, Vec<Arc<Unit>>) = units.into_iter().partition(|unit| unit.is_sorted());
 
         let min_seq;
 
         /* (Algorithm2) line 4 ~ 8 */
-        if sorted.is_empty() {
+        if sorted.iter()
+            .filter(|unit| !unit.tx.aborted())
+            .collect_vec().is_empty() {
+                
             self.max_seq = 1;
             min_seq = 1;
         } 
         /* (Algorithm2) line 9 ~ 15 */
         else {
-            let (_min_seq, _max_seq) = sorted.iter().map(|unit| unit.sequence()).minmax().into_option().unwrap();
+            let (_min_seq, _max_seq) = sorted.iter()
+                .filter(|unit| !unit.tx.aborted())
+                .map(|unit| unit.sequence())
+                .minmax().into_option().unwrap();
             min_seq = _min_seq;
             self.max_seq = _max_seq;
         }
@@ -487,18 +530,19 @@ impl ReadUnits {
 
     fn increment_and_get_max_seq(&mut self) -> u64 {
         self.max_seq += 1;
-        self.max_seq.clone()
+        self.max_seq
     }
 
-    fn max_seq(&self) -> &u64 {
-        &self.max_seq
+    fn max_seq(&self) -> u64 {
+        self.max_seq
     }
 }
 
 #[derive(Clone, Debug)]
 struct WriteUnits {
     units: Vec<Arc<Unit>>,
-    max_seq: u64
+    max_seq: u64,
+    first_updater_flag: bool,
 }
 
 impl WriteUnits {
@@ -506,6 +550,7 @@ impl WriteUnits {
         Self {
             units: Vec::new(),
             max_seq: 0,
+            first_updater_flag: false,
         }
     }
 
@@ -517,19 +562,29 @@ impl WriteUnits {
     fn sort(&mut self, read_units: &mut ReadUnits) {
 
         /* (Algorithm2) line 16 */
-        let units = std::mem::replace(&mut self.units, Vec::new());
+        let units = std::mem::take(&mut self.units);
         let (sorted, mut remaining): (Vec<Arc<Unit>>, Vec<Arc<Unit>>) = units.into_iter().partition(|unit| unit.is_sorted());
 
         /* (Algorithm2) line 17 ~ 19 */
-        sorted.iter().for_each(|unit|{
+        sorted.iter()
+            .filter(|unit| !unit.tx.aborted())
+            .for_each(|unit|{
                 if unit.co_located() {
-                    unit.set_sequence(read_units.increment_and_get_max_seq());
+                    match self.first_updater_flag {
+                        false => {  // First updater wins
+                            unit.set_sequence(read_units.increment_and_get_max_seq());
+                            self.first_updater_flag = true;
+                        },
+                        true => {
+                            unit.set_sequence(0); // Loser will be aborted later.
+                        }
+                    }
                 }
             });
 
         /* (Algorithm2) line 20 ~ 24 */
         sorted.iter().for_each(|unit|{
-                if unit.sequence() < *read_units.max_seq() {
+                if unit.sequence() < read_units.max_seq() {
                     unit.abort_tx();  
                 }
             });
@@ -538,14 +593,14 @@ impl WriteUnits {
         let mut write_seq = read_units.increment_and_get_max_seq();
 
         /* (Algorithm2) line 30 ~ 35 */
-        let mut write_seq_set: FastHashSet<u64> = sorted.iter().map(|unit| unit.sequence().clone()).collect();
+        let mut write_seq_set: FastHashSet<u64> = sorted.iter().map(|unit| unit.sequence()).collect();
         remaining.iter_mut()
             .for_each(|unit| {
                 while write_seq_set.contains(&write_seq) {
                     write_seq += 1;
                 }
-                unit.set_sequence(write_seq.clone());
-                write_seq_set.insert(write_seq.clone());
+                unit.set_sequence(write_seq);
+                write_seq_set.insert(write_seq);
             });
 
         self.max_seq = write_seq;  // for reordering.
@@ -553,8 +608,8 @@ impl WriteUnits {
         self.units = [sorted, remaining].concat();
     }
 
-    fn max_seq(&self) -> &u64 {
-        &self.max_seq
+    fn max_seq(&self) -> u64 {
+        self.max_seq
     }
 }
 

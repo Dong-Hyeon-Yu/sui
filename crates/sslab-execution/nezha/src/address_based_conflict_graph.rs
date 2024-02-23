@@ -1,10 +1,13 @@
-use std::{cell::{Cell, RefCell, Ref}, rc::Rc, collections::{BTreeMap, HashMap}};
-use ethers_core::types::{H256, H160};
+use ethers_core::types::{H160, H256};
 use evm::backend::{Apply, Log};
 use itertools::Itertools;
+use std::{
+    cell::{Cell, Ref, RefCell},
+    collections::{BTreeMap, HashMap},
+    rc::Rc,
+};
 
-use super::{types::SimulatedTransaction, nezha_core::ScheduledInfo};
-
+use super::{nezha_core::ScheduledInfo, types::SimulatedTransaction};
 
 // pub(crate) type FastHashMap<K, V> = hashbrown::HashMap<K, V, nohash_hasher::BuildNoHashHasher<K>>;
 pub(crate) type FastHashSet<K> = hashbrown::HashSet<K, nohash_hasher::BuildNoHashHasher<K>>;
@@ -12,11 +15,10 @@ pub(crate) type FastHashSet<K> = hashbrown::HashSet<K, nohash_hasher::BuildNoHas
 pub struct AddressBasedConflictGraph {
     addresses: hashbrown::HashMap<H256, Address>,
     tx_list: hashbrown::HashMap<H256, Rc<Transaction>>, // tx_id -> transaction
-    aborted_txs: Vec<Rc<Transaction>>, // optimization for reordering.
+    aborted_txs: Vec<Rc<Transaction>>,                  // optimization for reordering.
 }
 
 impl AddressBasedConflictGraph {
-
     fn new() -> Self {
         Self {
             addresses: hashbrown::HashMap::new(),
@@ -25,9 +27,7 @@ impl AddressBasedConflictGraph {
         }
     }
 
-
     pub fn construct(simulation_result: Vec<SimulatedTransaction>) -> Self {
-
         let mut acg = Self::new();
 
         for tx in simulation_result {
@@ -50,49 +50,52 @@ impl AddressBasedConflictGraph {
         acg
     }
 
-
-    pub fn hierarchcial_sort(&mut self) -> &mut Self {  //? Radix sort?
+    pub fn hierarchcial_sort(&mut self) -> &mut Self {
+        //? Radix sort?
 
         for addr_key in &self._address_rank() {
-
             let current_addr = self.addresses.get_mut(addr_key).unwrap();
 
             current_addr.sort_read_units();
             current_addr.sort_write_units();
-        };
+        }
 
         self
     }
 
-
     pub fn reorder(&mut self) -> &mut Self {
-
-        let (mut reorder_targets, aborted) = self._aborted_txs().into_iter().partition(|tx| tx.reorderable());
+        let (mut reorder_targets, aborted) = self
+            ._aborted_txs()
+            .into_iter()
+            .partition(|tx| tx.reorderable());
 
         self.aborted_txs = aborted;
 
-        reorder_targets.iter_mut()
-            .for_each(|tx| {
-                let seq = tx.write_units().iter()
-                    .map(|unit| unit.address())
-                    .unique()  
-                    .map(|addr| {
-                        let address = self.addresses.get(addr).unwrap();
-                        
-                        address.write_units.max_seq().max(address.read_units.max_seq())
-                    })
-                    .max()
-                    .unwrap()
-                    .clone();
+        reorder_targets.iter_mut().for_each(|tx| {
+            let seq = tx
+                .write_units()
+                .iter()
+                .map(|unit| unit.address())
+                .unique()
+                .map(|addr| {
+                    let address = self.addresses.get(addr).unwrap();
 
-                tx.set_sequence(seq);
+                    address
+                        .write_units
+                        .max_seq()
+                        .max(address.read_units.max_seq())
+                })
+                .max()
+                .unwrap()
+                .clone();
 
-                self.tx_list.insert(tx.id(), tx.to_owned());
-            });
+            tx.set_sequence(seq);
+
+            self.tx_list.insert(tx.id(), tx.to_owned());
+        });
 
         self
     }
-
 
     #[must_use]
     pub fn extract_schedule(&mut self) -> ScheduledInfo {
@@ -107,60 +110,58 @@ impl AddressBasedConflictGraph {
         ScheduledInfo::from(tx_list, aborted_txs)
     }
 
-
     /* (Algorithm1) */
     fn _address_rank(&self) -> Vec<H256> {
         let mut addresses = self.addresses.values().collect_vec();
         addresses.sort_by(|a, b| {
-
-                // 1st priority
-                match a.in_degree().cmp(b.in_degree()) {  
-                    std::cmp::Ordering::Equal => {
-
-                        // 2nd priority
-                        match b.out_degree().cmp(a.out_degree()) { 
-                            std::cmp::Ordering::Equal => {
-
-                                // 3rd priority
-                                a.address().cmp(b.address())  //TODO: 여기에 해당하는 address들간 in_degree가 가장 작고, out_degree가 가장 큰 순서대로 정렬하는게 best. (overhead?)
-                            },
-                            other => other
+            // 1st priority
+            match a.in_degree().cmp(b.in_degree()) {
+                std::cmp::Ordering::Equal => {
+                    // 2nd priority
+                    match b.out_degree().cmp(a.out_degree()) {
+                        std::cmp::Ordering::Equal => {
+                            // 3rd priority
+                            a.address().cmp(b.address())
                         }
-                    },
-                    other => other
+                        other => other,
+                    }
                 }
-            });
+                other => other,
+            }
+        });
 
-        addresses.into_iter()
+        addresses
+            .into_iter()
             .map(|address| address.address().to_owned())
             .collect_vec()
     }
 
-
     fn _add_units_to_address(&mut self, units: Vec<Rc<Unit>>) {
-        
-        units.into_iter()
-            .for_each(|unit| {
-                let raw_address = unit.address();
-                let address = match self.addresses.get_mut(raw_address) {
-                    Some(address) => address,
-                    None => {
-                        self.addresses.insert(*raw_address, Address::new(*raw_address));
-                        self.addresses.get_mut(raw_address).unwrap()
-                    }
-                };
-                
-                address.add_unit(unit);
-            });
+        units.into_iter().for_each(|unit| {
+            let raw_address = unit.address();
+            let address = match self.addresses.get_mut(raw_address) {
+                Some(address) => address,
+                None => {
+                    self.addresses
+                        .insert(*raw_address, Address::new(*raw_address));
+                    self.addresses.get_mut(raw_address).unwrap()
+                }
+            };
+
+            address.add_unit(unit);
+        });
     }
 
-
-    fn _convert_to_units(tx: &Rc<Transaction>, unit_type: UnitType, read_or_write_set: BTreeMap<H160, HashMap<H256, H256>>) -> Vec<Rc<Unit>> {
+    fn _convert_to_units(
+        tx: &Rc<Transaction>,
+        unit_type: UnitType,
+        read_or_write_set: BTreeMap<H160, HashMap<H256, H256>>,
+    ) -> Vec<Rc<Unit>> {
         read_or_write_set
             .into_iter()
             .map(|(_, state_items)| {
-
-                state_items.into_iter()
+                state_items
+                    .into_iter()
                     .map(|(key, _)| {
                         /* mitigation for the across-contract calls: hash(contract addr + key) */
                         // let mut hasher = Sha256::new();
@@ -193,27 +194,28 @@ impl AddressBasedConflictGraph {
     }
 
     fn _aborted_txs(&mut self) -> Vec<Rc<Transaction>> {
-        let aborted_tx_indice = self.tx_list.iter()
+        let mut aborted_tx_indice = self
+            .tx_list
+            .iter()
             .filter(|(_, tx)| tx.aborted())
             .map(|(tx_id, _)| tx_id.to_owned())
             .collect_vec();
 
-        aborted_tx_indice.iter()
-            .for_each(|idx| {
-                let tx = self.tx_list.remove(idx).unwrap();
-                self.aborted_txs.push(tx);
-            });
+        aborted_tx_indice.sort();
+
+        aborted_tx_indice.iter().for_each(|idx| {
+            let tx = self.tx_list.remove(idx).unwrap();
+            self.aborted_txs.push(tx);
+        });
 
         self.aborted_txs.clone()
     }
 }
 
-
-
 #[derive(Clone, Debug)]
 pub struct Transaction {
-    tx_id: H256, 
-    sequence: Cell<u64>,  // 0 represents that this transaction havn't been ordered yet.
+    tx_id: H256,
+    sequence: Cell<u64>, // 0 represents that this transaction havn't been ordered yet.
     aborted: Cell<bool>,
     write_units: RefCell<Vec<Rc<Unit>>>,
 
@@ -223,7 +225,14 @@ pub struct Transaction {
 
 impl Transaction {
     fn new(tx_id: H256, effects: Vec<Apply>, logs: Vec<Log>) -> Self {
-        Self { tx_id, sequence: Cell::new(0), aborted: Cell::new(false), write_units: RefCell::new(Vec::new()), effects, logs }
+        Self {
+            tx_id,
+            sequence: Cell::new(0),
+            aborted: Cell::new(false),
+            write_units: RefCell::new(Vec::new()),
+            effects,
+            logs,
+        }
     }
 
     pub fn id(&self) -> H256 {
@@ -239,7 +248,9 @@ impl Transaction {
     }
 
     fn set_write_units(&self, write_units: Vec<Rc<Unit>>) {
-        write_units.into_iter().for_each(|u| self.write_units.borrow_mut().push(u));
+        write_units
+            .into_iter()
+            .for_each(|u| self.write_units.borrow_mut().push(u));
     }
 
     fn clear_write_units(&self) {
@@ -268,7 +279,10 @@ impl Transaction {
     }
 
     fn _is_write_only(&self) -> bool {
-        self.write_units.borrow().iter().all(|unit| unit.degree() == 0 && !unit.co_located())
+        self.write_units
+            .borrow()
+            .iter()
+            .all(|unit| unit.degree() == 0 && !unit.co_located())
     }
 
     fn write_units(&self) -> Ref<Vec<Rc<Unit>>> {
@@ -287,13 +301,19 @@ struct Unit {
     tx: Rc<Transaction>,
     unit_type: UnitType,
     address: H256,
-    wr_dependencies: Cell<u32>, // Vec<Rc<Unit>> is not necessary, but the degree is only used for sorting.  
-    co_located: Cell<bool>,  // True if the read unit and write unit are in the same address.
+    wr_dependencies: Cell<u32>, // Vec<Rc<Unit>> is not necessary, but the degree is only used for sorting.
+    co_located: Cell<bool>,     // True if the read unit and write unit are in the same address.
 }
 
 impl Unit {
     fn new(tx: Rc<Transaction>, unit_type: UnitType, address: H256) -> Self {
-        Self { tx, unit_type, address, wr_dependencies: Cell::new(0), co_located: Cell::new(false) }
+        Self {
+            tx,
+            unit_type,
+            address,
+            wr_dependencies: Cell::new(0),
+            co_located: Cell::new(false),
+        }
     }
 
     fn unit_type(&self) -> &UnitType {
@@ -357,28 +377,38 @@ impl ReadUnits {
 
     /* (Algorithm2) line 3 ~ 15 */
     fn sort(&mut self) {
-
         /* (Algorithm2) line 3*/
-        let units = std::mem::replace(&mut self.units, Vec::new());
-        let (sorted, remaining): (Vec<Rc<Unit>>, Vec<Rc<Unit>>) = units.into_iter().partition(|unit| unit.is_sorted());
+        let units = std::mem::take(&mut self.units);
+        let (sorted, remaining): (Vec<Rc<Unit>>, Vec<Rc<Unit>>) =
+            units.into_iter().partition(|unit| unit.is_sorted());
 
         let min_seq;
 
         /* (Algorithm2) line 4 ~ 8 */
-        if sorted.is_empty() {
+        if sorted
+            .iter()
+            .filter(|unit| !unit.tx.aborted())
+            .collect_vec()
+            .is_empty()
+        {
             self.max_seq = 1;
             min_seq = 1;
-        } 
+        }
         /* (Algorithm2) line 9 ~ 15 */
         else {
-            let (_min_seq, _max_seq) = sorted.iter().map(|unit| unit.sequence()).minmax().into_option().unwrap();
+            let (_min_seq, _max_seq) = sorted
+                .iter()
+                .filter(|unit| !unit.tx.aborted())
+                .map(|unit| unit.sequence())
+                .minmax()
+                .into_option()
+                .unwrap();
             min_seq = _min_seq;
             self.max_seq = _max_seq;
         }
 
         /* (Algorithm2) line 4~8, 12~14 */
-        remaining.iter()
-            .for_each(|unit| unit.set_sequence(min_seq));
+        remaining.iter().for_each(|unit| unit.set_sequence(min_seq));
 
         self.units = [sorted, remaining].concat();
         self.units.sort_by(|a, b| a.sequence().cmp(&b.sequence()))
@@ -386,18 +416,19 @@ impl ReadUnits {
 
     fn increment_and_get_max_seq(&mut self) -> u64 {
         self.max_seq += 1;
-        self.max_seq.clone()
+        self.max_seq
     }
 
-    fn max_seq(&self) -> &u64 {
-        &self.max_seq
+    fn max_seq(&self) -> u64 {
+        self.max_seq
     }
 }
 
 #[derive(Clone, Debug)]
 struct WriteUnits {
     units: Vec<Rc<Unit>>,
-    max_seq: u64
+    max_seq: u64,
+    first_updater_flag: bool,
 }
 
 impl WriteUnits {
@@ -405,6 +436,7 @@ impl WriteUnits {
         Self {
             units: Vec::new(),
             max_seq: 0,
+            first_updater_flag: false,
         }
     }
 
@@ -414,51 +446,61 @@ impl WriteUnits {
 
     /* (Algorithm2) line 16 ~ 35 */
     fn sort(&mut self, read_units: &mut ReadUnits) {
-
         /* (Algorithm2) line 16 */
-        let units = std::mem::replace(&mut self.units, Vec::new());
-        let (sorted, mut remaining): (Vec<Rc<Unit>>, Vec<Rc<Unit>>) = units.into_iter().partition(|unit| unit.is_sorted());
+        let units = std::mem::take(&mut self.units);
+        let (sorted, mut remaining): (Vec<Rc<Unit>>, Vec<Rc<Unit>>) =
+            units.into_iter().partition(|unit| unit.is_sorted());
 
         /* (Algorithm2) line 17 ~ 19 */
-        sorted.iter().for_each(|unit|{
+        sorted
+            .iter()
+            .filter(|unit| !unit.tx.aborted())
+            .for_each(|unit| {
                 if unit.co_located() {
-                    unit.set_sequence(read_units.increment_and_get_max_seq());
+                    match self.first_updater_flag {
+                        false => {
+                            // First updater wins
+                            unit.set_sequence(read_units.increment_and_get_max_seq());
+                            self.first_updater_flag = true;
+                        }
+                        true => {
+                            unit.set_sequence(0); // Loser will be aborted later.
+                        }
+                    }
                 }
             });
 
         /* (Algorithm2) line 20 ~ 24 */
-        sorted.iter().for_each(|unit|{
-                if unit.sequence() < *read_units.max_seq() {
-                    unit.abort_tx();  
-                }
-            });
+        sorted.iter().for_each(|unit| {
+            if unit.sequence() < read_units.max_seq() {
+                unit.abort_tx();
+            }
+        });
 
         /* (Algorithm2) line 25 ~ 29 */
         let mut write_seq = read_units.increment_and_get_max_seq();
 
         /* (Algorithm2) line 30 ~ 35 */
-        let mut write_seq_set: FastHashSet<u64> = sorted.iter().map(|unit| unit.sequence().clone()).collect();
-        remaining.iter_mut()
-            .for_each(|unit| {
-                while write_seq_set.contains(&write_seq) {
-                    write_seq += 1;
-                }
-                unit.set_sequence(write_seq.clone());
-                write_seq_set.insert(write_seq.clone());
-            });
+        let mut write_seq_set: FastHashSet<u64> =
+            sorted.iter().map(|unit| unit.sequence()).collect();
+        remaining.iter_mut().for_each(|unit| {
+            while write_seq_set.contains(&write_seq) {
+                write_seq += 1;
+            }
+            unit.set_sequence(write_seq);
+            write_seq_set.insert(write_seq);
+        });
 
-        self.max_seq = write_seq;  // for reordering.
+        self.max_seq = write_seq; // for reordering.
 
         self.units = [sorted, remaining].concat();
         self.units.sort_by(|a, b| a.sequence().cmp(&b.sequence()))
     }
 
-    fn max_seq(&self) -> &u64 {
-        &self.max_seq
+    fn max_seq(&self) -> u64 {
+        self.max_seq
     }
 }
-
-
 
 #[derive(Clone, Debug)]
 struct Address {
@@ -493,12 +535,11 @@ impl Address {
     }
 
     fn add_unit(&mut self, unit: Rc<Unit>) {
-
         match unit.unit_type() {
-            UnitType::Read => { 
+            UnitType::Read => {
                 self.in_degree += unit.degree();
                 self.read_units.push(unit);
-            },
+            }
             UnitType::Write => {
                 self.out_degree += unit.degree();
                 self.write_units.push(unit);

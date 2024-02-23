@@ -1,5 +1,8 @@
 use ethers_core::types::H256;
-use evm::{backend::{Apply, Log}, executor::stack::RwSet};
+use evm::{
+    backend::{Apply, Log},
+    executor::stack::RwSet,
+};
 use narwhal_types::BatchDigest;
 
 // SimulcationResult includes the batch digests and rw sets of each transctions in a ConsensusOutput.
@@ -19,8 +22,20 @@ pub struct SimulatedTransaction {
 }
 
 impl SimulatedTransaction {
-    pub fn new(seq: u64, tx_id: H256, rw_set: Option<RwSet>, effects: Vec<Apply>, logs: Vec<Log>) -> Self {
-        Self { seq, tx_id, rw_set, effects, logs }
+    pub fn new(
+        seq: u64,
+        tx_id: H256,
+        rw_set: Option<RwSet>,
+        effects: Vec<Apply>,
+        logs: Vec<Log>,
+    ) -> Self {
+        Self {
+            seq,
+            tx_id,
+            rw_set,
+            effects,
+            logs,
+        }
     }
 
     pub fn deconstruct(self) -> (H256, Option<RwSet>, Vec<Apply>, Vec<Log>) {

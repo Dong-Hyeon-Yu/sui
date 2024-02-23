@@ -60,7 +60,7 @@ async fn test_smallbank() {
     let aborted_tx_len =  scheduled_info.aborted_txs_len();
 
     now = Instant::now();
-    nezha._concurrent_commit(scheduled_info, 1).await;
+    nezha._concurrent_commit(scheduled_info.scheduled_txs).await;
     time = now.elapsed().as_millis();
 
     println!("Concurrent commit took {} ms for {} transactions.", time, scheduled_tx_len);
@@ -97,7 +97,7 @@ async fn test_par_smallbank() {
 
 
     now = Instant::now();
-    let (scheduled_info, _) = AddressBasedConflictGraph::par_construct(rw_sets).await
+    let scheduled_info = AddressBasedConflictGraph::par_construct(rw_sets).await
             .hierarchcial_sort()
             .reorder()
             .par_extract_schedule().await;
@@ -108,10 +108,36 @@ async fn test_par_smallbank() {
     let aborted_tx_len =  scheduled_info.aborted_txs_len();
 
     now = Instant::now();
-    nezha._concurrent_commit(scheduled_info, 1).await;
+    nezha._concurrent_commit(scheduled_info.scheduled_txs).await;
     time = now.elapsed().as_millis();
 
     println!("Concurrent commit took {} ms for {} transactions.", time, scheduled_tx_len);
     println!("Abort rate: {:.2} ({}/{} aborted)", (aborted_tx_len as f64) * 100.0 / (scheduled_tx_len+aborted_tx_len) as f64, aborted_tx_len, scheduled_tx_len+aborted_tx_len);
     println!("Total time: {} ms", total.elapsed().as_millis());
+}
+
+/* this test is for debuging nezha algorithm under a smallbank workload */
+#[tokio::test]
+async fn test_par_smallbank_for_advanced_nezha() {
+    let nezha = Box::pin(get_nezha_executor());
+    let handler = get_smallbank_handler();
+
+    //given
+    let skewness = 0.6;
+    let batch_size = 200;
+    let block_concurrency = 30;
+    let mut consensus_output = Vec::new();
+    for _ in 0..block_concurrency {
+        let mut tmp = Vec::new();
+        for _ in 0..batch_size {
+            tmp.push(handler.random_operation(skewness, 10_000))
+        }
+        consensus_output.push(ExecutableEthereumBatch::new(tmp, BatchDigest::default()));
+    }
+
+    //when
+    let now = Instant::now();
+    let _ = nezha._execute(consensus_output).await;
+    let time = now.elapsed().as_millis();
+    println!("execution took {} ms", time);
 }

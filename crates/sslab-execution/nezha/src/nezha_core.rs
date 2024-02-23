@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use ethers_core::types::H256;
+use hashbrown::HashSet;
 use itertools::Itertools;
 use narwhal_types::BatchDigest;
 use rayon::prelude::*;
@@ -10,7 +11,7 @@ use sslab_execution::{
 };
 use tracing::warn;
 
-use crate::{SimulationResult, AddressBasedConflictGraph, types::ScheduledTransaction};
+use crate::{evm_utils, types::ScheduledTransaction, AddressBasedConflictGraph, SimulationResult};
 
 use super::{
     types::SimulatedTransaction, 
@@ -102,19 +103,57 @@ impl ConcurrencyLevelManager {
 
     pub async fn _execute(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> Vec<BatchDigest> {
         
-        let (digests, mut tx_list) = Self::_unpack_batches(consensus_output).await;
+        let (digests, tx_list) = Self::_unpack_batches(consensus_output).await;
 
-        while tx_list.len() > 0 {
-            let rw_sets = self._simulate(tx_list).await;
-        
-            let (scheduled_info, aborted_txs) = AddressBasedConflictGraph::par_construct(rw_sets).await
+        // 1st execution
+        let rw_sets = self._simulate(tx_list).await;
+    
+        let ScheduledInfo {scheduled_txs, aborted_txs } = AddressBasedConflictGraph::par_construct(rw_sets).await
+            .hierarchcial_sort()
+            .reorder()
+            .par_extract_schedule().await;
+
+        self._concurrent_commit(scheduled_txs).await;
+
+        let mut remains = aborted_txs;
+
+        while !remains.is_empty() {
+            // TODO 1: (optimistic scheduling)
+            let ScheduledInfo {scheduled_txs, aborted_txs } = AddressBasedConflictGraph::par_optimistic_construct(remains).await
                 .hierarchcial_sort()
                 .reorder()
                 .par_extract_schedule().await;
-    
-            self._concurrent_commit(scheduled_info, 1).await;
 
-            tx_list = aborted_txs;
+            // TODO 2: (validation by speculatively executing)
+            for txs in scheduled_txs {
+                let simulated_txs = self._simulate(txs.iter().map(|tx| tx.raw_tx()).cloned().collect_vec()).await;
+                
+                match Self::_validate_commit_2_assumption(&simulated_txs).await { 
+                    true => {
+                        self._concurrent_commit_2(simulated_txs).await;
+                    },
+                    false => {
+
+                        // 3rd execution (serial) for complex transactions
+                        let snapshot = self.global_state.clone();
+                        tokio::task::spawn_blocking(move || {
+                            simulated_txs.into_iter()
+                                .for_each(|tx| {
+                                    match evm_utils::simulate_tx(tx.raw_tx(), snapshot.as_ref()) {
+                                        Ok(Some((effect, _, _))) => {
+                                            snapshot.apply_local_effect(effect);
+                                        },
+                                        _ => {
+                                            warn!("fail to execute a transaction {}", tx.id());
+                                        }
+                                    }
+                                });
+                        }).await.expect("fail to spawn a task for serial execution of aborted txs");
+                    }
+                }
+            }
+
+            remains = aborted_txs;
         }
         
 
@@ -168,9 +207,9 @@ impl ConcurrencyLevelManager {
         }
     }
 
-    pub async fn _concurrent_commit(&self, scheduled_info: ScheduledInfo, chunk_size: usize) {
+    //TODO: (optimization) commit the last write of each key
+    pub async fn _concurrent_commit(&self, scheduled_txs: Vec<Vec<ScheduledTransaction>>) {
         let storage = self.global_state.clone();
-        let scheduled_txs = scheduled_info.scheduled_txs;
 
         // Parallel simulation requires heavy cpu usages. 
         // CPU-bound jobs would make the I/O-bound tokio threads starve.
@@ -181,9 +220,9 @@ impl ConcurrencyLevelManager {
             let _storage = &storage;
             for txs_to_commit in scheduled_txs {
                 txs_to_commit
-                    .par_chunks(chunk_size)
-                    .for_each(|txs| {
-                        let effect = txs.into_iter().flat_map(|tx| tx.extract()).collect_vec();
+                    .into_par_iter()
+                    .for_each(|tx| {
+                        let effect = tx.extract();
                         _storage.apply_local_effect(effect)
                     })
             }
@@ -192,65 +231,66 @@ impl ConcurrencyLevelManager {
 
         let _ = recv.await;
     }
-    
+
+    // check if there are multiple writes in a key
+    async fn _validate_commit_2_assumption(rw_set: &Vec<SimulatedTransaction>) -> bool {
+
+        let mut res = true;
+        rayon::scope(|s| {
+            s.spawn(|_| {
+                let mut write_set = hashbrown::HashSet::<H256>::new();
+                for tx in rw_set.iter() {
+                    match tx.write_set() {
+                        Some(ref set) => {
+                            if !write_set.is_disjoint(set) {
+                                res = false;
+                                return;
+                            }
+                            write_set.extend(set);
+                        },
+                        None => continue,
+                    }
+                };
+            })
+        });
+        res
+    }
+
+    pub async fn _concurrent_commit_2(&self, scheduled_txs: Vec<SimulatedTransaction>) {
+        let scheduled_txs = vec![
+            tokio::task::spawn_blocking(move || {
+                scheduled_txs.into_par_iter().map(|tx| ScheduledTransaction::from(tx)).collect()
+            }).await.expect("fail to spawn a task for convert SimulatedTransaction to ScheduledTransaction")
+        ];
+         
+        self._concurrent_commit(scheduled_txs).await;
+    }    
 }
 
 
 
 pub struct ScheduledInfo {
     pub scheduled_txs: Vec<Vec<ScheduledTransaction>>,  
-    pub aborted_tx_num: usize,
+    pub aborted_txs: Vec<Arc<Transaction>>,
 }
 
 impl ScheduledInfo {
 
-    pub fn from(tx_list: hashbrown::HashMap<H256, Arc<Transaction>>, aborted_tx_num: usize) -> Self {
+    pub fn from(tx_list: hashbrown::HashMap<H256, Arc<Transaction>>, aborted_txs: Vec<Arc<Transaction>>) -> Self {
 
-        // group by sequence.
-        let mut list = tx_list.into_iter()
-            .map(|(_, tx)| {
-                let tx = Self::_unwrap(tx);
-                let tx_id = tx.id();
-                let seq = tx.sequence().to_owned();
-                let (effects, logs) = tx.simulation_result();
-
-                ScheduledTransaction {seq, tx_id, effects, logs }
-            })
-            .collect::<Vec<ScheduledTransaction>>();
-
-        // sort groups by sequence.
-        list.sort_unstable_by_key(|tx| tx.seq());
-        let mut scheduled_txs = Vec::<Vec<ScheduledTransaction>>::new(); 
-        for (_key, txns) in &list.into_iter().group_by(|tx| tx.seq()) {
-            scheduled_txs.push(txns.collect_vec());
-        }
+        let scheduled_txs = Self::_schedule_for_sorted_txs(tx_list, false);
+        let aborted_txs = Self::_process_aborted_txs(aborted_txs, false);
         
-        Self { scheduled_txs, aborted_tx_num }
+        Self { scheduled_txs, aborted_txs }
     }
 
 
-    pub fn par_from(tx_list: hashbrown::HashMap<H256, Arc<Transaction>>, aborted_tx_num: usize) -> Self {
+    pub fn par_from(tx_list: hashbrown::HashMap<H256, Arc<Transaction>>, aborted_txs: Vec<Arc<Transaction>>) -> Self {
 
-        // group by sequence.
-        let mut list = tx_list.into_par_iter()
-            .map(|(_, tx)| {
-                let tx = Self::_unwrap(tx);
-                let tx_id = tx.id();
-                let seq = tx.sequence().to_owned();
-                let (effects, logs) = tx.simulation_result();
-
-                ScheduledTransaction {seq, tx_id, effects, logs }
-            })
-            .collect::<Vec<ScheduledTransaction>>();
-
-        // sort groups by sequence.
-        list.sort_unstable_by_key(|tx| tx.seq());
-        let mut scheduled_txs = Vec::<Vec<ScheduledTransaction>>::new(); 
-        for (_key, txns) in &list.into_iter().group_by(|tx| tx.seq()) {
-            scheduled_txs.push(txns.collect_vec());
-        }
+        let scheduled_txs = Self::_schedule_for_sorted_txs(tx_list, true);
+        let aborted_txs = Self::_process_aborted_txs(aborted_txs, true);
         
-        Self { scheduled_txs, aborted_tx_num }
+        Self { scheduled_txs, aborted_txs }
     }
 
     fn _unwrap(tx: Arc<Transaction>) -> Transaction {
@@ -259,12 +299,99 @@ impl ScheduledInfo {
         )
     }
 
+    fn _schedule_for_sorted_txs(tx_list: hashbrown::HashMap<H256, Arc<Transaction>>, rayon: bool) -> Vec<Vec<ScheduledTransaction>> {
+        let mut list = if rayon {
+            tx_list.par_iter().for_each(|(_, tx)| tx.clear_write_units());
+
+            tx_list.into_par_iter()
+                .map(|(_, tx)| {
+                    let tx = Self::_unwrap(tx);
+    
+                    ScheduledTransaction::from(tx)
+                })
+                .collect::<Vec<ScheduledTransaction>>() 
+        }
+        else {
+            tx_list.iter().for_each(|(_, tx)| tx.clear_write_units());
+
+            tx_list.into_iter()
+                .map(|(_, tx)| {
+                    let tx = Self::_unwrap(tx);
+
+                    ScheduledTransaction::from(tx)
+                })
+                .collect::<Vec<ScheduledTransaction>>()
+        };
+
+        // sort groups by sequence.
+        list.sort_unstable_by_key(|tx| tx.seq());
+        let mut scheduled_txs = Vec::<Vec<ScheduledTransaction>>::new(); 
+        for (_key, txns) in &list.into_iter().group_by(|tx| tx.seq()) {
+            scheduled_txs.push(txns.collect_vec());
+        }
+
+        scheduled_txs
+    }
+
+    
+    fn _process_aborted_txs(aborted_txs: Vec<Arc<Transaction>>, rayon: bool) -> Vec<Arc<Transaction>> {
+        if rayon {
+            aborted_txs.par_iter()
+                .for_each(|tx| {
+                    tx.clear_write_units();
+                    tx.init();
+                }
+            );
+        }
+        else {
+            aborted_txs.iter()
+            .for_each(|tx| {
+                tx.clear_write_units();
+                tx.init();
+            }
+        );
+        };
+
+        aborted_txs
+    }
+
+    // anti-rw dependencies are occured when the read keys of latter tx are overlapped with the write keys of the previous txs in the same epoch.
+    fn _check_anti_rw_dependencies(
+        read_keys_of_tx: &hashbrown::HashSet<H256>,   // read keys of an aborted tx
+        write_keys_in_specific_epoch: &hashbrown::HashSet<H256>, // a map (epoch, write_keys_set) to prevent anti-rw dependencies
+    ) -> bool {
+        write_keys_in_specific_epoch.is_disjoint(read_keys_of_tx)
+    }
+
+    // TODO: allow only one write in one key.
+    // ww dependencies are occured when the keys which are both read and written by latter tx are overlapped with the rw keys of the previous txs in the same epoch.
+    fn _check_ww_dependencies(
+        write_keys_of_tx: &hashbrown::HashSet<H256>,   // keys where tx has both read & write 
+        write_keys_in_specific_epoch: &hashbrown::HashSet<H256>, // a map (epoch, keys which have both read and write of tx) to prevent ww dependencies
+    ) -> bool {
+        write_keys_in_specific_epoch.is_disjoint(write_keys_of_tx)
+    }
+
+    fn _find_minimun_epoch_with_no_conflicts(
+        read_keys_of_tx: &HashSet<H256>, 
+        write_keys_of_tx: &HashSet<H256>, 
+        w_map: &HashSet<H256>, 
+    ) -> std::cmp::Ordering {
+
+        match Self::_check_anti_rw_dependencies(read_keys_of_tx, w_map) 
+            && Self::_check_ww_dependencies(write_keys_of_tx, w_map) {
+
+            true => std::cmp::Ordering::Greater,
+            false => std::cmp::Ordering::Less,
+        }
+    }
+
     pub fn scheduled_txs_len(&self) -> usize {
         self.scheduled_txs.iter().map(|vec| vec.len()).sum()
     }
 
     pub fn aborted_txs_len(&self) -> usize {
-        self.aborted_tx_num
+        self.aborted_txs.len()
     }
 
     pub fn parallism_metric(&self) -> (usize, f64, f64, usize, usize) {

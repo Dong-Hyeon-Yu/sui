@@ -62,7 +62,7 @@ fn nezha_test(input_txs: Vec<SimulatedTransaction>, answer: Vec<Vec<u64>>, print
 }
 
 async fn nezha_par_test(input_txs: Vec<SimulatedTransaction>, answer: Vec<Vec<u64>>, print_result: bool) {
-    let (scheduled_info, _) = AddressBasedConflictGraph::par_construct(input_txs.clone()).await
+    let scheduled_info = AddressBasedConflictGraph::par_construct(input_txs.clone()).await
             .hierarchcial_sort()
             .reorder()
             .par_extract_schedule().await;
@@ -165,7 +165,7 @@ async fn test_scenario_4() {
         vec![1],
         vec![2],
         vec![3],
-        vec![5],
+        vec![4],
     ];
     
     nezha_test(txs.clone(), answer.clone(), false);
@@ -188,7 +188,7 @@ async fn test_scenario_5() {
         vec![1],
         vec![2],
         vec![3],
-        vec![7],
+        vec![4],
     ];
     
     nezha_test(txs.clone(), answer.clone(), false);

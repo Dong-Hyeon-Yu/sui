@@ -130,7 +130,7 @@ async fn test_par_smallbank_for_advanced_nezha() {
     for _ in 0..block_concurrency {
         let mut tmp = Vec::new();
         for _ in 0..batch_size {
-            tmp.push(handler.random_operation(skewness, 10_000))
+            tmp.push(handler.random_operation(skewness, 100_000))
         }
         consensus_output.push(ExecutableEthereumBatch::new(tmp, BatchDigest::default()));
     }

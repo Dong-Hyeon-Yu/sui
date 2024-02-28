@@ -59,6 +59,13 @@ fn nezha_test(input_txs: Vec<SimulatedTransaction>, answer: Vec<Vec<u64>>, print
         let answer_set:HashSet<&u64> = idx.iter().collect();
         assert!(txs.iter().all(|tx| answer_set.contains(&tx.id().to_low_u64_be())))
      });
+    
+     let aborted_tx_len = input_txs.len() - answer.iter().flatten().count();
+     assert_eq!(aborted_tx_len, scheduled_info.aborted_txs_len());
+
+     scheduled_info.aborted_txs.into_iter().for_each(|tx| {
+        std::sync::Arc::try_unwrap(tx).unwrap();
+    })
 }
 
 async fn nezha_par_test(input_txs: Vec<SimulatedTransaction>, answer: Vec<Vec<u64>>, print_result: bool) {
@@ -83,6 +90,13 @@ async fn nezha_par_test(input_txs: Vec<SimulatedTransaction>, answer: Vec<Vec<u6
         let answer_set:HashSet<&u64> = idx.iter().collect();
         assert!(txs.iter().all(|tx| answer_set.contains(&tx.id().to_low_u64_be())))
      });
+
+    let aborted_tx_len = input_txs.len() - answer.iter().flatten().count();
+    assert_eq!(aborted_tx_len, scheduled_info.aborted_txs_len());
+
+    scheduled_info.aborted_txs.into_iter().for_each(|tx| {
+        std::sync::Arc::try_unwrap(tx).unwrap();
+    })
 }
 
 #[tokio::test]

@@ -49,6 +49,18 @@ impl SimulatedTransaction {
         }
     }
 
+    pub fn read_set(&self) -> Option<hashbrown::HashSet<H256>> {
+        match self.rw_set {
+            Some(ref set) => {
+                Some(set.reads()
+                    .iter()
+                    .flat_map(|(_, state)| state.keys().cloned().collect_vec())
+                    .collect())
+            },
+            None => None
+        }
+    }
+
     pub fn raw_tx(&self) -> &EthereumTransaction {
         &self.raw_tx
     }
@@ -120,8 +132,8 @@ impl From<SimulatedTransaction> for ScheduledTransaction {
 }
 
 
-impl From<Transaction> for ScheduledTransaction {
-    fn from(tx: Transaction) -> Self {
+impl From<std::sync::Arc<Transaction>> for ScheduledTransaction {
+    fn from(tx: std::sync::Arc<Transaction>) -> Self {
         let tx_id = tx.id();
         let seq = tx.sequence().to_owned();
         let raw_tx = tx.raw_tx().to_owned();

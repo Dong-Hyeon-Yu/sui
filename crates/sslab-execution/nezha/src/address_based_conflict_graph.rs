@@ -58,48 +58,19 @@ impl AddressBasedConflictGraph {
         acg
     }
 
-    pub async fn par_construct(simulation_result: Vec<SimulatedTransaction>) -> Self {
-        let num_of_txn = simulation_result.len();
-        let ncpu = num_cpus::get();
-
-        let (send, recv) = tokio::sync::oneshot::channel();
-        rayon::spawn(move || {
-            let mut sub_graphs = simulation_result
-                .par_chunks(std::cmp::max(num_of_txn / ncpu, 1))
-                .map(|chunk| {
-                    Self::construct(chunk.to_vec())
-                })
-                .collect::<Vec<Self>>();
-
-            while sub_graphs.len() > 1 {
-                sub_graphs = sub_graphs
-                    .into_par_iter()
-                    .chunks(2)
-                    .map(|chuck| {
-                        if chuck.len() == 1 {
-                            chuck.into_iter().next().unwrap()
-                        } else {
-                            let (mut left, right) = chuck.into_iter().next_tuple().unwrap();
-                            left.merge(right);
-                            left
-                        }
-                    })
-                    .collect::<Vec<Self>>();
-            }
-            
-            let result = sub_graphs.into_iter().next().unwrap();
-            let _ = send.send(result);
-        });
-
-        recv.await.unwrap()
-    }
-
     pub fn optimistic_construct(aborted_txs: Vec<Arc<Transaction>>) -> Self {
         let mut acg = Self::new();
 
         for tx in aborted_txs {
-            let mut write_units = Self::_convert_to_units(&tx, UnitType::Write, tx.abort_info.read().prev_read_map().clone(), Some(tx.abort_info.read().prev_read_map()));
-            let mut read_units = Self::_convert_to_units(&tx, UnitType::Read, tx.abort_info.read().prev_read_map().clone(), None);
+            let (mut write_units, mut read_units);
+            {
+                let abort_info = tx.abort_info.read();
+                let prev_write = abort_info.prev_write_map().clone();
+                let prev_read = abort_info.prev_read_map().clone();
+
+                write_units = Self::_convert_to_units(&tx, UnitType::Write, prev_write, Some(&prev_read));
+                read_units = Self::_convert_to_units(&tx, UnitType::Read, prev_read, None);
+            }
 
             // before inserting the units, wr-dependencies must be created b/w RW units.
             Self::_set_wr_dependencies(&mut read_units, &mut write_units);
@@ -113,16 +84,22 @@ impl AddressBasedConflictGraph {
         acg
     }
 
-    pub async fn par_optimistic_construct(aborted_txs: Vec<Arc<Transaction>>) -> Self {
-        let num_of_txn = aborted_txs.len();
+    async fn _par_construct<F, B>(
+        simulation_result: Vec<B>, constructor: F
+    ) -> Self 
+    where
+        B: Sync + Send + Clone + 'static,
+        F: Fn(Vec<B>) -> Self + Sync + Send + 'static
+    {
+        let num_of_txn = simulation_result.len();
         let ncpu = num_cpus::get();
 
         let (send, recv) = tokio::sync::oneshot::channel();
         rayon::spawn(move || {
-            let mut sub_graphs = aborted_txs
+            let mut sub_graphs = simulation_result
                 .par_chunks(std::cmp::max(num_of_txn / ncpu, 1))
                 .map(|chunk| {
-                    Self::optimistic_construct(chunk.to_vec())
+                    constructor(chunk.to_vec())
                 })
                 .collect::<Vec<Self>>();
 
@@ -148,7 +125,15 @@ impl AddressBasedConflictGraph {
 
         recv.await.unwrap()
     }
-    
+
+    pub async fn par_construct(simulation_result: Vec<SimulatedTransaction>) -> Self {
+        Self::_par_construct(simulation_result, Self::construct).await
+    }
+
+    pub async fn par_optimistic_construct(aborted_txs: Vec<Arc<Transaction>>) -> Self {
+        Self::_par_construct(aborted_txs, Self::optimistic_construct).await
+    }
+
 
     pub fn hierarchcial_sort(&mut self) -> &mut Self {  //? Radix sort?
 
@@ -411,7 +396,7 @@ pub struct Transaction {
 
 impl Transaction {
 
-    fn from(tx: SimulatedTransaction) -> (Self, RwSet) {
+    pub fn from(tx: SimulatedTransaction) -> (Self, RwSet) {
         let (tx_id, rw_set, effects, logs, raw_tx ) = tx.deconstruct();
 
         let rw_set = match rw_set {
@@ -634,34 +619,34 @@ impl ReadUnits {
         self.max_seq
     }
 
-    fn check_minimum_and_uniqueness(&self, write_tx_id: H256) -> bool {
+    // TODO: this is not working properly. It needs:
+    // opimization to maximize parallelism when an address(=key) has only one read unit which has write unit as well in the same address.
+    // In original paper "NEZHA", the sequence number of this transaction is unnecessarily incremented.
+    // fn check_minimum_and_uniqueness(&self, write_unit: &Arc<Unit>) -> bool {
 
-        let mut min = None;
+    //     let read_units = self.units.iter()
+    //         .filter(|unit| !unit.tx.aborted())
+    //         .collect_vec();
 
-        if self.units.is_empty() {
-            return true;
-        }
+    //     if read_units.is_empty() {
+    //         return true;
+    //     }
         
-        for cur in &self.units {
-            if !cur.tx.aborted() {
-                match min {
-                    None => min = Some(cur),  // 1st element with minimum sequence.
-                    Some(min_unit) => {  // 2nd element with minimum sequence.
-                        if min_unit.sequence() == cur.sequence() {
-                            return false; // not unique.
-                        }
-                        if min_unit.tx.id() != write_tx_id {
-                            return false; // not minimum.
-                        }
+    //     /* check minimum */
+    //     let min = read_units[0].sequence();
+    //     if min < write_unit.sequence() || read_units[0].tx.tx_id != write_unit.tx.tx_id {
+    //         return false;
+    //     }
 
-                        return true;  // unique and minimum.
-                    }
-                }
-            }
-        };
+    //     /* TODO: check uniqueness */
+    //     for cur in read_units.into_iter().skip(1) {
+    //         if cur.sequence() <= min {
+    //             return false;
+    //         }
+    //     }
 
-        false
-    }
+    //     true
+    // }
 }
 
 #[derive(Clone, Debug)]
@@ -698,9 +683,9 @@ impl WriteUnits {
                 if unit.co_located() {
                     match self.first_updater_flag {
                         false => {  // First updater wins
-                            if !read_units.check_minimum_and_uniqueness(unit.tx.id()) {
+                            // if !read_units.check_minimum_and_uniqueness(unit) {
                                 unit.set_sequence(read_units.increment_and_get_max_seq());
-                            }
+                            // }
                             self.first_updater_flag = true;
                         },
                         true => {

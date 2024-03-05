@@ -126,6 +126,11 @@ impl ConcurrencyLevelManager {
                 .reorder()
                 .par_extract_schedule().await;
 
+            if scheduled_txs.is_empty() {
+                println!("(epoch # {}) aborted transactions({}): {:?}", epoch, aborted_txs.len(), aborted_txs);
+                panic!("endless loop!");
+            }
+
             // validation by speculative execution
             for txs in scheduled_txs {
                 let raw_tx_list = txs.par_iter().map(|tx| tx.raw_tx()).cloned().collect();
@@ -250,7 +255,7 @@ impl ConcurrencyLevelManager {
 
             // validation optimistic assumption: RW keys are not changed after re-execution.
             let (mut valid_list, _invalid_list): (Vec<_>, Vec<_>) = previous_tx
-                .par_iter()
+                .iter()
                 .zip(rw_set)
                 .partition_map(|(prev, cur)| {
                     let (prev_write_set, prev_read_set) = prev.rw_set();
@@ -382,7 +387,7 @@ impl ScheduledInfo {
         };
 
         // sort groups by sequence.
-        list.sort_unstable_by_key(|tx| tx.seq());
+        list.sort_by_key(|tx| tx.seq());
         let mut scheduled_txs = Vec::<Vec<ScheduledTransaction>>::new(); 
         for (_key, txns) in &list.into_iter().group_by(|tx| tx.seq()) {
             scheduled_txs.push(txns.collect_vec());

@@ -1,9 +1,12 @@
+use std::str::FromStr;
+
 use ethers_core::types::{H160, H256, transaction::eip2718::TypedTransaction};
 use evm::executor::stack::{RwSet, Simulatable};
 use hashbrown::HashSet;
+use itertools::Itertools;
 use sslab_execution::types::EthereumTransaction;
 
-use crate::{types::SimulatedTransaction, address_based_conflict_graph::AddressBasedConflictGraph};
+use crate::{address_based_conflict_graph::{AddressBasedConflictGraph, Transaction}, types::SimulatedTransaction};
 
 const CONTRACT_ADDR: u64 = 0x1;
 
@@ -35,6 +38,23 @@ fn transaction_with_multiple_rw(tx_id: u64, read_addr: Vec<u64>, write_addr: Vec
             H256::from_low_u64_be(1));
     });
     SimulatedTransaction::new(H256::from_low_u64_be(tx_id), Some(set), Vec::new(), Vec::new(), EthereumTransaction(TypedTransaction::default()))
+}
+
+fn transaction_with_multiple_rw_str(tx_id: &str, read_addr: Vec<&str>, write_addr: Vec<&str>) -> SimulatedTransaction {
+    let mut set = RwSet::new();
+    read_addr.into_iter().for_each(|addr| {
+        set.record_read_key(
+            H160::from_low_u64_be(CONTRACT_ADDR), 
+            H256::from_str(addr).unwrap(), 
+            H256::from_low_u64_be(1));
+    });
+    write_addr.into_iter().for_each(|addr| {
+        set.record_write_key(
+            H160::from_low_u64_be(CONTRACT_ADDR), 
+            H256::from_str(addr).unwrap(), 
+            H256::from_low_u64_be(1));
+    });
+    SimulatedTransaction::new(H256::from_str(tx_id).unwrap(), Some(set), Vec::new(), Vec::new(), EthereumTransaction(TypedTransaction::default()))
 }
 
 fn nezha_test(input_txs: Vec<SimulatedTransaction>, answer: Vec<Vec<u64>>, print_result: bool) {
@@ -105,6 +125,84 @@ async fn nezha_par_test(input_txs: Vec<SimulatedTransaction>, answer: Vec<Vec<u6
     })
 }
 
+fn optimistic_nezha_test(input_txs: Vec<SimulatedTransaction>, answer: Vec<Vec<u64>>, print_result: bool) {
+    let scheduled_info = AddressBasedConflictGraph::optimistic_construct(
+            input_txs.iter().map(|tx| std::sync::Arc::new(Transaction::from(tx.clone()).0)).collect_vec()
+        )
+        .hierarchcial_sort()
+        .reorder()
+        .extract_schedule();
+
+    if print_result {
+        println!("Scheduled Transactions:");
+        scheduled_info.scheduled_txs.iter()
+            .for_each(|txs| {
+                txs.iter().for_each(|tx| {
+                    print!("{} ", tx.id().to_low_u64_be());
+                });
+                print!("\n");
+            });
+
+        println!("Aborted Transactions:");
+        scheduled_info.aborted_txs.iter()
+            .for_each(|tx| {
+                print!("{}\n", tx.id().to_low_u64_be());
+            });
+    }
+
+    scheduled_info.scheduled_txs.iter().zip(answer.iter()).for_each(|(txs, idx)| {
+        assert_eq!(txs.len(), idx.len());
+        let answer_set:HashSet<&u64> = idx.iter().collect();
+            assert!(txs.iter().all(|tx| answer_set.contains(&tx.id().to_low_u64_be())))
+    });
+
+    let aborted_tx_len = input_txs.len() - answer.iter().flatten().count();
+    assert_eq!(aborted_tx_len, scheduled_info.aborted_txs_len());
+
+    scheduled_info.aborted_txs.into_iter().for_each(|tx| {
+        std::sync::Arc::try_unwrap(tx).unwrap();
+    })
+}
+
+async fn optimistic_nezha_par_test(input_txs: Vec<SimulatedTransaction>, answer: Vec<Vec<u64>>, print_result: bool) {
+    let scheduled_info = AddressBasedConflictGraph::par_optimistic_construct(
+        input_txs.iter().map(|tx| std::sync::Arc::new(Transaction::from(tx.clone()).0)).collect_vec()
+    ).await
+    .hierarchcial_sort()
+    .reorder()
+    .par_extract_schedule().await;
+
+    if print_result {
+        println!("Scheduled Transactions:");
+        scheduled_info.scheduled_txs.iter()
+            .for_each(|txs| {
+                txs.iter().for_each(|tx| {
+                    print!("{} ", tx.id().to_low_u64_be());
+                });
+                print!("\n");
+            });
+
+        println!("Aborted Transactions:");
+        scheduled_info.aborted_txs.iter()
+            .for_each(|tx| {
+                print!("{}\n", tx.id().to_low_u64_be());
+            });
+    }
+
+    scheduled_info.scheduled_txs.iter().zip(answer.iter()).for_each(|(txs, idx)| {
+        assert_eq!(txs.len(), idx.len());
+        let answer_set:HashSet<&u64> = idx.iter().collect();
+            assert!(txs.iter().all(|tx| answer_set.contains(&tx.id().to_low_u64_be())))
+    });
+
+    let aborted_tx_len = input_txs.len() - answer.iter().flatten().count();
+    assert_eq!(aborted_tx_len, scheduled_info.aborted_txs_len());
+
+    scheduled_info.aborted_txs.into_iter().for_each(|tx| {
+        std::sync::Arc::try_unwrap(tx).unwrap();
+    })
+}
+
 #[tokio::test]
 async fn test_scenario_1() {
     let txs = vec![
@@ -123,7 +221,9 @@ async fn test_scenario_1() {
     ];
 
     nezha_test(txs.clone(), answer.clone(), false);
-    nezha_par_test(txs, answer, false).await;
+    nezha_par_test(txs.clone(), answer.clone(), false).await;
+    optimistic_nezha_test(txs.clone(), answer.clone(), false);
+    optimistic_nezha_par_test(txs, answer, false).await;
 }
 
 #[tokio::test]
@@ -145,7 +245,9 @@ async fn test_scenario_2() {
     ];
     
     nezha_test(txs.clone(), answer.clone(), false);
-    nezha_par_test(txs, answer, false).await;
+    nezha_par_test(txs.clone(), answer.clone(), false).await;
+    optimistic_nezha_test(txs.clone(), answer.clone(), false);
+    optimistic_nezha_par_test(txs, answer, false).await;
 }
 
 #[tokio::test]
@@ -167,7 +269,9 @@ async fn test_scenario_3() {
     ];
     
     nezha_test(txs.clone(), answer.clone(), false);
-    nezha_par_test(txs, answer, false).await;
+    nezha_par_test(txs.clone(), answer.clone(), false).await;
+    optimistic_nezha_test(txs.clone(), answer.clone(), false);
+    optimistic_nezha_par_test(txs, answer, false).await;
 }
 
 #[tokio::test]
@@ -189,7 +293,9 @@ async fn test_scenario_4() {
     ];
     
     nezha_test(txs.clone(), answer.clone(), false);
-    nezha_par_test(txs, answer, false).await;
+    nezha_par_test(txs.clone(), answer.clone(), false).await;
+    optimistic_nezha_test(txs.clone(), answer.clone(), false);
+    optimistic_nezha_par_test(txs, answer, false).await;
 }
 
 #[tokio::test]
@@ -212,7 +318,9 @@ async fn test_scenario_5() {
     ];
     
     nezha_test(txs.clone(), answer.clone(), false);
-    nezha_par_test(txs, answer, false).await;
+    nezha_par_test(txs.clone(), answer.clone(), false).await;
+    optimistic_nezha_test(txs.clone(), answer.clone(), false);
+    optimistic_nezha_par_test(txs, answer, false).await;
 }
 
 #[tokio::test]
@@ -228,5 +336,31 @@ async fn test_reordering() {
     ];
     
     nezha_test(txs.clone(), answer.clone(), false);
-    nezha_par_test(txs, answer, false).await;
+    nezha_par_test(txs.clone(), answer.clone(), false).await;
+    optimistic_nezha_test(txs.clone(), answer.clone(), false);
+    optimistic_nezha_par_test(txs, answer, false).await;
+}
+
+#[tokio::test]
+async fn test_scenario_6() {
+    let txs = vec![
+        transaction_with_multiple_rw_str("0x0000000000000000000000000000000000000000000000000000000000000001", 
+            vec!["0x48c8d13a49dbf1c93484ba997be20d9cae319d82960232db3544bb8bf65d4ac0", "0xe3ea58be4f1efa6db4e24abc274fb1bccd82dfcd49c8f508a08c911f0357c19d"], 
+            vec!["0x48c8d13a49dbf1c93484ba997be20d9cae319d82960232db3544bb8bf65d4ac0", "0xe3ea58be4f1efa6db4e24abc274fb1bccd82dfcd49c8f508a08c911f0357c19d"]),
+        transaction_with_multiple_rw_str("0x0000000000000000000000000000000000000000000000000000000000000002", 
+            vec!["0x7b6a909101d770fd973075a9dbcef6c7ae894d77f3f89dcacb997ab3178cd44e", "0xb955ea50cf68e45358af8183015c9694f0e9401fee45e367d90c462108f102bd"], 
+            vec!["0x7b6a909101d770fd973075a9dbcef6c7ae894d77f3f89dcacb997ab3178cd44e", "0xb955ea50cf68e45358af8183015c9694f0e9401fee45e367d90c462108f102bd"]),
+        transaction_with_multiple_rw_str("0x0000000000000000000000000000000000000000000000000000000000000003", 
+            vec!["0x7b6a909101d770fd973075a9dbcef6c7ae894d77f3f89dcacb997ab3178cd44e", "0xe3ea58be4f1efa6db4e24abc274fb1bccd82dfcd49c8f508a08c911f0357c19d"], 
+            vec!["0x7b6a909101d770fd973075a9dbcef6c7ae894d77f3f89dcacb997ab3178cd44e", "0xe3ea58be4f1efa6db4e24abc274fb1bccd82dfcd49c8f508a08c911f0357c19d"]),
+    ];
+    
+    let answer = vec![
+        vec![1, 2],
+    ];
+    
+    nezha_test(txs.clone(), answer.clone(), true);
+    nezha_par_test(txs.clone(), answer.clone(), false).await;
+    optimistic_nezha_test(txs.clone(), answer.clone(), false);
+    optimistic_nezha_par_test(txs, answer, false).await;
 }

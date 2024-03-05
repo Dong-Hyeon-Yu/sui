@@ -238,7 +238,12 @@ impl ConcurrencyLevelManager {
     }
 
 
-    async fn _validate_optimistic_assumption(&self, previous_tx: Vec<ScheduledTransaction>, rw_set: Vec<SimulatedTransaction>) -> Option<Vec<SimulatedTransaction>> {
+    async fn _validate_optimistic_assumption(&self, previous_tx: Vec<ScheduledTransaction>, mut rw_set: Vec<SimulatedTransaction>) -> Option<Vec<SimulatedTransaction>> {
+
+        if rw_set.len() == 1 {
+            self._concurrent_commit(vec![vec![ScheduledTransaction::from(rw_set.pop().unwrap())]]).await;
+            return None;
+        }
 
         let (send, recv) = tokio::sync::oneshot::channel();
         rayon::spawn(move || {

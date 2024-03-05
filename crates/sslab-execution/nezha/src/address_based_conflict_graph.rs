@@ -44,25 +44,15 @@ impl AddressBasedConflictGraph {
 
             let (read_set, write_set) = rw_set.destruct();
             let mut write_units = Self::_convert_to_units(&tx_metadata, UnitType::Write, write_set, Some(&read_set));
-            
-            match acg._check_ww_conflict(&write_units) {
-                true => {
-                    tx_metadata.abort();
-                    acg.ww_aborted_txs.push(tx_metadata);
-                    continue;
-                },
-                false => {
-                    let mut read_units = Self::_convert_to_units(&tx_metadata, UnitType::Read, read_set, None);
+            let mut read_units = Self::_convert_to_units(&tx_metadata, UnitType::Read, read_set, None);
 
-                    // before inserting the units, wr-dependencies must be created b/w RW units.
-                    Self::_set_wr_dependencies(&mut read_units, &mut write_units);
+            // before inserting the units, wr-dependencies must be created b/w RW units.
+            Self::_set_wr_dependencies(&mut read_units, &mut write_units);
 
-                    tx_metadata.set_write_units(write_units.clone());
+            tx_metadata.set_write_units(write_units.clone());
 
-                    acg.tx_list.insert(tx_metadata.id(), tx_metadata);
-                    acg._add_units_to_address([read_units, write_units].concat());
-                }
-            }
+            acg.tx_list.insert(tx_metadata.id(), tx_metadata);
+            acg._add_units_to_address([read_units, write_units].concat());
         }
 
         acg
@@ -109,25 +99,15 @@ impl AddressBasedConflictGraph {
 
         for tx in aborted_txs {
             let mut write_units = Self::_convert_to_units(&tx, UnitType::Write, tx.abort_info.read().prev_read_map().clone(), Some(tx.abort_info.read().prev_read_map()));
-            
-            match acg._check_ww_conflict(&write_units) {
-                true => {
-                    tx.abort();
-                    acg.ww_aborted_txs.push(tx);
-                    continue;
-                },
-                false => {
-                    let mut read_units = Self::_convert_to_units(&tx, UnitType::Read, tx.abort_info.read().prev_read_map().clone(), None);
+            let mut read_units = Self::_convert_to_units(&tx, UnitType::Read, tx.abort_info.read().prev_read_map().clone(), None);
 
-                    // before inserting the units, wr-dependencies must be created b/w RW units.
-                    Self::_set_wr_dependencies(&mut read_units, &mut write_units);
+            // before inserting the units, wr-dependencies must be created b/w RW units.
+            Self::_set_wr_dependencies(&mut read_units, &mut write_units);
 
-                    tx.set_write_units(write_units.clone());
+            tx.set_write_units(write_units.clone());
 
-                    acg.tx_list.insert(tx.id(), tx);
-                    acg._add_units_to_address([read_units, write_units].concat());
-                }
-            }
+            acg.tx_list.insert(tx.id(), tx);
+            acg._add_units_to_address([read_units, write_units].concat());
         }
 
         acg
@@ -282,10 +262,6 @@ impl AddressBasedConflictGraph {
                     }
                 };
 
-                if unit.unit_type == UnitType::Write && unit.co_located() {
-                    address.co_located = true
-                }
-
                 address.add_unit(unit);
             });
     }
@@ -335,28 +311,27 @@ impl AddressBasedConflictGraph {
         });
     }
 
-    fn _check_ww_conflict(&mut self, write_units: &Vec<Arc<Unit>>) -> bool {
-        write_units.iter()
-            .filter(|unit| unit.co_located)
-            .any(|possible_ww_conflict_unit| {
-                match self.addresses.get(possible_ww_conflict_unit.address()) {
-                    Some(address) => {
-                        address.co_located
-                    },
-                    None => false
-                }
-            })
-    }
-
     fn _aborted_txs(&mut self) -> Vec<Arc<Transaction>> {
-        let mut aborted_tx_indice = self.tx_list.iter()
-            .filter(|(_, tx)| tx.aborted())
-            .map(|(tx_id, _)| tx_id.to_owned())
-            .collect_vec();
+        let mut rw_abort_indice = vec![];
+        let mut ww_abort_indice = vec![];
 
-        aborted_tx_indice.sort();
+        for (id, tx) in self.tx_list.iter() {
+            if tx.rw_aborted() {
+                rw_abort_indice.push(id.clone());
+            } else if tx.ww_aborted() {
+                ww_abort_indice.push(id.clone());
+            }
+        }
 
-        aborted_tx_indice.iter()
+        rw_abort_indice.sort();
+        ww_abort_indice.sort();
+
+        rw_abort_indice.iter()
+            .for_each(|idx| {
+                let tx = self.tx_list.remove(idx).unwrap();
+                self.aborted_txs.push(tx);
+            });
+        ww_abort_indice.iter()
             .for_each(|idx| {
                 let tx = self.tx_list.remove(idx).unwrap();
                 self.aborted_txs.push(tx);
@@ -379,13 +354,13 @@ impl AddressBasedConflictGraph {
                 }
         });
         self.tx_list.extend(other.tx_list);
-        self.ww_aborted_txs.extend(other.ww_aborted_txs);
     }
 }
 
 #[derive(Debug)]
 pub struct AbortInfo {
-    aborted: bool,
+    rw_aborted: bool,
+    ww_aborted: bool,
     prev_write_keys: BTreeMap<H160, HashMap<H256, H256>>,
     prev_read_keys: BTreeMap<H160, HashMap<H256, H256>>,
 }
@@ -393,7 +368,8 @@ pub struct AbortInfo {
 impl AbortInfo {
     fn new(rw_set: RwSet) -> Self {
         Self { 
-            aborted: false, 
+            rw_aborted: false, 
+            ww_aborted: false,
             prev_write_keys: rw_set.writes().to_owned(),
             prev_read_keys: rw_set.reads().to_owned(),
         }
@@ -416,7 +392,7 @@ impl AbortInfo {
     }
 
     pub fn aborted(&self) -> bool {
-        self.aborted
+        self.rw_aborted || self.ww_aborted
     }
 }
 
@@ -458,7 +434,9 @@ impl Transaction {
 
     pub fn init(&self) {
         *self.sequence.write() = 0;
-        self.abort_info.write().aborted = false;
+        let mut abort_info = self.abort_info.write();
+        abort_info.rw_aborted = false;
+        abort_info.ww_aborted = false;
     }
 
     pub fn id(&self) -> H256 {
@@ -484,13 +462,26 @@ impl Transaction {
         my_units.shrink_to_fit();
     }
 
-    fn abort(&self) {
+    fn rw_abort(&self) {
         let mut info = self.abort_info.write();
-        info.aborted = true;
+        info.rw_aborted = true;
+    }
+
+    fn ww_abort(&self) {
+        let mut info = self.abort_info.write();
+        info.ww_aborted = true;
     }
 
     fn aborted(&self) -> bool {
-        self.abort_info.read().aborted
+        self.abort_info.read().aborted()
+    }
+
+    fn rw_aborted(&self) -> bool {
+        self.abort_info.read().rw_aborted
+    }
+
+    fn ww_aborted(&self) -> bool {
+        self.abort_info.read().ww_aborted
     }
 
     fn set_sequence(&self, sequence: u64) {
@@ -567,8 +558,14 @@ impl Unit {
         self.tx.set_sequence(sequence);
     }
 
+    // abort a transaction that makes the anti-rw conflict, resulting in a cycle at ACG.
     fn abort_tx(&self) {
-        self.tx.abort();
+        self.tx.rw_abort();
+    }
+
+    // abort a transaction that makes the write-write conflict within a same address (key).
+    fn abort_ww_tx(&self) {
+        self.tx.ww_abort();
     }
 
     fn co_located(&self) -> bool {
@@ -636,6 +633,35 @@ impl ReadUnits {
     fn max_seq(&self) -> u64 {
         self.max_seq
     }
+
+    fn check_minimum_and_uniqueness(&self, write_tx_id: H256) -> bool {
+
+        let mut min = None;
+
+        if self.units.is_empty() {
+            return true;
+        }
+        
+        for cur in &self.units {
+            if !cur.tx.aborted() {
+                match min {
+                    None => min = Some(cur),  // 1st element with minimum sequence.
+                    Some(min_unit) => {  // 2nd element with minimum sequence.
+                        if min_unit.sequence() == cur.sequence() {
+                            return false; // not unique.
+                        }
+                        if min_unit.tx.id() != write_tx_id {
+                            return false; // not minimum.
+                        }
+
+                        return true;  // unique and minimum.
+                    }
+                }
+            }
+        };
+
+        false
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -672,18 +698,22 @@ impl WriteUnits {
                 if unit.co_located() {
                     match self.first_updater_flag {
                         false => {  // First updater wins
-                            unit.set_sequence(read_units.increment_and_get_max_seq());
+                            if !read_units.check_minimum_and_uniqueness(unit.tx.id()) {
+                                unit.set_sequence(read_units.increment_and_get_max_seq());
+                            }
                             self.first_updater_flag = true;
                         },
                         true => {
-                            unit.set_sequence(0); // Loser will be aborted later.
+                            unit.abort_ww_tx();
                         }
                     }
                 }
             });
 
         /* (Algorithm2) line 20 ~ 24 */
-        sorted.iter().for_each(|unit|{
+        sorted.iter()
+            .filter(|unit| !unit.tx.aborted())
+            .for_each(|unit|{
                 if unit.sequence() < read_units.max_seq() {
                     unit.abort_tx();  
                 }
@@ -722,7 +752,6 @@ struct Address {
     out_degree: u32,
     read_units: ReadUnits,
     write_units: WriteUnits,
-    co_located: bool,  // True if the read unit and write unit of a transaction are in the same address. used for checking ww-conflict.
 }
 
 impl Address {
@@ -733,7 +762,6 @@ impl Address {
             out_degree: 0,
             read_units: ReadUnits::new(),
             write_units: WriteUnits::new(),
-            co_located: false,
         }
     }
 

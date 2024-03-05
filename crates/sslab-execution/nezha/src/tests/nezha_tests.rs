@@ -52,6 +52,12 @@ fn nezha_test(input_txs: Vec<SimulatedTransaction>, answer: Vec<Vec<u64>>, print
                 });
                 print!("\n");
             });
+
+        println!("Aborted Transactions:");
+        scheduled_info.aborted_txs.iter()
+            .for_each(|tx| {
+                print!("{}\n", tx.id().to_low_u64_be());
+            });
     }
     
     scheduled_info.scheduled_txs.iter().zip(answer.iter()).for_each(|(txs, idx)| {

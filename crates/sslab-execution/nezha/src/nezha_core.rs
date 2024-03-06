@@ -8,7 +8,7 @@ use sslab_execution::{
     executor::Executable, 
     evm_storage::{ConcurrentEVMStorage, backend::ExecutionBackend}
 };
-use tokio::time::Instant;
+// use tokio::time::Instant;
 use tracing::{info, debug, warn, error};
 
 
@@ -74,33 +74,33 @@ impl ConcurrencyLevelManager {
     }
 
     async fn _execute(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> Vec<BatchDigest> {
-        let mut now = Instant::now();
+        // let mut now = Instant::now();
         let SimulationResult { digests, rw_sets } = self._simulate(consensus_output).await;
-        let mut time = now.elapsed().as_millis();
-        info!("Simulation took {} ms for {} transactions.", time, rw_sets.len());
+        // let mut time = now.elapsed().as_millis();
+        // info!("Simulation took {} ms for {} transactions.", time, rw_sets.len());
 
         // rw_sets.clone().iter().for_each(|rw_set| {
         //     println!("rw_set: {:?}\n", rw_set);
         // });
         
-        now = Instant::now();
+        // now = Instant::now();
         let scheduled_info = AddressBasedConflictGraph::construct(rw_sets)
             .hierarchcial_sort()
             .reorder()
             .extract_schedule();
-        time = now.elapsed().as_millis();
-        info!("Scheduling took {} ms.", time);
+        // time = now.elapsed().as_millis();
+        // info!("Scheduling took {} ms.", time);
 
-        let scheduled_tx_len = scheduled_info.scheduled_txs_len();
-        let aborted_tx_len =  scheduled_info.aborted_txs_len();
-        info!("Parallelism metric: {:?}", scheduled_info.parallism_metric());
+        // let scheduled_tx_len = scheduled_info.scheduled_txs_len();
+        // let aborted_tx_len =  scheduled_info.aborted_txs_len();
+        // info!("Parallelism metric: {:?}", scheduled_info.parallism_metric());
 
-        now = Instant::now();
-        self._concurrent_commit(scheduled_info, 10).await;
-        time = now.elapsed().as_millis();
+        // now = Instant::now();
+        self._concurrent_commit(scheduled_info, 1).await;
+        // time = now.elapsed().as_millis();
 
-        info!("Concurrent commit took {} ms for {} transactions.", time, scheduled_tx_len);
-        info!("Abort rate: {:.2} ({}/{} aborted)", (aborted_tx_len as f64) * 100.0 / (scheduled_tx_len+aborted_tx_len) as f64, aborted_tx_len, scheduled_tx_len+aborted_tx_len);
+        // info!("Concurrent commit took {} ms for {} transactions.", time, scheduled_tx_len);
+        // info!("Abort rate: {:.2} ({}/{} aborted)", (aborted_tx_len as f64) * 100.0 / (scheduled_tx_len+aborted_tx_len) as f64, aborted_tx_len, scheduled_tx_len+aborted_tx_len);
 
         // println!("{} transactions are aborted.", aborted_tx_len);
 

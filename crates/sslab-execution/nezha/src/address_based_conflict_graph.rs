@@ -45,6 +45,7 @@ impl AddressBasedConflictGraph {
             let (read_set, write_set) = rw_set.destruct();
             let mut write_units = Self::_convert_to_units(&tx, UnitType::Write, write_set, Some(&read_set));
             
+            #[cfg(feature = "ww-conflict-optimization")]
             if acg._check_updater_already_exist_in_same_address(&write_units) {
                 tx.abort();
                 acg.ww_aborted_txs.push(tx);
@@ -55,38 +56,6 @@ impl AddressBasedConflictGraph {
 
             // before inserting the units, wr-dependencies must be created b/w RW units.
             Self::_set_wr_dependencies(&mut read_units, &mut write_units);
-            tx.set_write_units(write_units.clone());
-
-            acg.tx_list.insert(tx.id(), tx);
-            acg._add_units_to_address([read_units, write_units].concat());
-        }
-
-        acg
-    }
-
-    pub fn optimistic_construct(aborted_txs: Vec<Arc<Transaction>>) -> Self {
-        let mut acg = Self::new();
-
-        for tx in aborted_txs {
-            let (prev_write, prev_read);
-            {
-                let abort_info = tx.abort_info.read();
-                prev_write = abort_info.prev_write_map().clone();
-                prev_read = abort_info.prev_read_map().clone();
-            }
-            let mut write_units = Self::_convert_to_units(&tx, UnitType::Write, prev_write, Some(&prev_read));
-
-            if acg._check_updater_already_exist_in_same_address(&write_units) {
-                tx.abort();
-                acg.ww_aborted_txs.push(tx);
-                continue;
-            }
-
-            let mut read_units = Self::_convert_to_units(&tx, UnitType::Read, prev_read, None);
-
-            // before inserting the units, wr-dependencies must be created b/w RW units.
-            Self::_set_wr_dependencies(&mut read_units, &mut write_units);
-
             tx.set_write_units(write_units.clone());
 
             acg.tx_list.insert(tx.id(), tx);
@@ -140,10 +109,6 @@ impl AddressBasedConflictGraph {
 
     pub async fn par_construct(simulation_result: Vec<SimulatedTransaction>) -> Self {
         Self::_par_construct(simulation_result, Self::construct).await
-    }
-
-    pub async fn par_optimistic_construct(aborted_txs: Vec<Arc<Transaction>>) -> Self {
-        Self::_par_construct(aborted_txs, Self::optimistic_construct).await
     }
 
 
@@ -308,6 +273,7 @@ impl AddressBasedConflictGraph {
         });
     }
 
+    #[cfg(feature = "ww-conflict-optimization")]
     fn _check_updater_already_exist_in_same_address(&mut self, write_units: &Vec<Arc<Unit>>) -> bool {
         write_units.iter()
             .filter(|unit| unit.co_located)
@@ -726,6 +692,7 @@ struct Address {
     out_degree: u32,
     read_units: ReadUnits,
     write_units: WriteUnits,
+    #[cfg(feature = "ww-conflict-optimization")]
     first_updater_flag: bool,
 }
 
@@ -737,6 +704,7 @@ impl Address {
             out_degree: 0,
             read_units: ReadUnits::new(),
             write_units: WriteUnits::new(),
+            #[cfg(feature = "ww-conflict-optimization")]
             first_updater_flag: false
         }
     }
@@ -761,6 +729,7 @@ impl Address {
                 self.read_units.push(unit);
             },
             UnitType::Write => {
+                #[cfg(feature = "ww-conflict-optimization")]
                 if unit.co_located() {
                     self.first_updater_flag = true;
                 }
@@ -783,6 +752,8 @@ impl Address {
         self.out_degree += other.out_degree;
         self.read_units.units.extend(other.read_units.units);
         self.write_units.units.extend(other.write_units.units);
-        self.first_updater_flag = self.first_updater_flag | other.first_updater_flag
+        #[cfg(feature = "ww-conflict-optimization")] {
+            self.first_updater_flag = self.first_updater_flag | other.first_updater_flag;
+        }
     }
 }

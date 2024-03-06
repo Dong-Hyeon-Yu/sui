@@ -3,10 +3,9 @@ use std::str::FromStr;
 use ethers_core::types::{H160, H256};
 use evm::executor::stack::{RwSet, Simulatable};
 use hashbrown::HashSet;
-use itertools::Itertools;
 use sslab_execution::types::{EthereumTransaction, IndexedEthereumTransaction};
 
-use crate::{address_based_conflict_graph::{AddressBasedConflictGraph, Transaction}, types::SimulatedTransaction};
+use crate::{address_based_conflict_graph::AddressBasedConflictGraph, types::SimulatedTransaction};
 
 const CONTRACT_ADDR: u64 = 0x1;
 
@@ -76,7 +75,7 @@ fn nezha_test(input_txs: Vec<SimulatedTransaction>, answer: Vec<Vec<u64>>, print
         println!("Aborted Transactions:");
         scheduled_info.aborted_txs.iter()
             .for_each(|tx| {
-                print!("{}\n", tx.id());
+                print!("{}\n", tx.id);
             });
     }
     
@@ -88,10 +87,6 @@ fn nezha_test(input_txs: Vec<SimulatedTransaction>, answer: Vec<Vec<u64>>, print
     
      let aborted_tx_len = input_txs.len() - answer.iter().flatten().count();
      assert_eq!(aborted_tx_len, scheduled_info.aborted_txs_len());
-
-     scheduled_info.aborted_txs.into_iter().for_each(|tx| {
-        std::sync::Arc::try_unwrap(tx).unwrap();
-    })
 }
 
 async fn nezha_par_test(input_txs: Vec<SimulatedTransaction>, answer: Vec<Vec<u64>>, print_result: bool) {
@@ -119,88 +114,6 @@ async fn nezha_par_test(input_txs: Vec<SimulatedTransaction>, answer: Vec<Vec<u6
 
     let aborted_tx_len = input_txs.len() - answer.iter().flatten().count();
     assert_eq!(aborted_tx_len, scheduled_info.aborted_txs_len());
-
-    scheduled_info.aborted_txs.into_iter().for_each(|tx| {
-        std::sync::Arc::try_unwrap(tx).unwrap();
-    })
-}
-
-fn optimistic_nezha_test(input_txs: Vec<SimulatedTransaction>, answer: Vec<Vec<u64>>, print_result: bool) {
-    let scheduled_info = AddressBasedConflictGraph::optimistic_construct(
-            input_txs.iter().map(|tx| std::sync::Arc::new(Transaction::from(tx.clone()).0)).collect_vec()
-        )
-        .hierarchcial_sort()
-        .reorder()
-        .extract_schedule();
-
-    if print_result {
-        println!("Scheduled Transactions:");
-        scheduled_info.scheduled_txs.iter()
-            .for_each(|txs| {
-                txs.iter().for_each(|tx| {
-                    print!("{} ", tx.id());
-                });
-                print!("\n");
-            });
-
-        println!("Aborted Transactions:");
-        scheduled_info.aborted_txs.iter()
-            .for_each(|tx| {
-                print!("{}\n", tx.id());
-            });
-    }
-
-    scheduled_info.scheduled_txs.iter().zip(answer.iter()).for_each(|(txs, idx)| {
-        assert_eq!(txs.len(), idx.len());
-        let answer_set:HashSet<&u64> = idx.iter().collect();
-            assert!(txs.iter().all(|tx| answer_set.contains(&tx.id())))
-    });
-
-    let aborted_tx_len = input_txs.len() - answer.iter().flatten().count();
-    assert_eq!(aborted_tx_len, scheduled_info.aborted_txs_len());
-
-    scheduled_info.aborted_txs.into_iter().for_each(|tx| {
-        std::sync::Arc::try_unwrap(tx).unwrap();
-    })
-}
-
-async fn optimistic_nezha_par_test(input_txs: Vec<SimulatedTransaction>, answer: Vec<Vec<u64>>, print_result: bool) {
-    let scheduled_info = AddressBasedConflictGraph::par_optimistic_construct(
-        input_txs.iter().map(|tx| std::sync::Arc::new(Transaction::from(tx.clone()).0)).collect_vec()
-    ).await
-    .hierarchcial_sort()
-    .reorder()
-    .par_extract_schedule().await;
-
-    if print_result {
-        println!("Scheduled Transactions:");
-        scheduled_info.scheduled_txs.iter()
-            .for_each(|txs| {
-                txs.iter().for_each(|tx| {
-                    print!("{} ", tx.id());
-                });
-                print!("\n");
-            });
-
-        println!("Aborted Transactions:");
-        scheduled_info.aborted_txs.iter()
-            .for_each(|tx| {
-                print!("{}\n", tx.id());
-            });
-    }
-
-    scheduled_info.scheduled_txs.iter().zip(answer.iter()).for_each(|(txs, idx)| {
-        assert_eq!(txs.len(), idx.len());
-        let answer_set:HashSet<&u64> = idx.iter().collect();
-            assert!(txs.iter().all(|tx| answer_set.contains(&tx.id())))
-    });
-
-    let aborted_tx_len = input_txs.len() - answer.iter().flatten().count();
-    assert_eq!(aborted_tx_len, scheduled_info.aborted_txs_len());
-
-    scheduled_info.aborted_txs.into_iter().for_each(|tx| {
-        std::sync::Arc::try_unwrap(tx).unwrap();
-    })
 }
 
 #[tokio::test]
@@ -221,9 +134,7 @@ async fn test_scenario_1() {
     ];
 
     nezha_test(txs.clone(), answer.clone(), false);
-    nezha_par_test(txs.clone(), answer.clone(), false).await;
-    optimistic_nezha_test(txs.clone(), answer.clone(), false);
-    optimistic_nezha_par_test(txs, answer, false).await;
+    nezha_par_test(txs, answer, false).await;
 }
 
 #[tokio::test]
@@ -245,9 +156,7 @@ async fn test_scenario_2() {
     ];
     
     nezha_test(txs.clone(), answer.clone(), false);
-    nezha_par_test(txs.clone(), answer.clone(), false).await;
-    optimistic_nezha_test(txs.clone(), answer.clone(), false);
-    optimistic_nezha_par_test(txs, answer, false).await;
+    nezha_par_test(txs, answer, false).await;
 }
 
 #[tokio::test]
@@ -269,9 +178,7 @@ async fn test_scenario_3() {
     ];
     
     nezha_test(txs.clone(), answer.clone(), false);
-    nezha_par_test(txs.clone(), answer.clone(), false).await;
-    optimistic_nezha_test(txs.clone(), answer.clone(), false);
-    optimistic_nezha_par_test(txs, answer, false).await;
+    nezha_par_test(txs, answer, false).await;
 }
 
 #[tokio::test]
@@ -293,9 +200,7 @@ async fn test_scenario_4() {
     ];
     
     nezha_test(txs.clone(), answer.clone(), false);
-    nezha_par_test(txs.clone(), answer.clone(), false).await;
-    optimistic_nezha_test(txs.clone(), answer.clone(), false);
-    optimistic_nezha_par_test(txs, answer, false).await;
+    nezha_par_test(txs, answer, false).await;
 }
 
 #[tokio::test]
@@ -318,9 +223,7 @@ async fn test_scenario_5() {
     ];
     
     nezha_test(txs.clone(), answer.clone(), false);
-    nezha_par_test(txs.clone(), answer.clone(), false).await;
-    optimistic_nezha_test(txs.clone(), answer.clone(), false);
-    optimistic_nezha_par_test(txs, answer, false).await;
+    nezha_par_test(txs, answer, false).await;
 }
 
 #[tokio::test]
@@ -336,9 +239,7 @@ async fn test_reordering() {
     ];
     
     nezha_test(txs.clone(), answer.clone(), false);
-    nezha_par_test(txs.clone(), answer.clone(), false).await;
-    optimistic_nezha_test(txs.clone(), answer.clone(), false);
-    optimistic_nezha_par_test(txs, answer, false).await;
+    nezha_par_test(txs, answer, false).await;
 }
 
 #[tokio::test]
@@ -363,7 +264,5 @@ async fn test_scenario_6() {
     ];
     
     nezha_test(txs.clone(), answer.clone(), false);
-    nezha_par_test(txs.clone(), answer.clone(), false).await;
-    optimistic_nezha_test(txs.clone(), answer.clone(), false);
-    optimistic_nezha_par_test(txs, answer, false).await;
+    nezha_par_test(txs, answer, false).await;
 }

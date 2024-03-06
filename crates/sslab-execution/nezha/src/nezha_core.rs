@@ -4,7 +4,6 @@ use hashbrown::HashSet;
 use itertools::Itertools;
 use narwhal_types::BatchDigest;
 use rayon::prelude::*;
-use rayon::iter::Either;
 use sslab_execution::{
     types::{ExecutableEthereumBatch, ExecutionResult, IndexedEthereumTransaction}, 
     executor::Executable, 
@@ -102,12 +101,10 @@ impl ConcurrencyLevelManager {
 
     pub async fn _execute(&self, consensus_output: Vec<ExecutableEthereumBatch>) -> Vec<BatchDigest> {
         
-        let (digests, tx_list) = Self::_unpack_batches(consensus_output).await;
+        let (digests, mut tx_list) = Self::_unpack_batches(consensus_output).await;
 
-        let mut remains;
 
-        // 1st execution
-        {
+        while tx_list.len() > 0 {
             let rw_sets = self._simulate(tx_list).await;
         
             let ScheduledInfo {scheduled_txs, aborted_txs } = AddressBasedConflictGraph::par_construct(rw_sets).await
@@ -117,57 +114,8 @@ impl ConcurrencyLevelManager {
 
             self._concurrent_commit(scheduled_txs).await;
 
-            remains = aborted_txs;
+            tx_list = aborted_txs;
         }
-
-        let mut epoch = 1u32;
-        while !remains.is_empty() {
-            // optimistic scheduling
-            let ScheduledInfo {scheduled_txs, aborted_txs } = AddressBasedConflictGraph::par_optimistic_construct(remains).await
-                .hierarchcial_sort()
-                .reorder()
-                .par_extract_schedule().await;
-
-            if scheduled_txs.is_empty() {
-                println!("(epoch # {}) aborted transactions({}): {:?}", epoch, aborted_txs.len(), aborted_txs);
-                panic!("endless loop!");
-            }
-
-            // validation by speculative execution
-            for txs in scheduled_txs {
-                let raw_tx_list = txs.par_iter().map(|tx| tx.raw_tx()).cloned().collect();
-                let simulated_txs = self._simulate(raw_tx_list).await;
-                
-                match self._validate_optimistic_assumption(txs, simulated_txs).await { 
-                    Some(invalid_txs) => {
-
-                        // invalidate txs
-                        tracing::debug!("(epoch # {}) invalidate txs: {:?}", epoch, invalid_txs.len());
-
-                        /* fallback to serial execution */
-                        // let snapshot = self.global_state.clone();
-                        // tokio::task::spawn_blocking(move || {
-                        //     simulated_txs.into_iter()
-                        //         .for_each(|tx| {
-                        //             match evm_utils::simulate_tx(tx.raw_tx(), snapshot.as_ref()) {
-                        //                 Ok(Some((effect, _, _))) => {
-                        //                     snapshot.apply_local_effect(effect);
-                        //                 },
-                        //                 _ => {
-                        //                     warn!("fail to execute a transaction {}", tx.id());
-                        //                 }
-                        //             }
-                        //         });
-                        // }).await.expect("fail to spawn a task for serial execution of aborted txs");
-                    },
-                    None => {}
-                }
-            }
-
-            remains = aborted_txs;
-            epoch += 1;
-        }
-        
 
         digests
     }
@@ -243,97 +191,13 @@ impl ConcurrencyLevelManager {
 
         let _ = recv.await;
     }
-
-
-    async fn _validate_optimistic_assumption(&self, previous_tx: Vec<ScheduledTransaction>, mut rw_set: Vec<SimulatedTransaction>) -> Option<Vec<SimulatedTransaction>> {
-
-        if rw_set.len() == 1 {
-            self._concurrent_commit(vec![vec![ScheduledTransaction::from(rw_set.pop().unwrap())]]).await;
-            return None;
-        }
-
-        let (send, recv) = tokio::sync::oneshot::channel();
-        rayon::spawn(move || {
-
-            // validation optimistic assumption: RW keys are not changed after re-execution.
-            let (mut valid_list, _invalid_list): (Vec<_>, Vec<_>) = previous_tx
-                .iter()
-                .zip(rw_set)
-                .partition_map(|(prev, cur)| {
-                    let (prev_write_set, prev_read_set) = prev.rw_set();
-                    if prev_write_set == cur.write_set().unwrap() && prev_read_set == cur.read_set().unwrap() {
-                        Either::Left(cur)
-                    }
-                    else {
-                        Either::Right(cur)
-                    }
-            });
-
-            // allow only one write in one key.
-            let mut invalid_list = vec![];
-            if _invalid_list.len() > 0 {
-
-                let mut write_set: hashbrown::HashSet<_> = valid_list
-                    .iter()
-                    .fold(hashbrown::HashSet::new(), 
-                        |mut set, tx|  {
-                            set.extend(tx.write_set().unwrap());
-                            set
-                    });
-
-                for tx in _invalid_list.into_iter() {
-                    match tx.write_set() {
-                        Some(ref set) => {
-                            if write_set.is_disjoint(set) {
-                                write_set.extend(set);
-                                valid_list.push(tx);
-                            }
-                            else {
-                                invalid_list.push(tx);
-                            }
-                        },
-                        None => {
-                            valid_list.push(tx);
-                        },
-                    }
-                };
-            }
-
-            send.send((valid_list, invalid_list)).unwrap();
-        });
-
-        match recv.await {
-            Ok((valid_list, invalid_list)) => {
-                self._concurrent_commit_2(valid_list).await;
-                if invalid_list.len() > 0 {
-                    Some(invalid_list)
-                }
-                else {
-                    None
-                }
-            },
-            Err(e) => {
-                panic!("fail to receive validation result from the worker thread. {:?}", e);
-            }
-        }
-    }
-
-    pub async fn _concurrent_commit_2(&self, scheduled_txs: Vec<SimulatedTransaction>) {
-        let scheduled_txs = vec![
-            tokio::task::spawn_blocking(move || {
-                scheduled_txs.into_par_iter().map(|tx| ScheduledTransaction::from(tx)).collect()
-            }).await.expect("fail to spawn a task for convert SimulatedTransaction to ScheduledTransaction")
-        ];
-         
-        self._concurrent_commit(scheduled_txs).await;
-    }    
 }
 
 
 
 pub struct ScheduledInfo {
     pub scheduled_txs: Vec<Vec<ScheduledTransaction>>,  
-    pub aborted_txs: Vec<Arc<Transaction>>,
+    pub aborted_txs: Vec<IndexedEthereumTransaction>,
 }
 
 impl ScheduledInfo {
@@ -370,7 +234,7 @@ impl ScheduledInfo {
 
             tx_list.into_par_iter()
                 .map(|(_, tx)| {
-                    // TODO: memory leak (let tx = Self::_unwrap(tx);) 
+                    let tx = Self::_unwrap(tx); // TODO: memory leak (let tx = Self::_unwrap(tx);) 
     
                     ScheduledTransaction::from(tx)
                 })
@@ -381,7 +245,7 @@ impl ScheduledInfo {
 
             tx_list.into_iter()
                 .map(|(_, tx)| {
-                    // TODO: memory leak (let tx = Self::_unwrap(tx);)  
+                    let tx = Self::_unwrap(tx); // TODO: memory leak (let tx = Self::_unwrap(tx);)  
 
                     ScheduledTransaction::from(tx)
                 })
@@ -399,7 +263,7 @@ impl ScheduledInfo {
     }
 
     
-    fn _process_aborted_txs(mut aborted_txs: Vec<Arc<Transaction>>, rayon: bool) -> Vec<Arc<Transaction>> {
+    fn _process_aborted_txs(aborted_txs: Vec<Arc<Transaction>>, rayon: bool) -> Vec<IndexedEthereumTransaction> {
         if rayon {
             aborted_txs.par_iter()
                 .for_each(|tx| {
@@ -407,6 +271,14 @@ impl ScheduledInfo {
                     tx.init();
                 }
             );
+
+            let mut ret = aborted_txs.into_par_iter()
+                .map(|tx| tx.raw_tx().to_owned())
+                .collect::<Vec<_>>();
+
+            ret.sort_by_key(|tx| tx.id);
+
+            ret
         }
         else {
             aborted_txs.iter()
@@ -414,11 +286,15 @@ impl ScheduledInfo {
                 tx.clear_write_units();
                 tx.init();
             });
-        };
 
-        aborted_txs.sort_by_key(|tx| tx.id());
+            let mut ret = aborted_txs.into_iter()
+                .map(|tx| tx.raw_tx().to_owned())
+                .collect::<Vec<_>>();
 
-        aborted_txs
+            ret.sort_by_key(|tx| tx.id);
+
+            ret
+        }
     }
 
     // anti-rw dependencies are occured when the read keys of latter tx are overlapped with the write keys of the previous txs in the same epoch.

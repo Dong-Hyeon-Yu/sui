@@ -23,6 +23,10 @@ rayon = "1.8.0"
 nohash-hasher = "0.2.0"
 hashbrown = { version = "0.14.2", features = ["inline-more", "default"]}
 
+[features]
+default = []
+ww-conflict-optimization = []
+
 
 [dev-dependencies]
 ethers = "^2.0.0"

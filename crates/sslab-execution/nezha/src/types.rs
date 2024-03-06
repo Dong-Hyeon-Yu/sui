@@ -4,7 +4,7 @@ use ethers_core::types::H256;
 use evm::{backend::{Apply, Log}, executor::stack::RwSet};
 use itertools::Itertools;
 use narwhal_types::BatchDigest;
-use sslab_execution::types::EthereumTransaction;
+use sslab_execution::types::IndexedEthereumTransaction;
 
 use crate::address_based_conflict_graph::Transaction;
 
@@ -17,24 +17,24 @@ pub struct SimulationResult {
 
 #[derive(Clone, Debug, Default)]
 pub struct SimulatedTransaction {
-    tx_id: H256,
+    tx_id: u64,
     rw_set: Option<RwSet>,
     effects: Vec<Apply>,
     logs: Vec<Log>,
-    raw_tx: EthereumTransaction,
+    raw_tx: IndexedEthereumTransaction,
 }
 
 impl SimulatedTransaction {
-    pub fn new(tx_id: H256, rw_set: Option<RwSet>, effects: Vec<Apply>, logs: Vec<Log>, raw_tx: EthereumTransaction) -> Self {
-        Self { tx_id, rw_set, effects, logs, raw_tx }
+    pub fn new( rw_set: Option<RwSet>, effects: Vec<Apply>, logs: Vec<Log>, raw_tx: IndexedEthereumTransaction) -> Self {
+        Self { tx_id: raw_tx.id, rw_set, effects, logs, raw_tx }
     }
 
-    pub fn id(&self) -> &H256 {
-        &self.tx_id
+    pub fn id(&self) -> u64 {
+        self.tx_id
     }
 
-    pub fn deconstruct(self) -> (H256, Option<RwSet>, Vec<Apply>, Vec<Log>, EthereumTransaction) {
-        (self.tx_id, self.rw_set, self.effects, self.logs, self.raw_tx)
+    pub fn deconstruct(self) -> (u64, Option<RwSet>, Vec<Apply>, Vec<Log>, IndexedEthereumTransaction) {
+        (self.raw_tx.id, self.rw_set, self.effects, self.logs, self.raw_tx)
     }
 
     pub fn write_set(&self) -> Option<hashbrown::HashSet<H256>> {
@@ -61,21 +61,21 @@ impl SimulatedTransaction {
         }
     }
 
-    pub fn raw_tx(&self) -> &EthereumTransaction {
+    pub fn raw_tx(&self) -> &IndexedEthereumTransaction {
         &self.raw_tx
     }
 }
 
 
 pub struct OptimisticInfo {
-    raw_tx: EthereumTransaction,
+    raw_tx: IndexedEthereumTransaction,
     prev_write_keys: hashbrown::HashSet<H256>,
     prev_read_keys: hashbrown::HashSet<H256>,
 }
 
 pub struct ScheduledTransaction {
     pub seq: u64, 
-    pub tx_id: H256,
+    pub tx_id: u64,
     pub effects: Vec<Apply>,
     pub logs: Vec<Log>,
     optimistic_info: Option<OptimisticInfo>
@@ -91,8 +91,8 @@ impl ScheduledTransaction {
     }
 
     #[allow(dead_code)] // this function is used in unit tests.
-    pub(crate) fn id(&self) -> &H256 {
-        &self.tx_id
+    pub(crate) fn id(&self) -> u64 {
+        self.tx_id
     }
 
     pub fn rw_set(&self) -> (hashbrown::HashSet<H256>, hashbrown::HashSet<H256>) {
@@ -102,7 +102,7 @@ impl ScheduledTransaction {
         }
     }
 
-    pub fn raw_tx(&self) -> &EthereumTransaction {
+    pub fn raw_tx(&self) -> &IndexedEthereumTransaction {
         match &self.optimistic_info {
             Some(info) => &info.raw_tx,
             None => panic!("No raw_tx for this transaction")
@@ -134,6 +134,24 @@ impl From<SimulatedTransaction> for ScheduledTransaction {
 
 impl From<std::sync::Arc<Transaction>> for ScheduledTransaction {
     fn from(tx: std::sync::Arc<Transaction>) -> Self {
+        let tx_id = tx.id();
+        let seq = tx.sequence().to_owned();
+        let raw_tx = tx.raw_tx().to_owned();
+
+        let optimistic_info = Some(OptimisticInfo {
+            raw_tx, 
+            prev_write_keys: tx.abort_info.read().write_keys().to_owned(), 
+            prev_read_keys: tx.abort_info.read().read_keys().to_owned()
+        });
+
+        let (effects, logs) = tx.simulation_result();
+
+        Self { seq, tx_id, effects, logs, optimistic_info }
+    }
+}
+
+impl From<Transaction> for ScheduledTransaction {
+    fn from(tx: Transaction) -> Self {
         let tx_id = tx.id();
         let seq = tx.sequence().to_owned();
         let raw_tx = tx.raw_tx().to_owned();

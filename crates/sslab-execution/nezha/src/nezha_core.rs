@@ -6,13 +6,13 @@ use narwhal_types::BatchDigest;
 use rayon::prelude::*;
 use rayon::iter::Either;
 use sslab_execution::{
-    types::{ExecutableEthereumBatch, ExecutionResult, EthereumTransaction}, 
+    types::{ExecutableEthereumBatch, ExecutionResult, IndexedEthereumTransaction}, 
     executor::Executable, 
     evm_storage::{ConcurrentEVMStorage, backend::ExecutionBackend}
 };
 use tracing::warn;
 
-use crate::{types::ScheduledTransaction, AddressBasedConflictGraph, SimulationResult};
+use crate::{address_based_conflict_graph::FastHashMap, types::ScheduledTransaction, AddressBasedConflictGraph, SimulationResult};
 
 use super::{
     types::SimulatedTransaction, 
@@ -73,7 +73,7 @@ impl ConcurrencyLevelManager {
         ExecutionResult::new(result)
     }
 
-    async fn _unpack_batches(consensus_output: Vec<ExecutableEthereumBatch>) -> (Vec<BatchDigest>, Vec<EthereumTransaction>){
+    async fn _unpack_batches(consensus_output: Vec<ExecutableEthereumBatch>) -> (Vec<BatchDigest>, Vec<IndexedEthereumTransaction>){
 
         let (send, recv) = tokio::sync::oneshot::channel();
 
@@ -90,6 +90,8 @@ impl ConcurrencyLevelManager {
             let tx_list = batches
                 .into_iter()
                 .flatten()
+                .enumerate()
+                .map(|(id, tx)| IndexedEthereumTransaction::new(tx, id as u64))
                 .collect::<Vec<_>>();
 
             let _ = send.send((digests, tx_list)).unwrap();
@@ -178,7 +180,7 @@ impl ConcurrencyLevelManager {
     }
     
 
-    async fn _simulate(&self, tx_list: Vec<EthereumTransaction>) -> Vec<SimulatedTransaction> {
+    async fn _simulate(&self, tx_list: Vec<IndexedEthereumTransaction>) -> Vec<SimulatedTransaction> {
         let snapshot = self.global_state.clone();
 
         // Parallel simulation requires heavy cpu usages. 
@@ -191,13 +193,13 @@ impl ConcurrencyLevelManager {
             let result = tx_list
                 .into_par_iter()
                 .filter_map(|tx| {
-                    match crate::evm_utils::simulate_tx(&tx, snapshot.as_ref()) {
+                    match crate::evm_utils::simulate_tx(tx.data(), snapshot.as_ref()) {
                         Ok(Some((effect, log, rw_set))) => {
                             
-                            Some(SimulatedTransaction::new(tx.digest(), Some(rw_set), effect, log, tx))
+                            Some(SimulatedTransaction::new(Some(rw_set), effect, log, tx))
                         },
                         _ => {
-                            warn!("fail to execute a transaction {}", tx.id());
+                            warn!("fail to execute a transaction {}", tx.digest_u64());
                             None
                         },
                     }
@@ -336,19 +338,19 @@ pub struct ScheduledInfo {
 
 impl ScheduledInfo {
 
-    pub fn from(tx_list: hashbrown::HashMap<H256, Arc<Transaction>>, aborted_txs: Vec<Arc<Transaction>>) -> Self {
+    pub fn from(tx_list: FastHashMap<u64, Arc<Transaction>>, aborted_txs: Vec<Arc<Transaction>>) -> Self {
 
-        let scheduled_txs = Self::_schedule_for_sorted_txs(tx_list, false);
         let aborted_txs = Self::_process_aborted_txs(aborted_txs, false);
+        let scheduled_txs = Self::_schedule_for_sorted_txs(tx_list, false);
         
         Self { scheduled_txs, aborted_txs }
     }
 
 
-    pub fn par_from(tx_list: hashbrown::HashMap<H256, Arc<Transaction>>, aborted_txs: Vec<Arc<Transaction>>) -> Self {
+    pub fn par_from(tx_list: FastHashMap<u64, Arc<Transaction>>, aborted_txs: Vec<Arc<Transaction>>) -> Self {
 
-        let scheduled_txs = Self::_schedule_for_sorted_txs(tx_list, true);
         let aborted_txs = Self::_process_aborted_txs(aborted_txs, true);
+        let scheduled_txs = Self::_schedule_for_sorted_txs(tx_list, true);
         
         Self { scheduled_txs, aborted_txs }
     }
@@ -362,7 +364,7 @@ impl ScheduledInfo {
         }
     }
 
-    fn _schedule_for_sorted_txs(tx_list: hashbrown::HashMap<H256, Arc<Transaction>>, rayon: bool) -> Vec<Vec<ScheduledTransaction>> {
+    fn _schedule_for_sorted_txs(tx_list: FastHashMap<u64, Arc<Transaction>>, rayon: bool) -> Vec<Vec<ScheduledTransaction>> {
         let mut list = if rayon {
             tx_list.par_iter().for_each(|(_, tx)| tx.clear_write_units());
 
@@ -397,7 +399,7 @@ impl ScheduledInfo {
     }
 
     
-    fn _process_aborted_txs(aborted_txs: Vec<Arc<Transaction>>, rayon: bool) -> Vec<Arc<Transaction>> {
+    fn _process_aborted_txs(mut aborted_txs: Vec<Arc<Transaction>>, rayon: bool) -> Vec<Arc<Transaction>> {
         if rayon {
             aborted_txs.par_iter()
                 .for_each(|tx| {
@@ -413,6 +415,8 @@ impl ScheduledInfo {
                 tx.init();
             });
         };
+
+        aborted_txs.sort_by_key(|tx| tx.id());
 
         aborted_txs
     }

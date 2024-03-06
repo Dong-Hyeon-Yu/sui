@@ -1,10 +1,10 @@
 use std::str::FromStr;
 
-use ethers_core::types::{H160, H256, transaction::eip2718::TypedTransaction};
+use ethers_core::types::{H160, H256};
 use evm::executor::stack::{RwSet, Simulatable};
 use hashbrown::HashSet;
 use itertools::Itertools;
-use sslab_execution::types::EthereumTransaction;
+use sslab_execution::types::{EthereumTransaction, IndexedEthereumTransaction};
 
 use crate::{address_based_conflict_graph::{AddressBasedConflictGraph, Transaction}, types::SimulatedTransaction};
 
@@ -20,7 +20,7 @@ fn transaction_with_rw(tx_id: u64, read_addr: u64, write_addr: u64) -> Simulated
         H160::from_low_u64_be(CONTRACT_ADDR), 
         H256::from_low_u64_be(write_addr), 
         H256::from_low_u64_be(1));
-    SimulatedTransaction::new(H256::from_low_u64_be(tx_id), Some(set), Vec::new(), Vec::new(), EthereumTransaction(TypedTransaction::default()))
+    SimulatedTransaction::new(Some(set), Vec::new(), Vec::new(), IndexedEthereumTransaction::new(EthereumTransaction::default(), tx_id))
 }
 
 fn transaction_with_multiple_rw(tx_id: u64, read_addr: Vec<u64>, write_addr: Vec<u64>) -> SimulatedTransaction {
@@ -37,10 +37,10 @@ fn transaction_with_multiple_rw(tx_id: u64, read_addr: Vec<u64>, write_addr: Vec
             H256::from_low_u64_be(*addr), 
             H256::from_low_u64_be(1));
     });
-    SimulatedTransaction::new(H256::from_low_u64_be(tx_id), Some(set), Vec::new(), Vec::new(), EthereumTransaction(TypedTransaction::default()))
+    SimulatedTransaction::new(Some(set), Vec::new(), Vec::new(), IndexedEthereumTransaction::new(EthereumTransaction::default(), tx_id))
 }
 
-fn transaction_with_multiple_rw_str(tx_id: &str, read_addr: Vec<&str>, write_addr: Vec<&str>) -> SimulatedTransaction {
+fn transaction_with_multiple_rw_str(tx_id: u64, read_addr: Vec<&str>, write_addr: Vec<&str>) -> SimulatedTransaction {
     let mut set = RwSet::new();
     read_addr.into_iter().for_each(|addr| {
         set.record_read_key(
@@ -54,7 +54,7 @@ fn transaction_with_multiple_rw_str(tx_id: &str, read_addr: Vec<&str>, write_add
             H256::from_str(addr).unwrap(), 
             H256::from_low_u64_be(1));
     });
-    SimulatedTransaction::new(H256::from_str(tx_id).unwrap(), Some(set), Vec::new(), Vec::new(), EthereumTransaction(TypedTransaction::default()))
+    SimulatedTransaction::new(Some(set), Vec::new(), Vec::new(), IndexedEthereumTransaction::new(EthereumTransaction::default(), tx_id))
 }
 
 fn nezha_test(input_txs: Vec<SimulatedTransaction>, answer: Vec<Vec<u64>>, print_result: bool) {
@@ -68,7 +68,7 @@ fn nezha_test(input_txs: Vec<SimulatedTransaction>, answer: Vec<Vec<u64>>, print
         scheduled_info.scheduled_txs.iter()
             .for_each(|txs| {
                 txs.iter().for_each(|tx| {
-                    print!("{} ", tx.id().to_low_u64_be());
+                    print!("{} ", tx.id());
                 });
                 print!("\n");
             });
@@ -76,14 +76,14 @@ fn nezha_test(input_txs: Vec<SimulatedTransaction>, answer: Vec<Vec<u64>>, print
         println!("Aborted Transactions:");
         scheduled_info.aborted_txs.iter()
             .for_each(|tx| {
-                print!("{}\n", tx.id().to_low_u64_be());
+                print!("{}\n", tx.id());
             });
     }
     
     scheduled_info.scheduled_txs.iter().zip(answer.iter()).for_each(|(txs, idx)| {
         assert_eq!(txs.len(), idx.len());
         let answer_set:HashSet<&u64> = idx.iter().collect();
-        assert!(txs.iter().all(|tx| answer_set.contains(&tx.id().to_low_u64_be())))
+        assert!(txs.iter().all(|tx| answer_set.contains(&tx.id())))
      });
     
      let aborted_tx_len = input_txs.len() - answer.iter().flatten().count();
@@ -105,7 +105,7 @@ async fn nezha_par_test(input_txs: Vec<SimulatedTransaction>, answer: Vec<Vec<u6
         scheduled_info.scheduled_txs.iter()
             .for_each(|txs| {
                 txs.iter().for_each(|tx| {
-                    print!("{} ", tx.id().to_low_u64_be());
+                    print!("{} ", tx.id());
                 });
                 print!("\n");
             });
@@ -114,7 +114,7 @@ async fn nezha_par_test(input_txs: Vec<SimulatedTransaction>, answer: Vec<Vec<u6
     scheduled_info.scheduled_txs.iter().zip(answer.iter()).for_each(|(txs, idx)| {
         assert_eq!(txs.len(), idx.len());
         let answer_set:HashSet<&u64> = idx.iter().collect();
-        assert!(txs.iter().all(|tx| answer_set.contains(&tx.id().to_low_u64_be())))
+        assert!(txs.iter().all(|tx| answer_set.contains(&tx.id())))
      });
 
     let aborted_tx_len = input_txs.len() - answer.iter().flatten().count();
@@ -138,7 +138,7 @@ fn optimistic_nezha_test(input_txs: Vec<SimulatedTransaction>, answer: Vec<Vec<u
         scheduled_info.scheduled_txs.iter()
             .for_each(|txs| {
                 txs.iter().for_each(|tx| {
-                    print!("{} ", tx.id().to_low_u64_be());
+                    print!("{} ", tx.id());
                 });
                 print!("\n");
             });
@@ -146,14 +146,14 @@ fn optimistic_nezha_test(input_txs: Vec<SimulatedTransaction>, answer: Vec<Vec<u
         println!("Aborted Transactions:");
         scheduled_info.aborted_txs.iter()
             .for_each(|tx| {
-                print!("{}\n", tx.id().to_low_u64_be());
+                print!("{}\n", tx.id());
             });
     }
 
     scheduled_info.scheduled_txs.iter().zip(answer.iter()).for_each(|(txs, idx)| {
         assert_eq!(txs.len(), idx.len());
         let answer_set:HashSet<&u64> = idx.iter().collect();
-            assert!(txs.iter().all(|tx| answer_set.contains(&tx.id().to_low_u64_be())))
+            assert!(txs.iter().all(|tx| answer_set.contains(&tx.id())))
     });
 
     let aborted_tx_len = input_txs.len() - answer.iter().flatten().count();
@@ -177,7 +177,7 @@ async fn optimistic_nezha_par_test(input_txs: Vec<SimulatedTransaction>, answer:
         scheduled_info.scheduled_txs.iter()
             .for_each(|txs| {
                 txs.iter().for_each(|tx| {
-                    print!("{} ", tx.id().to_low_u64_be());
+                    print!("{} ", tx.id());
                 });
                 print!("\n");
             });
@@ -185,14 +185,14 @@ async fn optimistic_nezha_par_test(input_txs: Vec<SimulatedTransaction>, answer:
         println!("Aborted Transactions:");
         scheduled_info.aborted_txs.iter()
             .for_each(|tx| {
-                print!("{}\n", tx.id().to_low_u64_be());
+                print!("{}\n", tx.id());
             });
     }
 
     scheduled_info.scheduled_txs.iter().zip(answer.iter()).for_each(|(txs, idx)| {
         assert_eq!(txs.len(), idx.len());
         let answer_set:HashSet<&u64> = idx.iter().collect();
-            assert!(txs.iter().all(|tx| answer_set.contains(&tx.id().to_low_u64_be())))
+            assert!(txs.iter().all(|tx| answer_set.contains(&tx.id())))
     });
 
     let aborted_tx_len = input_txs.len() - answer.iter().flatten().count();
@@ -344,13 +344,16 @@ async fn test_reordering() {
 #[tokio::test]
 async fn test_scenario_6() {
     let txs = vec![
-        transaction_with_multiple_rw_str("0x0000000000000000000000000000000000000000000000000000000000000001", 
+        transaction_with_multiple_rw_str(
+            1, 
             vec!["0x48c8d13a49dbf1c93484ba997be20d9cae319d82960232db3544bb8bf65d4ac0", "0xe3ea58be4f1efa6db4e24abc274fb1bccd82dfcd49c8f508a08c911f0357c19d"], 
             vec!["0x48c8d13a49dbf1c93484ba997be20d9cae319d82960232db3544bb8bf65d4ac0", "0xe3ea58be4f1efa6db4e24abc274fb1bccd82dfcd49c8f508a08c911f0357c19d"]),
-        transaction_with_multiple_rw_str("0x0000000000000000000000000000000000000000000000000000000000000002", 
+        transaction_with_multiple_rw_str(
+            2, 
             vec!["0x7b6a909101d770fd973075a9dbcef6c7ae894d77f3f89dcacb997ab3178cd44e", "0xb955ea50cf68e45358af8183015c9694f0e9401fee45e367d90c462108f102bd"], 
             vec!["0x7b6a909101d770fd973075a9dbcef6c7ae894d77f3f89dcacb997ab3178cd44e", "0xb955ea50cf68e45358af8183015c9694f0e9401fee45e367d90c462108f102bd"]),
-        transaction_with_multiple_rw_str("0x0000000000000000000000000000000000000000000000000000000000000003", 
+        transaction_with_multiple_rw_str(
+            3, 
             vec!["0x7b6a909101d770fd973075a9dbcef6c7ae894d77f3f89dcacb997ab3178cd44e", "0xe3ea58be4f1efa6db4e24abc274fb1bccd82dfcd49c8f508a08c911f0357c19d"], 
             vec!["0x7b6a909101d770fd973075a9dbcef6c7ae894d77f3f89dcacb997ab3178cd44e", "0xe3ea58be4f1efa6db4e24abc274fb1bccd82dfcd49c8f508a08c911f0357c19d"]),
     ];
@@ -359,7 +362,7 @@ async fn test_scenario_6() {
         vec![1, 2],
     ];
     
-    nezha_test(txs.clone(), answer.clone(), true);
+    nezha_test(txs.clone(), answer.clone(), false);
     nezha_par_test(txs.clone(), answer.clone(), false).await;
     optimistic_nezha_test(txs.clone(), answer.clone(), false);
     optimistic_nezha_par_test(txs, answer, false).await;

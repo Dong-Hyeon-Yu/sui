@@ -43,7 +43,7 @@ impl SerialExecutor {
                     Ok(Some((effect, _))) 
                         => state.apply_local_effect(effect),
                     Ok(None) 
-                        => trace!("{:?} may be reverted.", tx.id()),
+                        => trace!("{:?} may be reverted.", tx.digest_u64()),
                     Err(e) 
                         => warn!("fail to execute a transaction {:?}", e)
                 }

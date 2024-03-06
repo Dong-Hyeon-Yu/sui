@@ -18,7 +18,7 @@ pub struct EthereumTransaction(pub TypedTransaction);
 
 impl EthereumTransaction {
 
-    pub fn id(&self) -> u64 {
+    pub fn digest_u64(&self) -> u64 {
         u64::from_be_bytes(self.0.sighash()[2..10].try_into().ok().unwrap())
     }
 
@@ -95,6 +95,30 @@ impl EthereumTransaction {
 impl std::hash::Hash for EthereumTransaction {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.0.sighash().hash(state);
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize, Eq, PartialEq)]
+pub struct IndexedEthereumTransaction {
+    pub tx: EthereumTransaction,
+    pub id: u64,
+}
+
+impl IndexedEthereumTransaction {
+    pub fn new(tx: EthereumTransaction, id: u64) -> Self {
+        Self { tx, id }
+    }
+
+    pub fn data(&self) -> &EthereumTransaction {
+        &self.tx
+    }
+
+    pub fn digest(&self) -> H256 {
+        self.tx.digest()
+    }
+
+    pub fn digest_u64(&self) -> u64 {
+        self.tx.digest_u64()
     }
 }
 

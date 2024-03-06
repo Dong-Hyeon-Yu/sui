@@ -64,38 +64,6 @@ impl AddressBasedConflictGraph {
         acg
     }
 
-    pub fn optimistic_construct(aborted_txs: Vec<Arc<Transaction>>) -> Self {
-        let mut acg = Self::new();
-
-        for tx in aborted_txs {
-            let (prev_write, prev_read);
-            {
-                let abort_info = tx.abort_info.read();
-                prev_write = abort_info.prev_write_map().clone();
-                prev_read = abort_info.prev_read_map().clone();
-            }
-            let mut write_units = Self::_convert_to_units(&tx, UnitType::Write, prev_write, Some(&prev_read));
-
-            if acg._check_updater_already_exist_in_same_address(&write_units) {
-                tx.abort();
-                acg.ww_aborted_txs.push(tx);
-                continue;
-            }
-
-            let mut read_units = Self::_convert_to_units(&tx, UnitType::Read, prev_read, None);
-
-            // before inserting the units, wr-dependencies must be created b/w RW units.
-            Self::_set_wr_dependencies(&mut read_units, &mut write_units);
-
-            tx.set_write_units(write_units.clone());
-
-            acg.tx_list.insert(tx.id(), tx);
-            acg._add_units_to_address([read_units, write_units].concat());
-        }
-
-        acg
-    }
-
     async fn _par_construct<F, B>(
         simulation_result: Vec<B>, constructor: F
     ) -> Self 
@@ -141,11 +109,6 @@ impl AddressBasedConflictGraph {
     pub async fn par_construct(simulation_result: Vec<SimulatedTransaction>) -> Self {
         Self::_par_construct(simulation_result, Self::construct).await
     }
-
-    pub async fn par_optimistic_construct(aborted_txs: Vec<Arc<Transaction>>) -> Self {
-        Self::_par_construct(aborted_txs, Self::optimistic_construct).await
-    }
-
 
     pub fn hierarchcial_sort(&mut self) -> &mut Self {  //? Radix sort?
 
@@ -357,6 +320,7 @@ impl AddressBasedConflictGraph {
 #[derive(Debug)]
 pub struct AbortInfo {
     aborted: bool,
+    next_epoch: u64,
     prev_write_keys: BTreeMap<H160, HashMap<H256, H256>>,
     prev_read_keys: BTreeMap<H160, HashMap<H256, H256>>,
 }
@@ -365,9 +329,14 @@ impl AbortInfo {
     fn new(rw_set: RwSet) -> Self {
         Self { 
             aborted: false, 
+            next_epoch: 0,
             prev_write_keys: rw_set.writes().to_owned(),
             prev_read_keys: rw_set.reads().to_owned(),
         }
+    }
+
+    pub fn set_epoch(&mut self, next_epoch: u64) {
+        self.next_epoch = next_epoch;
     }
 
     pub fn write_keys(&self) -> hashbrown::HashSet<H256> {
@@ -388,6 +357,10 @@ impl AbortInfo {
 
     pub fn aborted(&self) -> bool {
         self.aborted
+    }
+
+    pub fn epoch(&self) -> u64 {
+        self.next_epoch
     }
 }
 
@@ -783,5 +756,6 @@ impl Address {
         self.out_degree += other.out_degree;
         self.read_units.units.extend(other.read_units.units);
         self.write_units.units.extend(other.write_units.units);
+        self.first_updater_flag = self.first_updater_flag || other.first_updater_flag
     }
 }

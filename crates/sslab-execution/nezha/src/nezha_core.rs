@@ -270,9 +270,6 @@ impl ConcurrencyLevelManager {
                 }
             };
 
-            // TODO: commit valid transactions
-
-
             if invalid_txs.is_empty() {
                 let _ = send.send((valid_txs, None));
             }
@@ -386,10 +383,11 @@ impl ScheduledInfo {
             });
         };
 
-        // TODO: determine minimum #epoch in which tx have no conflicts with others --> by binary-search over a map (#epoch, addrSet) 
+        // determine minimum #epoch in which tx have no conflicts with others --> by binary-search over a map (#epoch, addrSet) 
         let mut epoch_map: Vec<HashSet<H256>> = vec![];  // (epoch, write set)
 
-        // TODO: check whether the aborted txs are sorted by total order index.
+        aborted_txs.sort_unstable_by_key(|tx| tx.id());
+
         for tx in aborted_txs.iter() {
             let mut tx_info = tx.abort_info.write();
             let read_keys = tx_info.read_keys();
@@ -422,16 +420,16 @@ impl ScheduledInfo {
 
     // anti-rw dependencies are occured when the read keys of latter tx are overlapped with the write keys of the previous txs in the same epoch.
     fn _check_anti_rw_dependencies(
-        read_keys_of_tx: &hashbrown::HashSet<H256>,   // read keys of an aborted tx
+        read_keys_of_tx: &hashbrown::HashSet<H256>,   // read keys of an tx
         write_keys_in_specific_epoch: &hashbrown::HashSet<H256>, // a map (epoch, write_keys_set) to prevent anti-rw dependencies
     ) -> bool {
         write_keys_in_specific_epoch.is_disjoint(read_keys_of_tx)
     }
 
-    // TODO: allow only one write in one key.
     // ww dependencies are occured when the keys which are both read and written by latter tx are overlapped with the rw keys of the previous txs in the same epoch.
+    // for simplicity, only single write is allowed for each key in the same epoch.
     fn _check_ww_dependencies(
-        write_keys_of_tx: &hashbrown::HashSet<H256>,   // keys where tx has both read & write 
+        write_keys_of_tx: &hashbrown::HashSet<H256>,   // write read keys of an tx
         write_keys_in_specific_epoch: &hashbrown::HashSet<H256>, // a map (epoch, keys which have both read and write of tx) to prevent ww dependencies
     ) -> bool {
         write_keys_in_specific_epoch.is_disjoint(write_keys_of_tx)

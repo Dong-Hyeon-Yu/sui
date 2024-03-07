@@ -582,35 +582,6 @@ impl ReadUnits {
     fn max_seq(&self) -> u64 {
         self.max_seq
     }
-
-    // TODO: this is not working properly. It needs:
-    // opimization to maximize parallelism when an address(=key) has only one read unit which has write unit as well in the same address.
-    // In original paper "NEZHA", the sequence number of this transaction is unnecessarily incremented.
-    // fn check_minimum_and_uniqueness(&self, write_unit: &Arc<Unit>) -> bool {
-
-    //     let read_units = self.units.iter()
-    //         .filter(|unit| !unit.tx.aborted())
-    //         .collect_vec();
-
-    //     if read_units.is_empty() {
-    //         return true;
-    //     }
-        
-    //     /* check minimum */
-    //     let min = read_units[0].sequence();
-    //     if min < write_unit.sequence() || read_units[0].tx.tx_id != write_unit.tx.tx_id {
-    //         return false;
-    //     }
-
-    //     /* TODO: check uniqueness */
-    //     for cur in read_units.into_iter().skip(1) {
-    //         if cur.sequence() <= min {
-    //             return false;
-    //         }
-    //     }
-
-    //     true
-    // }
 }
 
 #[derive(Clone, Debug)]

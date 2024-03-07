@@ -1,6 +1,5 @@
 use std::sync::Arc;
 use ethers_core::types::H256;
-use hashbrown::HashSet;
 use itertools::Itertools;
 use narwhal_types::BatchDigest;
 use rayon::prelude::*;
@@ -243,25 +242,29 @@ impl ConcurrencyLevelManager {
     }
 
 
-    async fn _validate_optimistic_assumption(&self, mut rw_set: Vec<SimulatedTransaction>) -> Option<Vec<SimulatedTransaction>> {
+    async fn _validate_optimistic_assumption(&self, rw_set: Vec<SimulatedTransaction>) -> Option<Vec<SimulatedTransaction>> {
+
+        if rw_set.len() == 1 {
+            self._concurrent_commit_2(rw_set).await;
+            return None;
+        }
 
         let (send, recv) = tokio::sync::oneshot::channel();
         rayon::spawn(move || {
             let mut valid_txs = vec![];
             let mut invalid_txs = vec![];
 
-            rw_set.sort_by_key(|tx| tx.id());
-
             let mut write_set = hashbrown::HashSet::<H256>::new();
             for tx in rw_set.into_iter() {
                 match tx.write_set() {
                     Some(ref set) => {
-                        if write_set.is_disjoint(set) {
+                        if (set.len() <= write_set.len() && set.is_disjoint(&write_set)) // select smaller set using short-circuit evaluation
+                            || (set.len() > write_set.len() && write_set.is_disjoint(set))  {
                             write_set.extend(set);
                             valid_txs.push(tx);
                         }
                         else {
-                            invalid_txs.push(tx)
+                            invalid_txs.push(tx);
                         }
                     },
                     None => {
@@ -383,70 +386,58 @@ impl ScheduledInfo {
             });
         };
 
-        // determine minimum #epoch in which tx have no conflicts with others --> by binary-search over a map (#epoch, addrSet) 
-        let mut epoch_map: Vec<HashSet<H256>> = vec![];  // (epoch, write set)
+        // determine minimum #epoch in which tx have no conflicts with others --> by binary-search over a map (#epoch, writeset) 
+        let mut epoch_map: Vec<hashbrown::HashSet<H256>> = vec![];  // (epoch, write set)
+
+        // store final schedule information
+        let mut schedule: Vec<Vec<Arc<Transaction>>> = vec![];
 
         aborted_txs.sort_unstable_by_key(|tx| tx.id());
 
         for tx in aborted_txs.iter() {
-            let mut tx_info = tx.abort_info.write();
+            let tx_info = tx.abort_info.read();
             let read_keys = tx_info.read_keys();
             let write_keys = tx_info.write_keys();
 
-            let epoch = match epoch_map.binary_search_by(
-                |w_map| Self::_find_minimun_epoch_with_no_conflicts(&read_keys, &write_keys, w_map)
-            ) {
-                Ok(idx) => {
-                    epoch_map[idx].extend(write_keys.to_owned());
-                    idx
+            let epoch = Self::_find_minimun_epoch_with_no_conflicts(&read_keys, &write_keys, &epoch_map);
+            
+            // update epoch_map & schedule
+            match epoch_map.get_mut(epoch) {
+                Some(w_map) => {
+                    w_map.extend(write_keys);
+                    schedule[epoch].push(tx.clone());
                 },
-                Err(idx) => {
-                    epoch_map.push(write_keys.to_owned());
-                    idx
+                None => {
+                    epoch_map.push(write_keys);
+                    schedule.push(vec![tx.clone()]);
                 }
             };
-
-            tx_info.set_epoch(epoch as u64);
         };
 
-        aborted_txs.sort_unstable_by_key(|tx| tx.abort_info.read().epoch());
-        let mut scheduled_txs = Vec::<Vec<Arc<Transaction>>>::new();
-        for (_key, txns) in &aborted_txs.into_iter().group_by(|tx| tx.abort_info.read().epoch()) {
-            scheduled_txs.push(txns.collect_vec());
-        }
-
-        scheduled_txs
+        schedule
     }
-
-    // anti-rw dependencies are occured when the read keys of latter tx are overlapped with the write keys of the previous txs in the same epoch.
-    fn _check_anti_rw_dependencies(
-        read_keys_of_tx: &hashbrown::HashSet<H256>,   // read keys of an tx
-        write_keys_in_specific_epoch: &hashbrown::HashSet<H256>, // a map (epoch, write_keys_set) to prevent anti-rw dependencies
-    ) -> bool {
-        write_keys_in_specific_epoch.is_disjoint(read_keys_of_tx)
-    }
-
-    // ww dependencies are occured when the keys which are both read and written by latter tx are overlapped with the rw keys of the previous txs in the same epoch.
-    // for simplicity, only single write is allowed for each key in the same epoch.
-    fn _check_ww_dependencies(
-        write_keys_of_tx: &hashbrown::HashSet<H256>,   // write read keys of an tx
-        write_keys_in_specific_epoch: &hashbrown::HashSet<H256>, // a map (epoch, keys which have both read and write of tx) to prevent ww dependencies
-    ) -> bool {
-        write_keys_in_specific_epoch.is_disjoint(write_keys_of_tx)
-    }
+    
 
     fn _find_minimun_epoch_with_no_conflicts (
-        read_keys_of_tx: &HashSet<H256>, 
-        write_keys_of_tx: &HashSet<H256>, 
-        w_map: &HashSet<H256>, 
-    ) -> std::cmp::Ordering {
+        read_keys_of_tx: &hashbrown::HashSet<H256>, 
+        write_keys_of_tx: &hashbrown::HashSet<H256>, 
+        epoch_map: &Vec<hashbrown::HashSet<H256>>,
+    ) -> usize {
 
-        match Self::_check_anti_rw_dependencies(read_keys_of_tx, w_map) 
-            && Self::_check_ww_dependencies(write_keys_of_tx, w_map) {
+        // 1) ww dependencies are occured when the keys which are both read and written by latter tx are overlapped with the rw keys of the previous txs in the same epoch.
+        //   for simplicity, only single write is allowed for each key in the same epoch.
 
-            true => std::cmp::Ordering::Greater,
-            false => std::cmp::Ordering::Less,
-        }
+        // 2) anti-rw dependencies are occured when the read keys of latter tx are overlapped with the write keys of the previous txs in the same epoch.
+        let keys_of_tx = read_keys_of_tx.union(write_keys_of_tx).cloned().collect::<hashbrown::HashSet<_>>();
+
+        let mut epoch = 0;
+        while epoch_map.len() > epoch
+            && !keys_of_tx.is_disjoint(&epoch_map[epoch]) {
+
+            epoch += 1;
+        };
+        
+        epoch
     }
 
     pub fn scheduled_txs_len(&self) -> usize {

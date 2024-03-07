@@ -320,7 +320,6 @@ impl AddressBasedConflictGraph {
 #[derive(Debug)]
 pub struct AbortInfo {
     aborted: bool,
-    next_epoch: u64,
     prev_write_keys: BTreeMap<H160, HashMap<H256, H256>>,
     prev_read_keys: BTreeMap<H160, HashMap<H256, H256>>,
 }
@@ -329,14 +328,9 @@ impl AbortInfo {
     fn new(rw_set: RwSet) -> Self {
         Self { 
             aborted: false, 
-            next_epoch: 0,
             prev_write_keys: rw_set.writes().to_owned(),
             prev_read_keys: rw_set.reads().to_owned(),
         }
-    }
-
-    pub fn set_epoch(&mut self, next_epoch: u64) {
-        self.next_epoch = next_epoch;
     }
 
     pub fn write_keys(&self) -> hashbrown::HashSet<H256> {
@@ -357,10 +351,6 @@ impl AbortInfo {
 
     pub fn aborted(&self) -> bool {
         self.aborted
-    }
-
-    pub fn epoch(&self) -> u64 {
-        self.next_epoch
     }
 }
 
@@ -460,6 +450,10 @@ impl Transaction {
 
     pub fn raw_tx(&self) -> &IndexedEthereumTransaction {
         &self.raw_tx
+    }
+
+    pub fn rw_set(&self) -> (hashbrown::HashSet<H256>, hashbrown::HashSet<H256>) {
+        (self.abort_info.read().read_keys(), self.abort_info.read().write_keys())
     }
 }
 

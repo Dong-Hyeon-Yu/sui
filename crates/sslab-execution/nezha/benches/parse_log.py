@@ -4,6 +4,7 @@ import sys
 
 MICRO = "µs"
 MILLI = "ms"
+SEC = "s"
 
 def _parse_scheduling(log): 
     tmp = findall(r'ACG construct: (\d+\.\d+)', log)
@@ -27,13 +28,15 @@ def _parse_effective_throughput(log):
     return committed
 
 def _parse_total(log):
-    tmp = findall(r'time:   \[\d+\.\d+ [µ|m]s (\d+\.\d+) ([µ|m]s) \d+\.\d+ [µ|m]s\]', log)
+    tmp = findall(r'time:   \[\d+\.\d+ [µs|ms|s]+ (\d+\.\d+) ([µs|ms|s]+) \d+\.\d+ [µs|ms|s]+\]', log)
     
     total = []
     for duration, unit in tmp:
         duration = float(duration)
         if unit == MICRO:
             duration /= 1000
+        elif unit == SEC:
+            duration *= 1000
         total.append(duration)
         
     return total

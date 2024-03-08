@@ -1,6 +1,4 @@
 use std::sync::Arc;
-use ethers_core::types::H256;
-use hashbrown::HashSet;
 use itertools::Itertools;
 use narwhal_types::BatchDigest;
 use rayon::prelude::*;
@@ -284,7 +282,8 @@ impl ConcurrencyLevelManager {
                 for tx in _invalid_list.into_iter() {
                     match tx.write_set() {
                         Some(ref set) => {
-                            if write_set.is_disjoint(set) {
+                            if (set.len() <= write_set.len() && set.is_disjoint(&write_set)) // select smaller set using short-circuit evaluation
+                                || (set.len() > write_set.len() && write_set.is_disjoint(set))  {
                                 write_set.extend(set);
                                 valid_list.push(tx);
                             }
@@ -419,37 +418,6 @@ impl ScheduledInfo {
         aborted_txs.sort_by_key(|tx| tx.id());
 
         aborted_txs
-    }
-
-    // anti-rw dependencies are occured when the read keys of latter tx are overlapped with the write keys of the previous txs in the same epoch.
-    fn _check_anti_rw_dependencies(
-        read_keys_of_tx: &hashbrown::HashSet<H256>,   // read keys of an aborted tx
-        write_keys_in_specific_epoch: &hashbrown::HashSet<H256>, // a map (epoch, write_keys_set) to prevent anti-rw dependencies
-    ) -> bool {
-        write_keys_in_specific_epoch.is_disjoint(read_keys_of_tx)
-    }
-
-    // TODO: allow only one write in one key.
-    // ww dependencies are occured when the keys which are both read and written by latter tx are overlapped with the rw keys of the previous txs in the same epoch.
-    fn _check_ww_dependencies(
-        write_keys_of_tx: &hashbrown::HashSet<H256>,   // keys where tx has both read & write 
-        write_keys_in_specific_epoch: &hashbrown::HashSet<H256>, // a map (epoch, keys which have both read and write of tx) to prevent ww dependencies
-    ) -> bool {
-        write_keys_in_specific_epoch.is_disjoint(write_keys_of_tx)
-    }
-
-    fn _find_minimun_epoch_with_no_conflicts(
-        read_keys_of_tx: &HashSet<H256>, 
-        write_keys_of_tx: &HashSet<H256>, 
-        w_map: &HashSet<H256>, 
-    ) -> std::cmp::Ordering {
-
-        match Self::_check_anti_rw_dependencies(read_keys_of_tx, w_map) 
-            && Self::_check_ww_dependencies(write_keys_of_tx, w_map) {
-
-            true => std::cmp::Ordering::Greater,
-            false => std::cmp::Ordering::Less,
-        }
     }
 
     pub fn scheduled_txs_len(&self) -> usize {

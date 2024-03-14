@@ -4,6 +4,7 @@ use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use ethers_providers::{MockProvider, Provider};
 
 use parking_lot::RwLock;
+use sslab_execution::types::EthereumTransaction;
 use sslab_execution::{
     types::ExecutableEthereumBatch,
     utils::smallbank_contract_benchmark::concurrent_evm_storage,
@@ -31,7 +32,7 @@ fn _create_random_smallbank_workload(
     skewness: f32,
     batch_size: usize,
     block_concurrency: usize,
-) -> Vec<ExecutableEthereumBatch> {
+) -> Vec<ExecutableEthereumBatch<EthereumTransaction>> {
     let handler = _get_smallbank_handler();
 
     handler.create_batches(batch_size, block_concurrency, skewness, 100_000)
@@ -39,7 +40,7 @@ fn _create_random_smallbank_workload(
 
 fn _get_rw_sets(
     nezha: std::sync::Arc<ConcurrencyLevelManager>,
-    consensus_output: Vec<ExecutableEthereumBatch>,
+    consensus_output: Vec<ExecutableEthereumBatch<EthereumTransaction>>,
 ) -> Vec<SimulatedTransaction> {
     let (tx, rx) = std::sync::mpsc::channel();
     let _ = tokio::runtime::Handle::current().spawn(async move {

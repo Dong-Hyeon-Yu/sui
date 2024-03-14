@@ -1,82 +1,76 @@
-use std::collections::BTreeMap;
-use sui_types::error::SuiError;
-use evm::backend::{Apply, Log, Backend};
-use sslab_execution::{
-    types::EthereumTransaction, 
-    evm_storage::{EvmStorage, backend::ApplyBackend}, 
-    executor::EvmExecutionUtils
+use reth::{
+    core::node_config::{ConfigureEvm, ConfigureEvmEnv},
+    primitives::{
+        revm::{config::revm_spec, env::fill_tx_env},
+        revm_primitives::{AnalysisKind, CfgEnvWithHandlerCfg, TxEnv},
+        Address, ChainSpec, Head, Header, Transaction, U256,
+    },
 };
-use tracing::debug;
+use std::fmt::Debug;
 
+// Ethereum-related EVM configuration.
+#[derive(Debug, Clone, Copy, Default)]
+#[non_exhaustive]
+pub struct EthEvmConfig;
 
-pub fn execute_tx<B>(
-    tx: &EthereumTransaction, 
-    snapshot: &EvmStorage<B>
-) -> Result<Option<(Vec<Apply>, Vec<Log>)>, SuiError> 
-where
-    B: Backend + ApplyBackend + Default + Clone
-{
-    let mut executor = snapshot.executor(tx.gas_limit(), false);
+impl ConfigureEvmEnv for EthEvmConfig {
+    type TxMeta = ();
 
-    let mut effect: Vec<Apply> = vec![];
-    let mut log: Vec<Log> = vec![];
+    fn fill_tx_env<T>(tx_env: &mut TxEnv, transaction: T, sender: Address, _meta: ())
+    where
+        T: AsRef<Transaction>,
+    {
+        fill_tx_env(tx_env, transaction, sender)
+    }
 
-    if let Some(to_addr) = tx.to_addr() {
-
-        let (reason, _) = & executor.transact_call(
-            tx.caller(), *to_addr, tx.value(), tx.data().unwrap().to_owned().to_vec(), 
-            tx.gas_limit(), tx.access_list()
+    fn fill_cfg_env(
+        cfg_env: &mut CfgEnvWithHandlerCfg,
+        chain_spec: &ChainSpec,
+        header: &Header,
+        total_difficulty: U256,
+    ) {
+        let spec_id = revm_spec(
+            chain_spec,
+            Head {
+                number: header.number,
+                timestamp: header.timestamp,
+                difficulty: header.difficulty,
+                total_difficulty,
+                hash: Default::default(),
+            },
         );
 
-        match EvmExecutionUtils::process_transact_call_result(reason) {
-            Ok(fail) => {
-                if fail {
-                    return Ok(None);
-                } else {
-                    // debug!("success to execute a transaction {}", tx.id());
-                    (effect, log) = executor.into_state().deconstruct();
-                    return Ok(Some((effect, log)));
-                }
-            },
-            Err(e) => return Err(e)
-        }
-    } else { 
-        if let Some(data) = tx.data() {
-             // create EOA
-            let init_code = data.to_vec();
-            let (reason, _) = &executor.transact_create(tx.caller(), tx.value(), init_code.clone(), tx.gas_limit(), tx.access_list());
+        cfg_env.chain_id = chain_spec.chain().id();
+        cfg_env.perf_analyse_created_bytecodes = AnalysisKind::Analyse;
 
-            match EvmExecutionUtils::process_transact_create_result(reason) {
-                Ok(fail) => {
-                    if fail {
-                        return Ok(None);
-                    } else {
-                        debug!("success to deploy a contract!");
+        cfg_env.handler_cfg.spec_id = spec_id;
+    }
+}
 
-                        (effect, log) = executor.into_state().deconstruct();
-                        return Ok(Some((effect, log)));
-                    }
-                },
-                Err(e) => return Err(e)
-                
-            }
-        } else {
-            // create user account
-            debug!("create user account: {:?} with balance {:?} and nonce {:?}", tx.caller(), tx.value(), tx.nonce());
-            effect.push(Apply::Modify {
-                address: tx.caller(),
-                basic: evm::backend::Basic { balance: tx.value(), nonce: tx.nonce() },
-                code: None,
-                storage: BTreeMap::new(),
-                reset_storage: false,
-            });
-            log.push(Log {
-                address: tx.caller(),
-                topics: vec![],
-                data: vec![],
-            });
-            // Self::_process_local_effect(store, effect, log, &mut effects, &mut logs);
-            return Ok(Some((effect, log)));
-        }
+impl ConfigureEvm for EthEvmConfig {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use reth::revm::primitives::{BlockEnv, CfgEnv, SpecId};
+
+    #[test]
+    #[ignore]
+    fn test_fill_cfg_and_block_env() {
+        let mut cfg_env = CfgEnvWithHandlerCfg::new_with_spec_id(CfgEnv::default(), SpecId::LATEST);
+        let mut block_env = BlockEnv::default();
+        let header = Header::default();
+        let chain_spec = ChainSpec::default();
+        let total_difficulty = U256::ZERO;
+
+        EthEvmConfig::fill_cfg_and_block_env(
+            &mut cfg_env,
+            &mut block_env,
+            &chain_spec,
+            &header,
+            total_difficulty,
+        );
+
+        assert_eq!(cfg_env.chain_id, chain_spec.chain().id());
     }
 }

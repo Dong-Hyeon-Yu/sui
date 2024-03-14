@@ -1,56 +1,79 @@
 use std::sync::Arc;
 
-use sslab_execution::{
-    executor::Executable, 
-    evm_storage::{SerialEVMStorage, backend::ExecutionBackend}, 
-    types::{ExecutableEthereumBatch, ExecutionResult}
+use reth::{
+    core::node_config::ConfigureEvmEnv,
+    primitives::TransactionSignedEcRecovered,
+    revm::{
+        primitives::{CfgEnv, CfgEnvWithHandlerCfg, SpecId},
+        Evm, EvmBuilder, InMemoryDB,
+    },
 };
-use tracing::{warn, info, trace};
+use sslab_execution::{
+    executor::Executable,
+    types::{ExecutableEthereumBatch, ExecutionResult},
+};
 
+use tokio::sync::Mutex;
+use tracing::{debug, warn};
 
-#[async_trait::async_trait]
-impl Executable for SerialExecutor {
-    async fn execute(&self, consensus_output: Vec<ExecutableEthereumBatch>) {
+use crate::evm_utils::EthEvmConfig;
 
+#[async_trait::async_trait(?Send)]
+impl Executable<TransactionSignedEcRecovered> for SerialExecutor {
+    async fn execute(
+        &self,
+        consensus_output: Vec<ExecutableEthereumBatch<TransactionSignedEcRecovered>>,
+    ) {
         for batch in consensus_output {
-            let _ = self._execute(batch);
+            let _ = self._execute(batch).await;
         }
     }
 }
 
-
 pub struct SerialExecutor {
-    global_state: Arc<SerialEVMStorage>,
+    evm: Arc<Mutex<Evm<'static, (), InMemoryDB>>>,
 }
 
 impl SerialExecutor {
-    pub fn new(global_state: Arc<SerialEVMStorage>) -> Self {
-        info!("Execution mode: 'serial'");
+    pub fn new(global_state: InMemoryDB) -> Self {
+        let mut cfg_env = CfgEnv::default();
+        cfg_env.chain_id = 9;
+        let cfg_env = CfgEnvWithHandlerCfg::new_with_spec_id(cfg_env, SpecId::ISTANBUL);
+
         Self {
-            global_state
+            evm: Arc::new(Mutex::new(
+                EvmBuilder::default()
+                    .with_db(global_state)
+                    .with_cfg_env_with_handler_cfg(cfg_env)
+                    .build(),
+            )),
         }
     }
 
-    pub fn _execute(&self, batch: ExecutableEthereumBatch) -> ExecutionResult {
-
-        let state = self.global_state.clone();
-
+    #[inline]
+    async fn _execute(
+        &self,
+        batch: ExecutableEthereumBatch<TransactionSignedEcRecovered>,
+    ) -> ExecutionResult {
         let digest = batch.digest().clone();
 
-        std::thread::spawn(move || {
-            for tx in batch.data() {
-                match crate::evm_utils::execute_tx(tx, state.as_ref()) {
-                    Ok(Some((effect, _))) 
-                        => state.apply_local_effect(effect),
-                    Ok(None) 
-                        => trace!("{:?} may be reverted.", tx.digest_u64()),
-                    Err(e) 
-                        => warn!("fail to execute a transaction {:?}", e)
+        let mut evm = self.evm.lock().await;
+        for tx in batch.take_data() {
+            EthEvmConfig::fill_tx_env(evm.tx_mut(), tx.as_ref(), tx.signer(), ());
+
+            match evm.transact_commit() {
+                Ok(result) => {
+                    if !result.is_success() {
+                        debug!(
+                            "Transaction failed (but this is normal evm error): {:?}",
+                            result
+                        );
+                    }
                 }
+                Err(e) => warn!("fail to execute a transaction {:?}", e),
             }
-        }).join().expect("fail to execute transactions");
-        
+        }
+
         ExecutionResult::new(vec![digest])
     }
 }
-

@@ -6,7 +6,7 @@ use ethers_providers::{MockProvider, Provider};
 use parking_lot::RwLock;
 
 use sslab_execution::executor::Executable;
-use sslab_execution::types::ExecutableEthereumBatch;
+use sslab_execution::types::{EthereumTransaction, ExecutableEthereumBatch};
 use sslab_execution::utils::test_utils::SmallBankTransactionHandler;
 use sslab_execution_blockstm::utils::smallbank_contract_benchmark::concurrent_evm_storage;
 use sslab_execution_blockstm::BlockSTM;
@@ -30,7 +30,7 @@ fn _create_random_smallbank_workload(
     batch_size: usize,
     block_concurrency: usize,
     account_num: u64,
-) -> Vec<ExecutableEthereumBatch> {
+) -> Vec<ExecutableEthereumBatch<EthereumTransaction>> {
     let handler = _get_smallbank_handler();
 
     handler.create_batches(batch_size, block_concurrency, skewness, account_num)

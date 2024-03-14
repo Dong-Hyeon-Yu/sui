@@ -109,11 +109,11 @@ impl BlockSTM {
     }
 }
 
-#[async_trait::async_trait]
-impl Executable for BlockSTM {
+#[async_trait::async_trait(?Send)]
+impl Executable<EthereumTransaction> for BlockSTM {
     async fn execute(
         &self,
-        consensus_output: Vec<sslab_execution::types::ExecutableEthereumBatch>,
+        consensus_output: Vec<sslab_execution::types::ExecutableEthereumBatch<EthereumTransaction>>,
     ) {
         let executor: ParallelTransactionExecutor<EtherTxn, EvmExecutorTask> =
             ParallelTransactionExecutor::new();
@@ -143,7 +143,7 @@ impl Executable for BlockSTM {
 impl BlockSTM {
     pub async fn execute_and_return_commit_latency(
         &self,
-        consensus_output: Vec<sslab_execution::types::ExecutableEthereumBatch>,
+        consensus_output: Vec<sslab_execution::types::ExecutableEthereumBatch<EthereumTransaction>>,
     ) -> u128 {
         let executor: ParallelTransactionExecutor<EtherTxn, EvmExecutorTask> =
             ParallelTransactionExecutor::new();

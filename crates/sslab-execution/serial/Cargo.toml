@@ -13,6 +13,10 @@ sslab-execution.workspace = true
 tracing.workspace = true
 criterion.workspace = true
 evm.workspace = true
+reth = { git = "https://github.com/Dong-Hyeon-Yu/reth.git", branch = "release/v0.1.0-alpha.22" }
+anstyle = "1.0.6"
+parking_lot.workspace = true
+tokio.workspace = true
 
 [dev-dependencies]
 ethers = "^2.0.0"

@@ -5,10 +5,11 @@ use rayon::prelude::*;
 use sslab_execution::{
     evm_storage::{backend::ExecutionBackend, ConcurrentEVMStorage},
     executor::Executable,
-    types::{ExecutableEthereumBatch, ExecutionResult, IndexedEthereumTransaction},
+    types::{
+        EthereumTransaction, ExecutableEthereumBatch, ExecutionResult, IndexedEthereumTransaction,
+    },
 };
 use std::sync::Arc;
-use tokio::time::Instant;
 use tracing::warn;
 
 use crate::{
@@ -18,9 +19,9 @@ use crate::{
 
 use super::{address_based_conflict_graph::Transaction, types::SimulatedTransaction};
 
-#[async_trait::async_trait]
-impl Executable for Nezha {
-    async fn execute(&self, consensus_output: Vec<ExecutableEthereumBatch>) {
+#[async_trait::async_trait(?Send)]
+impl Executable<EthereumTransaction> for Nezha {
+    async fn execute(&self, consensus_output: Vec<ExecutableEthereumBatch<EthereumTransaction>>) {
         let _ = self.inner.prepare_execution(consensus_output).await;
     }
 }
@@ -52,14 +53,15 @@ impl ConcurrencyLevelManager {
 
     async fn prepare_execution(
         &self,
-        consensus_output: Vec<ExecutableEthereumBatch>,
+        consensus_output: Vec<ExecutableEthereumBatch<EthereumTransaction>>,
     ) -> ExecutionResult {
         let mut result = vec![];
         let mut target = consensus_output;
 
         while !target.is_empty() {
             let split_idx = std::cmp::min(self.concurrency_level, target.len());
-            let remains: Vec<ExecutableEthereumBatch> = target.split_off(split_idx);
+            let remains: Vec<ExecutableEthereumBatch<EthereumTransaction>> =
+                target.split_off(split_idx);
 
             result.extend(self._execute(target).await);
 
@@ -70,7 +72,7 @@ impl ConcurrencyLevelManager {
     }
 
     async fn _unpack_batches(
-        consensus_output: Vec<ExecutableEthereumBatch>,
+        consensus_output: Vec<ExecutableEthereumBatch<EthereumTransaction>>,
     ) -> (Vec<BatchDigest>, Vec<IndexedEthereumTransaction>) {
         let (send, recv) = tokio::sync::oneshot::channel();
 
@@ -95,7 +97,7 @@ impl ConcurrencyLevelManager {
 
     pub async fn _execute(
         &self,
-        consensus_output: Vec<ExecutableEthereumBatch>,
+        consensus_output: Vec<ExecutableEthereumBatch<EthereumTransaction>>,
     ) -> Vec<BatchDigest> {
         let (digests, tx_list) = Self::_unpack_batches(consensus_output).await;
 
@@ -174,148 +176,9 @@ impl ConcurrencyLevelManager {
         digests
     }
 
-    pub async fn _execute_and_return_latency(
-        &self,
-        consensus_output: Vec<ExecutableEthereumBatch>,
-    ) -> (u128, u128, u128, u128, u128) {
-        let (_, tx_list) = Self::_unpack_batches(consensus_output).await;
-
-        let scheduled_aborted_txs: Vec<Vec<Arc<Transaction>>>;
-
-        let mut simulation_latency = 0;
-        let mut scheduling_latency = 0;
-        let mut validation_latency = 0;
-        let mut commit_latency = 0;
-
-        let total_latency = Instant::now();
-        // 1st execution
-        {
-            let latency = Instant::now();
-            let rw_sets = self._simulate(tx_list).await;
-            simulation_latency += latency.elapsed().as_micros();
-
-            let latency = Instant::now();
-            let ScheduledInfo {
-                scheduled_txs,
-                aborted_txs,
-            } = AddressBasedConflictGraph::par_construct(rw_sets)
-                .await
-                .hierarchcial_sort()
-                .reorder()
-                .par_extract_schedule()
-                .await;
-            scheduling_latency += latency.elapsed().as_micros();
-
-            let latency = Instant::now();
-            self._concurrent_commit(scheduled_txs).await;
-            commit_latency += latency.elapsed().as_micros();
-
-            scheduled_aborted_txs = aborted_txs;
-        }
-
-        for tx_list_to_re_execute in scheduled_aborted_txs.into_iter() {
-            // 2nd execution
-            //  (1) re-simulation  ----------------> (rw-sets are changed ??)  -------yes-------> (2') invalidate (or, fallback)
-            //                                                 |
-            //                                                no
-            //                                                 |
-            //                                          (2) commit
-
-            let latency = Instant::now();
-            let rw_sets = self
-                ._simulate(
-                    tx_list_to_re_execute
-                        .iter()
-                        .map(|tx| tx.raw_tx().clone())
-                        .collect(),
-                )
-                .await;
-            simulation_latency += latency.elapsed().as_micros();
-
-            match self
-                ._validate_optimistic_assumption_and_return_latency(rw_sets)
-                .await
-            {
-                (None, v, c) => {
-                    commit_latency += c;
-                    validation_latency += v;
-                }
-                (Some(invalid_txs), v, c) => {
-                    commit_latency += c;
-                    validation_latency += v;
-
-                    //* invalidate */
-                    tracing::debug!("invalidated txs: {:?}", invalid_txs);
-                }
-            }
-        }
-
-        (
-            total_latency.elapsed().as_micros(),
-            simulation_latency,
-            scheduling_latency,
-            validation_latency,
-            commit_latency,
-        )
-    }
-
-    async fn _validate_optimistic_assumption_and_return_latency(
-        &self,
-        rw_set: Vec<SimulatedTransaction>,
-    ) -> (Option<Vec<SimulatedTransaction>>, u128, u128) {
-        if rw_set.len() == 1 {
-            let latency = Instant::now();
-            self._concurrent_commit_2(rw_set).await;
-
-            return (None, 0, latency.elapsed().as_micros());
-        }
-
-        let (send, recv) = tokio::sync::oneshot::channel();
-
-        let latency = Instant::now();
-        rayon::spawn(move || {
-            let mut valid_txs = vec![];
-            let mut invalid_txs = vec![];
-
-            let mut write_set = hashbrown::HashSet::<H256>::new();
-            for tx in rw_set.into_iter() {
-                match tx.write_set() {
-                    Some(ref set) => {
-                        if (set.len() <= write_set.len() && set.is_disjoint(&write_set)) // select smaller set using short-circuit evaluation
-                            || (set.len() > write_set.len() && write_set.is_disjoint(set))
-                        {
-                            write_set.extend(set);
-                            valid_txs.push(tx);
-                        } else {
-                            invalid_txs.push(tx);
-                        }
-                    }
-                    None => {
-                        valid_txs.push(tx);
-                    }
-                }
-            }
-
-            if invalid_txs.is_empty() {
-                let _ = send.send((valid_txs, None));
-            } else {
-                let _ = send.send((valid_txs, Some(invalid_txs)));
-            }
-        });
-
-        let (valid_txs, invalid_txs) = recv.await.unwrap();
-        let validation_latency = latency.elapsed().as_micros();
-
-        let latency = Instant::now();
-        self._concurrent_commit_2(valid_txs).await;
-        let commit_latency = latency.elapsed().as_micros();
-
-        (invalid_txs, validation_latency, commit_latency)
-    }
-
     pub async fn simulate(
         &self,
-        consensus_output: Vec<ExecutableEthereumBatch>,
+        consensus_output: Vec<ExecutableEthereumBatch<EthereumTransaction>>,
     ) -> SimulationResult {
         let (digests, tx_list) = Self::_unpack_batches(consensus_output).await;
         let rw_sets = self._simulate(tx_list).await;

@@ -1,52 +1,54 @@
 use std::collections::BTreeMap;
 
+use crate::executor::EtherMVHashMapView;
 use ethers::types::{H160, U64};
 use evm::{
-    backend::{Backend, Apply, Log}, 
+    backend::{Apply, Backend, Log},
     executor::stack::{
-        PrecompileFn, MultiversionStackExecutor, MemoryStackState, StackSubstateMetadata, RwSet
-    }, ExitError, ExitReason
+        MemoryStackState, MultiversionStackExecutor, PrecompileFn, RwSet, StackSubstateMetadata,
+    },
+    ExitError, ExitReason,
 };
+use sslab_execution::evm_storage::backend::{ApplyBackend, ExecutionBackend, ExecutionResult};
+use sslab_execution::types::{ChainConfig, EthereumTransactable as _, EthereumTransaction, SpecId};
 use sui_types::error::SuiError;
 use tracing::{debug, warn};
-use crate::executor::EtherMVHashMapView;
-use sslab_execution::types::{ChainConfig, SpecId, EthereumTransaction};
-use sslab_execution::evm_storage::backend::{ExecutionBackend, ExecutionResult, ApplyBackend};
 
 #[derive(Clone, Debug)]
-pub struct EvmStorage<B: Backend+ApplyBackend+Clone+Default> {
-    backend: B,  
+pub struct EvmStorage<B: Backend + ApplyBackend + Clone + Default> {
+    backend: B,
     precompiles: BTreeMap<H160, PrecompileFn>,
     config: ChainConfig,
 }
 
-impl<B: Backend+ApplyBackend+Clone+Default> EvmStorage<B> {
-    pub fn new(
-        chain_id: U64, 
-        backend: B, 
-        precompiles: BTreeMap<H160, PrecompileFn>
-    ) -> Self {
-
+impl<B: Backend + ApplyBackend + Clone + Default> EvmStorage<B> {
+    pub fn new(chain_id: U64, backend: B, precompiles: BTreeMap<H160, PrecompileFn>) -> Self {
         let config = ChainConfig::new(SpecId::try_from_u8(chain_id.byte(0)).unwrap());
 
-        Self { 
+        Self {
             backend,
             precompiles,
-            config
+            config,
         }
     }
 
     pub fn executor<'a>(
-        &'a self, 
-        gas_limit: u64, 
+        &'a self,
+        gas_limit: u64,
         multiversion_view: &'a EtherMVHashMapView,
-    ) -> MultiversionStackExecutor<MemoryStackState<B>, BTreeMap<H160, PrecompileFn>, EtherMVHashMapView> {
-
+    ) -> MultiversionStackExecutor<
+        MemoryStackState<B>,
+        BTreeMap<H160, PrecompileFn>,
+        EtherMVHashMapView,
+    > {
         MultiversionStackExecutor::new_with_precompiles(
-            MemoryStackState::new(StackSubstateMetadata::new(gas_limit, self.config()), &self.backend),
+            MemoryStackState::new(
+                StackSubstateMetadata::new(gas_limit, self.config()),
+                &self.backend,
+            ),
             self.config(),
             self.precompiles(),
-            &multiversion_view
+            &multiversion_view,
         )
     }
 
@@ -58,7 +60,6 @@ impl<B: Backend+ApplyBackend+Clone+Default> EvmStorage<B> {
         }
     }
 
-
     pub fn get_storage(&self) -> &B {
         &self.backend
     }
@@ -68,17 +69,13 @@ impl<B: Backend+ApplyBackend+Clone+Default> EvmStorage<B> {
     }
 }
 
-impl<B: Backend+ApplyBackend+Clone+Default> Default for EvmStorage<B> {
+impl<B: Backend + ApplyBackend + Clone + Default> Default for EvmStorage<B> {
     fn default() -> Self {
-        EvmStorage::new(
-            U64::from(9), 
-            B::default(),
-            BTreeMap::new(),
-        )
+        EvmStorage::new(U64::from(9), B::default(), BTreeMap::new())
     }
 }
 
-impl<B: Backend+ApplyBackend+Clone+Default> ExecutionBackend for EvmStorage<B> {
+impl<B: Backend + ApplyBackend + Clone + Default> ExecutionBackend for EvmStorage<B> {
     fn config(&self) -> &evm::Config {
         self.config.config()
     }
@@ -98,17 +95,17 @@ impl<B: Backend+ApplyBackend+Clone+Default> ExecutionBackend for EvmStorage<B> {
     }
 
     fn apply_local_effect(&self, effect: Vec<evm::backend::Apply>) {
-        self.backend.apply(effect, false); 
+        self.backend.apply(effect, false);
     }
 }
 
 pub fn execute_tx<'a, B>(
-    tx: &EthereumTransaction, 
+    tx: &EthereumTransaction,
     snapshot: &EvmStorage<B>,
-    versioned_map: &EtherMVHashMapView
-) -> Result<Option<(Vec<Apply>, Vec<Log>, RwSet)>, SuiError> 
+    versioned_map: &EtherMVHashMapView,
+) -> Result<Option<(Vec<Apply>, Vec<Log>, RwSet)>, SuiError>
 where
-    B: Backend + ApplyBackend + Default + Clone
+    B: Backend + ApplyBackend + Default + Clone,
 {
     let mut executor = snapshot.executor(tx.gas_limit(), versioned_map);
 
@@ -116,10 +113,13 @@ where
     let mut log: Vec<Log> = vec![];
 
     if let Some(to_addr) = tx.to_addr() {
-
-        let (reason, _) = & executor.transact_call(
-            tx.caller(), *to_addr, tx.value(), tx.data().unwrap().to_owned().to_vec(), 
-            tx.gas_limit(), tx.access_list()
+        let (reason, _) = &executor.transact_call(
+            tx.caller(),
+            *to_addr,
+            tx.value(),
+            tx.data().unwrap().to_owned().to_vec(),
+            tx.gas_limit(),
+            tx.access_list(),
         );
 
         match process_transact_call_result(reason) {
@@ -132,14 +132,20 @@ where
                     (effect, log) = executor.into_state().deconstruct();
                     return Ok(Some((effect, log, rw_set)));
                 }
-            },
-            Err(e) => return Err(e)
+            }
+            Err(e) => return Err(e),
         }
-    } else { 
+    } else {
         if let Some(data) = tx.data() {
-             // create EOA
+            // create EOA
             let init_code = data.to_vec();
-            let (reason, _) = &executor.transact_create(tx.caller(), tx.value(), init_code.clone(), tx.gas_limit(), tx.access_list());
+            let (reason, _) = &executor.transact_create(
+                tx.caller(),
+                tx.value(),
+                init_code.clone(),
+                tx.gas_limit(),
+                tx.access_list(),
+            );
 
             match process_transact_create_result(reason) {
                 Ok(fail) => {
@@ -151,16 +157,23 @@ where
                         (effect, log) = executor.into_state().deconstruct();
                         return Ok(Some((effect, log, rw_set)));
                     }
-                },
-                Err(e) => return Err(e)
-                
+                }
+                Err(e) => return Err(e),
             }
         } else {
             // create user account
-            debug!("create user account: {:?} with balance {:?} and nonce {:?}", tx.caller(), tx.value(), tx.nonce());
+            debug!(
+                "create user account: {:?} with balance {:?} and nonce {:?}",
+                tx.caller(),
+                tx.value(),
+                tx.nonce()
+            );
             effect.push(Apply::Modify {
                 address: tx.caller(),
-                basic: evm::backend::Basic { balance: tx.value(), nonce: tx.nonce() },
+                basic: evm::backend::Basic {
+                    balance: tx.value(),
+                    nonce: tx.nonce(),
+                },
                 code: None,
                 storage: BTreeMap::new(),
                 reset_storage: false,
@@ -178,9 +191,7 @@ where
 
 fn process_transact_call_result(reason: &ExitReason) -> Result<bool, SuiError> {
     match reason {
-        ExitReason::Succeed(_) => {
-            Ok(false)
-        }
+        ExitReason::Succeed(_) => Ok(false),
         ExitReason::Revert(e) => {
             // do nothing: explicit revert is not an error
             debug!("tx execution revert: {:?}", e);
@@ -191,7 +202,7 @@ fn process_transact_call_result(reason: &ExitReason) -> Result<bool, SuiError> {
             match e {
                 ExitError::NotEstimatedYet => {
                     Err(SuiError::ExecutionError(String::from("ESTIMATE")))
-                },
+                }
                 _ => {
                     warn!("tx execution error: {:?}", e);
                     Ok(true)
@@ -200,16 +211,16 @@ fn process_transact_call_result(reason: &ExitReason) -> Result<bool, SuiError> {
         }
         ExitReason::Fatal(e) => {
             warn!("tx execution fatal error: {:?}", e);
-            Err(SuiError::ExecutionError(String::from("Fatal error occurred on EVM!")))
+            Err(SuiError::ExecutionError(String::from(
+                "Fatal error occurred on EVM!",
+            )))
         }
     }
 }
 
 fn process_transact_create_result(reason: &ExitReason) -> Result<bool, SuiError> {
     match reason {
-        ExitReason::Succeed(_) => {
-            Ok(false)
-        }
+        ExitReason::Succeed(_) => Ok(false),
         ExitReason::Revert(e) => {
             // do nothing: explicit revert is not an error
             debug!("fail to deploy contract: {:?}", e);
@@ -220,7 +231,7 @@ fn process_transact_create_result(reason: &ExitReason) -> Result<bool, SuiError>
             match e {
                 ExitError::NotEstimatedYet => {
                     Err(SuiError::ExecutionError(String::from("ESTIMATE")))
-                },
+                }
                 _ => {
                     warn!("fail to deploy contract: {:?}", e);
                     Ok(true)
@@ -229,7 +240,9 @@ fn process_transact_create_result(reason: &ExitReason) -> Result<bool, SuiError>
         }
         ExitReason::Fatal(e) => {
             warn!("fatal error occurred when deploying contract: {:?}", e);
-            Err(SuiError::ExecutionError(String::from("Fatal error occurred on EVM!")))
+            Err(SuiError::ExecutionError(String::from(
+                "Fatal error occurred on EVM!",
+            )))
         }
     }
 }

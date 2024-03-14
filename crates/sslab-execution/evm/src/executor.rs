@@ -3,30 +3,29 @@ use sui_types::error::SuiError;
 use tokio::sync::mpsc::Receiver;
 use tracing::{debug, warn};
 
-use crate::types::{ExecutableEthereumBatch, ExecutableConsensusOutput}; 
+use crate::types::{ExecutableConsensusOutput, ExecutableEthereumBatch};
 
-#[async_trait::async_trait]
-pub trait Executable {
-    async fn execute(&self, consensus_output: Vec<ExecutableEthereumBatch>);
+#[async_trait::async_trait(?Send)]
+pub trait Executable<T> {
+    async fn execute(&self, consensus_output: Vec<ExecutableEthereumBatch<T>>);
 }
 
-
-pub struct ParallelExecutor<ExecutionModel: Executable + Send + Sync> { 
-
-    rx_consensus_certificate: Receiver<ExecutableConsensusOutput>, 
+pub struct ParallelExecutor<T: Clone, ExecutionModel: Executable<T> + Send + Sync> {
+    rx_consensus_certificate: Receiver<ExecutableConsensusOutput<T>>,
 
     // rx_shutdown: ConditionalBroadcastReceiver,
-
-    execution_model: ExecutionModel
+    execution_model: ExecutionModel,
 }
 
-#[async_trait::async_trait]
+#[async_trait::async_trait(?Send)]
 pub trait ExecutionComponent {
     async fn run(&mut self);
 }
 
-#[async_trait::async_trait]
-impl<ExecutionModel: Executable + Send + Sync> ExecutionComponent for ParallelExecutor<ExecutionModel> {
+#[async_trait::async_trait(?Send)]
+impl<T: Clone + Send + Sync, ExecutionModel: Executable<T> + Send + Sync> ExecutionComponent
+    for ParallelExecutor<T, ExecutionModel>
+{
     async fn run(&mut self) {
         while let Some(consensus_output) = self.rx_consensus_certificate.recv().await {
             debug!(
@@ -44,7 +43,9 @@ impl<ExecutionModel: Executable + Send + Sync> ExecutionComponent for ParallelEx
                     );
                 }
             }
-            self.execution_model.execute(consensus_output.data().to_owned()).await;
+            self.execution_model
+                .execute(consensus_output.data().to_owned())
+                .await;
             cfg_if::cfg_if! {
                 if #[cfg(feature = "benchmark")] {
                     // NOTE: This log entry is used to compute performance.
@@ -57,30 +58,26 @@ impl<ExecutionModel: Executable + Send + Sync> ExecutionComponent for ParallelEx
     }
 }
 
-impl<ExecutionModel: Executable + Send + Sync> ParallelExecutor<ExecutionModel> {
+impl<T: Clone, ExecutionModel: Executable<T> + Send + Sync> ParallelExecutor<T, ExecutionModel> {
     pub fn new(
-        rx_consensus_certificate: Receiver<ExecutableConsensusOutput>, 
+        rx_consensus_certificate: Receiver<ExecutableConsensusOutput<T>>,
         // rx_shutdown: ConditionalBroadcastReceiver,
-        execution_model: ExecutionModel
+        execution_model: ExecutionModel,
     ) -> Self {
         Self {
             rx_consensus_certificate,
             // rx_shutdown,
-            execution_model
+            execution_model,
         }
     }
 }
 
-
 pub struct EvmExecutionUtils;
 
 impl EvmExecutionUtils {
-    
     pub fn process_transact_call_result(reason: &ExitReason) -> Result<bool, SuiError> {
         match reason {
-            ExitReason::Succeed(_) => {
-                Ok(false)
-            }
+            ExitReason::Succeed(_) => Ok(false),
             ExitReason::Revert(e) => {
                 // do nothing: explicit revert is not an error
                 debug!("tx execution revert: {:?}", e);
@@ -93,16 +90,16 @@ impl EvmExecutionUtils {
             }
             ExitReason::Fatal(e) => {
                 warn!("tx execution fatal error: {:?}", e);
-                Err(SuiError::ExecutionError(String::from("Fatal error occurred on EVM!")))
+                Err(SuiError::ExecutionError(String::from(
+                    "Fatal error occurred on EVM!",
+                )))
             }
         }
     }
-    
+
     pub fn process_transact_create_result(reason: &ExitReason) -> Result<bool, SuiError> {
         match reason {
-            ExitReason::Succeed(_) => {
-                Ok(false)
-            }
+            ExitReason::Succeed(_) => Ok(false),
             ExitReason::Revert(e) => {
                 // do nothing: explicit revert is not an error
                 debug!("fail to deploy contract: {:?}", e);
@@ -115,9 +112,10 @@ impl EvmExecutionUtils {
             }
             ExitReason::Fatal(e) => {
                 warn!("fatal error occurred when deploying contract: {:?}", e);
-                Err(SuiError::ExecutionError(String::from("Fatal error occurred on EVM!")))
+                Err(SuiError::ExecutionError(String::from(
+                    "Fatal error occurred on EVM!",
+                )))
             }
         }
     }
 }
-

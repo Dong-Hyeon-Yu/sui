@@ -1,12 +1,10 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use ethers_core::types::{H160, U256, H256};
-use evm::backend::{MemoryVicinity, MemoryAccount, Backend, Basic, Apply};
+use ethers_core::types::{H160, H256, U256};
+use evm::backend::{Apply, Backend, Basic, MemoryAccount, MemoryVicinity};
 use parking_lot::RwLock;
 
-
 use super::ApplyBackend;
-
 
 #[derive(Clone, Debug)]
 pub struct MemoryBackend {
@@ -15,15 +13,14 @@ pub struct MemoryBackend {
 }
 
 impl MemoryBackend {
-	/// Create a new memory backend.
-	pub fn new(vicinity: MemoryVicinity, state: BTreeMap<H160, MemoryAccount>) -> Self {
-		Self {
-			vicinity,
-			state: Arc::new(RwLock::new(state)),
-		}
-	}
+    /// Create a new memory backend.
+    pub fn new(vicinity: MemoryVicinity, state: BTreeMap<H160, MemoryAccount>) -> Self {
+        Self {
+            vicinity,
+            state: Arc::new(RwLock::new(state)),
+        }
+    }
 }
-
 
 impl Default for MemoryBackend {
     fn default() -> Self {
@@ -130,58 +127,58 @@ impl ApplyBackend for MemoryBackend {
     fn apply(&self, values: Vec<Apply>, delete_empty: bool) {
         let mut state = self.state.write();
         for apply in values {
-			match apply {
-				Apply::Modify {
-					address,
-					basic,
-					code,
-					storage,
-					reset_storage,
-				} => {
-					let is_empty = {
-						let mut account = state.entry(address).or_insert_with(Default::default);
-						account.balance = basic.balance;
-						account.nonce = basic.nonce;
-						if let Some(code) = code {
-							account.code = code;
-						}
+            match apply {
+                Apply::Modify {
+                    address,
+                    basic,
+                    code,
+                    storage,
+                    reset_storage,
+                } => {
+                    let is_empty = {
+                        let account = state.entry(address).or_insert_with(Default::default);
+                        account.balance = basic.balance;
+                        account.nonce = basic.nonce;
+                        if let Some(code) = code {
+                            account.code = code;
+                        }
 
-						if reset_storage {
-							account.storage = BTreeMap::new();
-						}
+                        if reset_storage {
+                            account.storage = BTreeMap::new();
+                        }
 
-						let zeros = account
-							.storage
-							.iter()
-							.filter(|(_, v)| *v == &H256::default())
-							.map(|(k, _)| *k)
-							.collect::<Vec<H256>>();
+                        let zeros = account
+                            .storage
+                            .iter()
+                            .filter(|(_, v)| *v == &H256::default())
+                            .map(|(k, _)| *k)
+                            .collect::<Vec<H256>>();
 
-						for zero in zeros.iter() {
-							account.storage.remove(zero);
-						}
+                        for zero in zeros.iter() {
+                            account.storage.remove(zero);
+                        }
 
-						for (index, value) in storage {
-							if value == H256::default() {
-								account.storage.remove(&index);
-							} else {
-								account.storage.insert(index, value);
-							}
-						}
+                        for (index, value) in storage {
+                            if value == H256::default() {
+                                account.storage.remove(&index);
+                            } else {
+                                account.storage.insert(index, value);
+                            }
+                        }
 
-						account.balance == U256::zero()
-							&& account.nonce == U256::zero()
-							&& account.code.is_empty()
-					};
+                        account.balance == U256::zero()
+                            && account.nonce == U256::zero()
+                            && account.code.is_empty()
+                    };
 
-					if is_empty && delete_empty {
-						state.remove(&address);
-					}
-				}
-				Apply::Delete { address } => {
-					state.remove(&address);
-				}
-			}
-		}
-	}
+                    if is_empty && delete_empty {
+                        state.remove(&address);
+                    }
+                }
+                Apply::Delete { address } => {
+                    state.remove(&address);
+                }
+            }
+        }
+    }
 }

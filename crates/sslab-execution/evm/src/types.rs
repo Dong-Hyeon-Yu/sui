@@ -1,51 +1,42 @@
-use std::rc::Rc;
 use enumn;
-use ethers_core::types::{H256, U256, Bytes};
-use ethers_core::types::{Address, transaction::eip2718::TypedTransaction};
+use ethers_core::types::{transaction::eip2718::TypedTransaction, Address};
+use ethers_core::types::{Bytes, H256, U256};
 use ethers_core::utils::rlp::Rlp;
-use evm::{Runtime, Config, Context};
+use evm::{Config, Context, Runtime};
 use fastcrypto::hash::Hash;
 use narwhal_types::{BatchDigest, ConsensusOutput, ConsensusOutputDigest};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
+use std::rc::Rc;
 
 use crate::transaction_validator::TxValidationError;
 
-pub(crate) const DEFAULT_EVM_STACK_LIMIT:usize = 1024;
-pub(crate) const DEFAULT_EVM_MEMORY_LIMIT:usize = usize::MAX; 
+pub(crate) const DEFAULT_EVM_STACK_LIMIT: usize = 1024;
+pub(crate) const DEFAULT_EVM_MEMORY_LIMIT: usize = usize::MAX;
+
+pub trait EthereumTransactable {
+    fn digest(&self) -> H256;
+    fn digest_u64(&self) -> u64;
+    fn encode(&self) -> Vec<u8>;
+    fn from_json(bytes: &[u8]) -> Result<Self, TxValidationError>
+    where
+        Self: Sized;
+    fn from_rlp(bytes: &[u8]) -> Result<Self, TxValidationError>
+    where
+        Self: Sized;
+    fn to_addr(&self) -> Option<&Address>;
+    fn caller(&self) -> Address;
+    fn value(&self) -> U256;
+    fn data(&self) -> Option<&Bytes>;
+    fn gas_limit(&self) -> u64;
+    fn access_list(&self) -> Vec<(Address, Vec<H256>)>;
+    fn nonce(&self) -> U256;
+}
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, Eq, PartialEq)]
 pub struct EthereumTransaction(pub TypedTransaction);
 
 impl EthereumTransaction {
-
-    pub fn digest_u64(&self) -> u64 {
-        u64::from_be_bytes(self.0.sighash()[2..10].try_into().ok().unwrap())
-    }
-
-    pub fn digest(&self) -> H256 {
-        self.0.sighash()
-    }
-
-    pub fn encode(&self) -> Vec<u8> {
-        self.0.rlp().to_vec()
-    }
-
-    pub fn from_json(bytes: &[u8]) -> Result<EthereumTransaction, TxValidationError> { 
-        let tx: TypedTransaction = serde_json::from_slice(bytes).unwrap();
-
-        Ok(EthereumTransaction(tx))
-    }
-
-    pub fn from_rlp(bytes: &[u8]) -> Result<EthereumTransaction, TxValidationError> {
-        let rlp = Rlp::new(bytes);
-
-        let (tx, _) = TypedTransaction::decode_signed(&rlp)?;
-
-        Ok(EthereumTransaction(tx))
-    }
-
-    pub fn execution_part(&self, code :Vec<u8>) -> Runtime {
-        
+    pub fn execution_part(&self, code: Vec<u8>) -> Runtime {
         let context = Context {
             caller: *self.0.from().unwrap(),
             address: *self.0.to_addr().unwrap(), //TODO: check this
@@ -53,41 +44,74 @@ impl EthereumTransaction {
         };
 
         Runtime::new(
-            Rc::new(code), 
+            Rc::new(code),
             Rc::new(self.0.data().unwrap().to_vec().clone()),
             context,
             DEFAULT_EVM_STACK_LIMIT,
-            DEFAULT_EVM_MEMORY_LIMIT
+            DEFAULT_EVM_MEMORY_LIMIT,
         )
     }
+}
 
-    pub fn to_addr(&self) -> Option<&Address> {
+impl EthereumTransactable for EthereumTransaction {
+    fn digest_u64(&self) -> u64 {
+        u64::from_be_bytes(self.0.sighash()[2..10].try_into().ok().unwrap())
+    }
+
+    fn digest(&self) -> H256 {
+        self.0.sighash()
+    }
+
+    fn encode(&self) -> Vec<u8> {
+        self.0.rlp().to_vec()
+    }
+
+    fn from_json(bytes: &[u8]) -> Result<EthereumTransaction, TxValidationError> {
+        let tx: TypedTransaction = serde_json::from_slice(bytes).unwrap();
+
+        Ok(EthereumTransaction(tx))
+    }
+
+    fn from_rlp(bytes: &[u8]) -> Result<EthereumTransaction, TxValidationError> {
+        let rlp = Rlp::new(bytes);
+
+        let (tx, _) = TypedTransaction::decode_signed(&rlp)?;
+
+        Ok(EthereumTransaction(tx))
+    }
+
+    fn to_addr(&self) -> Option<&Address> {
         self.0.to_addr()
     }
 
-    pub fn caller(&self) -> Address {
+    fn caller(&self) -> Address {
         self.0.from().unwrap().clone()
     }
 
-    pub fn value(&self) -> U256 {
+    fn value(&self) -> U256 {
         self.0.value().unwrap().clone()
     }
 
-    pub fn data(&self) -> Option<&Bytes> {
-        self.0.data() 
+    fn data(&self) -> Option<&Bytes> {
+        self.0.data()
     }
 
-    pub fn gas_limit(&self) -> u64 {
+    fn gas_limit(&self) -> u64 {
         self.0.gas().unwrap().clone().as_u64()
     }
 
-    pub fn access_list(&self) -> Vec<(Address, Vec<H256>)> {
+    fn access_list(&self) -> Vec<(Address, Vec<H256>)> {
         match self.0.access_list() {
-            Some(list) => list.clone().0.iter().map(|item| (item.address, item.storage_keys.clone())).collect(),
-            None => vec![]
+            Some(list) => list
+                .clone()
+                .0
+                .iter()
+                .map(|item| (item.address, item.storage_keys.clone()))
+                .collect(),
+            None => vec![],
         }
     }
-    pub fn nonce(&self) -> U256 {
+    fn nonce(&self) -> U256 {
         self.0.nonce().unwrap().clone()
     }
 }
@@ -122,18 +146,17 @@ impl IndexedEthereumTransaction {
     }
 }
 
-
 #[derive(Clone, Debug, Default)]
-pub struct ExecutableEthereumBatch{
+pub struct ExecutableEthereumBatch<T> {
     digest: BatchDigest,
-    data: Vec<EthereumTransaction>, 
+    data: Vec<T>,
 }
 
-impl ExecutableEthereumBatch {
-    pub fn new(batch: Vec<EthereumTransaction>, digest: BatchDigest) -> ExecutableEthereumBatch {
+impl<T> ExecutableEthereumBatch<T> {
+    pub fn new(batch: Vec<T>, digest: BatchDigest) -> Self {
         Self {
             data: batch,
-            digest
+            digest,
         }
     }
 
@@ -141,22 +164,26 @@ impl ExecutableEthereumBatch {
         &self.digest
     }
 
-    pub fn data(&self) -> &Vec<EthereumTransaction> {
+    pub fn data(&self) -> &Vec<T> {
         &self.data
+    }
+
+    pub fn take_data(self) -> Vec<T> {
+        self.data
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct ExecutableConsensusOutput {
+pub struct ExecutableConsensusOutput<T: Clone> {
     digest: ConsensusOutputDigest,
-    data: Vec<ExecutableEthereumBatch>,
+    data: Vec<ExecutableEthereumBatch<T>>,
     timestamp: u64,
     round: u64,
     sub_dag_index: u64,
 }
 
-impl ExecutableConsensusOutput {
-    pub fn new(data: Vec<ExecutableEthereumBatch>, consensus_output: &ConsensusOutput) -> ExecutableConsensusOutput {
+impl<T: Clone> ExecutableConsensusOutput<T> {
+    pub fn new(data: Vec<ExecutableEthereumBatch<T>>, consensus_output: &ConsensusOutput) -> Self {
         Self {
             digest: consensus_output.digest(),
             data,
@@ -170,11 +197,11 @@ impl ExecutableConsensusOutput {
         &self.digest
     }
 
-    pub fn take_data(self) -> Vec<ExecutableEthereumBatch> {
+    pub fn take_data(self) -> Vec<ExecutableEthereumBatch<T>> {
         self.data
     }
 
-    pub fn data(&self) -> &Vec<ExecutableEthereumBatch> {
+    pub fn data(&self) -> &Vec<ExecutableEthereumBatch<T>> {
         &self.data
     }
 
@@ -197,9 +224,7 @@ pub struct ExecutionResult {
 
 impl ExecutionResult {
     pub fn new(digests: Vec<BatchDigest>) -> Self {
-        Self {
-            digests
-        }
+        Self { digests }
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &BatchDigest> {
@@ -247,7 +272,7 @@ impl SpecId {
 
 #[derive(Clone, Debug)]
 pub struct ChainConfig {
-    config: Config
+    config: Config,
 }
 
 impl ChainConfig {
@@ -272,16 +297,13 @@ impl ChainConfig {
             SpecId::SHANGHAI => Config::shanghai(),
             // SpecId::CANCUN => Config::cancun(),
             SpecId::LATEST => Config::shanghai(),
-            _ => panic!("SpecId is not supported")
+            _ => panic!("SpecId is not supported"),
         };
 
-        Self {
-            config
-        }
+        Self { config }
     }
 
     pub fn config(&self) -> &Config {
         &self.config
     }
-
 }

@@ -2,50 +2,45 @@ use std::collections::BTreeMap;
 
 use ethers_core::types::{H160, U64};
 use evm::{
-    backend::Backend, 
-    executor::stack::{
-        PrecompileFn, StackExecutor, MemoryStackState, StackSubstateMetadata
-    }
+    backend::Backend,
+    executor::stack::{MemoryStackState, PrecompileFn, StackExecutor, StackSubstateMetadata},
 };
 
 use crate::types::{ChainConfig, SpecId};
 
-use super::backend::{ExecutionBackend, ExecutionResult, ApplyBackend};
+use super::backend::{ApplyBackend, ExecutionBackend, ExecutionResult};
 
 #[derive(Clone, Debug)]
-pub struct EvmStorage<B: Backend+ApplyBackend+Clone+Default> {
-    backend: B,  
+pub struct EvmStorage<B: Backend + ApplyBackend + Clone + Default> {
+    backend: B,
     precompiles: BTreeMap<H160, PrecompileFn>,
     config: ChainConfig,
 }
 
-impl<B: Backend+ApplyBackend+Clone+Default> EvmStorage<B> {
-    pub fn new(
-        chain_id: U64, 
-        backend: B, 
-        precompiles: BTreeMap<H160, PrecompileFn>
-    ) -> Self {
-
+impl<B: Backend + ApplyBackend + Clone + Default> EvmStorage<B> {
+    pub fn new(chain_id: U64, backend: B, precompiles: BTreeMap<H160, PrecompileFn>) -> Self {
         let config = ChainConfig::new(SpecId::try_from_u8(chain_id.byte(0)).unwrap());
 
-        Self { 
+        Self {
             backend,
             precompiles,
-            config
+            config,
         }
     }
 
     pub fn executor(
-        &self, 
-        gas_limit: u64, 
-        simulation: bool
+        &self,
+        gas_limit: u64,
+        simulation: bool,
     ) -> StackExecutor<MemoryStackState<B>, BTreeMap<H160, PrecompileFn>> {
-
         StackExecutor::new_with_precompiles(
-            MemoryStackState::new(StackSubstateMetadata::new(gas_limit, self.config()), &self.backend),
+            MemoryStackState::new(
+                StackSubstateMetadata::new(gas_limit, self.config()),
+                &self.backend,
+            ),
             self.config(),
             self.precompiles(),
-            simulation
+            simulation,
         )
     }
 
@@ -57,7 +52,6 @@ impl<B: Backend+ApplyBackend+Clone+Default> EvmStorage<B> {
         }
     }
 
-
     pub fn get_storage(&self) -> &B {
         &self.backend
     }
@@ -67,17 +61,17 @@ impl<B: Backend+ApplyBackend+Clone+Default> EvmStorage<B> {
     }
 }
 
-impl<B: Backend+ApplyBackend+Clone+Default> Default for EvmStorage<B> {
+impl<B: Backend + ApplyBackend + Clone + Default> Default for EvmStorage<B> {
     fn default() -> Self {
         EvmStorage::new(
-            ethers_core::types::U64::from(9), 
+            ethers_core::types::U64::from(9),
             B::default(),
             BTreeMap::new(),
         )
     }
 }
 
-impl<B: Backend+ApplyBackend+Clone+Default> ExecutionBackend for EvmStorage<B> {
+impl<B: Backend + ApplyBackend + Clone + Default> ExecutionBackend for EvmStorage<B> {
     fn config(&self) -> &evm::Config {
         self.config.config()
     }
@@ -90,13 +84,13 @@ impl<B: Backend+ApplyBackend+Clone+Default> ExecutionBackend for EvmStorage<B> {
         self.backend.code(address)
     }
 
-    fn apply_all_effects(&self, execution_result: &ExecutionResult) {
+    fn apply_all_effects(&mut self, execution_result: &ExecutionResult) {
         let effects = execution_result.effects.clone();
 
         self.backend.apply(effects, false);
     }
 
-    fn apply_local_effect(&self, effect: Vec<evm::backend::Apply>) {
-        self.backend.apply(effect, false); 
+    fn apply_local_effect(&mut self, effect: Vec<evm::backend::Apply>) {
+        self.backend.apply(effect, false);
     }
 }

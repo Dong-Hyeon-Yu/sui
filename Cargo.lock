@@ -125,12 +125,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "allocator-api2"
-version = "0.2.16"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0942ffc6dcaadf03badf6e6a2d0228460359d5e34b57ccdc720b7382dfbd5ec5"
-
-[[package]]
 name = "android-tzdata"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2311,32 +2305,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "criterion"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f2b12d017a929603d80db1831cd3a24082f8137ce19c69e6447f54f5fc8d692f"
-dependencies = [
- "anes",
- "cast",
- "ciborium",
- "clap 4.4.10",
- "criterion-plot",
- "is-terminal",
- "itertools",
- "num-traits 0.2.15",
- "once_cell",
- "oorandom",
- "plotters",
- "rayon",
- "regex",
- "serde 1.0.152",
- "serde_derive",
- "serde_json",
- "tinytemplate",
- "walkdir",
-]
-
-[[package]]
 name = "criterion-plot"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2344,20 +2312,6 @@ checksum = "6b50826342786a51a89e2da3a28f1c32b06e387201bc2d19791f622c673706b1"
 dependencies = [
  "cast",
  "itertools",
-]
-
-[[package]]
-name = "crossbeam"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2801af0d36612ae591caa9568261fddce32ce6e08a7275ea334a06a4ad021a2c"
-dependencies = [
- "cfg-if",
- "crossbeam-channel",
- "crossbeam-deque",
- "crossbeam-epoch",
- "crossbeam-queue",
- "crossbeam-utils",
 ]
 
 [[package]]
@@ -2392,16 +2346,6 @@ dependencies = [
  "crossbeam-utils",
  "memoffset 0.7.1",
  "scopeguard",
-]
-
-[[package]]
-name = "crossbeam-queue"
-version = "0.3.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d1cfb3ea8a53f37c40dea2c7bedcbd88bdfae54f5e2175d6ecaff1c988353add"
-dependencies = [
- "cfg-if",
- "crossbeam-utils",
 ]
 
 [[package]]
@@ -3728,7 +3672,7 @@ checksum = "0206175f82b8d6bf6652ff7d71a1e27fd2e4efde587fd368662814d6ec1d9ce0"
 [[package]]
 name = "evm"
 version = "0.39.1"
-source = "git+https://github.com/Dong-Hyeon-Yu/evm.git?rev=d81889d9303491a61f91560399ed292e09b91739#d81889d9303491a61f91560399ed292e09b91739"
+source = "git+https://github.com/Dong-Hyeon-Yu/evm.git?rev=c5215fcb00451d51a96bd6696db54a19b269e5fe#c5215fcb00451d51a96bd6696db54a19b269e5fe"
 dependencies = [
  "anyhow",
  "auto_impl",
@@ -3738,6 +3682,7 @@ dependencies = [
  "evm-core",
  "evm-gasometer",
  "evm-runtime",
+ "hashbrown 0.12.3",
  "log",
  "parity-scale-codec 3.5.0",
  "primitive-types 0.12.1",
@@ -3750,7 +3695,7 @@ dependencies = [
 [[package]]
 name = "evm-core"
 version = "0.39.0"
-source = "git+https://github.com/Dong-Hyeon-Yu/evm.git?rev=d81889d9303491a61f91560399ed292e09b91739#d81889d9303491a61f91560399ed292e09b91739"
+source = "git+https://github.com/Dong-Hyeon-Yu/evm.git?rev=c5215fcb00451d51a96bd6696db54a19b269e5fe#c5215fcb00451d51a96bd6696db54a19b269e5fe"
 dependencies = [
  "parity-scale-codec 3.5.0",
  "primitive-types 0.12.1",
@@ -3761,7 +3706,7 @@ dependencies = [
 [[package]]
 name = "evm-gasometer"
 version = "0.39.0"
-source = "git+https://github.com/Dong-Hyeon-Yu/evm.git?rev=d81889d9303491a61f91560399ed292e09b91739#d81889d9303491a61f91560399ed292e09b91739"
+source = "git+https://github.com/Dong-Hyeon-Yu/evm.git?rev=c5215fcb00451d51a96bd6696db54a19b269e5fe#c5215fcb00451d51a96bd6696db54a19b269e5fe"
 dependencies = [
  "cfg-if",
  "environmental",
@@ -3773,7 +3718,7 @@ dependencies = [
 [[package]]
 name = "evm-runtime"
 version = "0.39.0"
-source = "git+https://github.com/Dong-Hyeon-Yu/evm.git?rev=d81889d9303491a61f91560399ed292e09b91739#d81889d9303491a61f91560399ed292e09b91739"
+source = "git+https://github.com/Dong-Hyeon-Yu/evm.git?rev=c5215fcb00451d51a96bd6696db54a19b269e5fe#c5215fcb00451d51a96bd6696db54a19b269e5fe"
 dependencies = [
  "auto_impl",
  "cfg-if",
@@ -4557,6 +4502,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
 dependencies = [
  "ahash 0.7.6",
+ "rayon",
 ]
 
 [[package]]
@@ -4566,17 +4512,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "43a3c133739dddd0d2990f9a4bdf8eb4b21ef50e4851ca85ab661199821d510e"
 dependencies = [
  "ahash 0.8.2",
-]
-
-[[package]]
-name = "hashbrown"
-version = "0.14.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f93e7192158dbcda357bdec5fb5788eebf8bbac027f3f33e719d29135ae84156"
-dependencies = [
- "ahash 0.8.2",
- "allocator-api2",
- "rayon",
 ]
 
 [[package]]
@@ -6029,7 +5964,7 @@ dependencies = [
  "once_cell",
  "primitive-types 0.10.1",
  "proptest",
- "proptest-derive 0.3.0",
+ "proptest-derive",
  "rand 0.8.5",
  "ref-cast",
  "serde 1.0.152",
@@ -6793,7 +6728,7 @@ dependencies = [
  "bcs",
  "bincode",
  "cfg-if",
- "criterion 0.4.0",
+ "criterion",
  "fastcrypto",
  "futures",
  "indexmap",
@@ -6825,11 +6760,11 @@ version = "0.1.0"
 dependencies = [
  "bcs",
  "bincode",
- "criterion 0.4.0",
+ "criterion",
  "fastcrypto",
  "hex-literal",
  "proptest",
- "proptest-derive 0.3.0",
+ "proptest-derive",
  "serde 1.0.152",
  "serde-reflection",
  "serde_json",
@@ -6849,7 +6784,7 @@ dependencies = [
  "narwhal-crypto",
  "once_cell",
  "proptest",
- "proptest-derive 0.3.0",
+ "proptest-derive",
  "rayon",
  "thiserror",
  "workspace-hack",
@@ -7107,7 +7042,7 @@ dependencies = [
  "base64 0.13.1",
  "bcs",
  "bytes",
- "criterion 0.4.0",
+ "criterion",
  "derive_builder",
  "enum_dispatch",
  "fastcrypto",
@@ -7125,7 +7060,7 @@ dependencies = [
  "once_cell",
  "prometheus",
  "proptest",
- "proptest-derive 0.3.0",
+ "proptest-derive",
  "prost",
  "prost-build",
  "protobuf-src",
@@ -7282,12 +7217,6 @@ name = "no-std-compat"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b93853da6d84c2e3c7d730d6473e8817692dd89be387eb01b94d7f108ecb5b8c"
-
-[[package]]
-name = "nohash-hasher"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2bf50223579dc7cdcfb3bfcacf7069ff68243f8c363f62ffa99cf000a6b9c451"
 
 [[package]]
 name = "nom"
@@ -8237,7 +8166,7 @@ checksum = "e20150f965e0e4c925982b9356da71c84bcd56cb66ef4e894825837cbcf6613e"
 dependencies = [
  "backtrace",
  "cfg-if",
- "criterion 0.4.0",
+ "criterion",
  "findshlibs",
  "inferno",
  "libc",
@@ -8519,17 +8448,6 @@ dependencies = [
  "proc-macro2 0.4.30",
  "quote 0.6.13",
  "syn 0.15.44",
-]
-
-[[package]]
-name = "proptest-derive"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9cf16337405ca084e9c78985114633b6827711d22b9e6ef6c6c0d665eb3f0b6e"
-dependencies = [
- "proc-macro2 1.0.66",
- "quote 1.0.32",
- "syn 1.0.107",
 ]
 
 [[package]]
@@ -10455,7 +10373,7 @@ dependencies = [
  "cfg-if",
  "chrono",
  "clap 2.34.0",
- "criterion 0.4.0",
+ "criterion",
  "dashmap",
  "either",
  "enum_dispatch",
@@ -10489,8 +10407,6 @@ dependencies = [
  "shared-crypto",
  "signature 1.6.4",
  "sslab-execution",
- "sslab-execution-blockstm",
- "sslab-execution-nezha",
  "sslab-execution-serial",
  "sui-archival",
  "sui-config",
@@ -10525,7 +10441,7 @@ dependencies = [
  "async-trait",
  "bytes",
  "cfg-if",
- "criterion 0.4.0",
+ "criterion",
  "enumn",
  "ethers",
  "ethers-core",
@@ -10535,7 +10451,7 @@ dependencies = [
  "fastcrypto",
  "flurry",
  "futures",
- "hashbrown 0.14.2",
+ "hashbrown 0.12.3",
  "mysten-metrics",
  "narwhal-executor",
  "narwhal-types",
@@ -10555,63 +10471,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "sslab-execution-blockstm"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "arc-swap",
- "async-trait",
- "criterion 0.4.0",
- "criterion 0.5.1",
- "crossbeam",
- "crossbeam-queue",
- "dashmap",
- "ethers",
- "ethers-providers",
- "evm",
- "num_cpus",
- "once_cell",
- "proptest",
- "proptest-derive 0.4.0",
- "rand 0.8.5",
- "rayon",
- "sslab-execution",
- "sui-types",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "sslab-execution-nezha"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "criterion 0.4.0",
- "ethers",
- "ethers-core",
- "ethers-providers",
- "ethers-signers",
- "evm",
- "hashbrown 0.14.2",
- "itertools",
- "narwhal-types",
- "nohash-hasher",
- "num_cpus",
- "parking_lot 0.12.1",
- "rand_distr",
- "rayon",
- "sslab-execution",
- "sui-types",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "sslab-execution-serial"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "criterion 0.4.0",
+ "criterion",
  "ethers",
  "ethers-providers",
  "ethers-signers",
@@ -10619,6 +10483,7 @@ dependencies = [
  "rand_distr",
  "sslab-execution",
  "sui-types",
+ "tokio",
  "tracing",
 ]
 
@@ -11060,7 +10925,7 @@ dependencies = [
  "bytes",
  "chrono",
  "clap 3.2.23",
- "criterion 0.4.0",
+ "criterion",
  "dashmap",
  "either",
  "enum_dispatch",
@@ -11396,7 +11261,7 @@ dependencies = [
  "cached",
  "chrono",
  "clap 3.2.23",
- "criterion 0.4.0",
+ "criterion",
  "diesel",
  "diesel-derive-enum",
  "diesel_migrations",
@@ -12229,7 +12094,7 @@ dependencies = [
  "byteorder",
  "bytes",
  "clap 4.4.10",
- "criterion 0.4.0",
+ "criterion",
  "eyre",
  "fastcrypto",
  "futures",
@@ -12536,7 +12401,7 @@ dependencies = [
  "bcs",
  "bincode",
  "byteorder",
- "criterion 0.4.0",
+ "criterion",
  "derivative",
  "derive_more",
  "enum_dispatch",
@@ -12562,7 +12427,7 @@ dependencies = [
  "parking_lot 0.12.1",
  "prometheus",
  "proptest",
- "proptest-derive 0.3.0",
+ "proptest-derive",
  "rand 0.8.5",
  "roaring",
  "schemars",
@@ -13579,7 +13444,7 @@ dependencies = [
  "move-core-types",
  "once_cell",
  "proptest",
- "proptest-derive 0.3.0",
+ "proptest-derive",
  "rand 0.8.5",
  "sui-adapter-latest",
  "sui-core",
@@ -14575,7 +14440,7 @@ dependencies = [
  "cpp_demangle",
  "cpufeatures",
  "crc32fast",
- "criterion 0.4.0",
+ "criterion",
  "criterion-plot",
  "crossbeam-channel",
  "crossbeam-deque",
@@ -14980,7 +14845,7 @@ dependencies = [
  "prometheus",
  "prometheus-http-query",
  "proptest",
- "proptest-derive 0.3.0",
+ "proptest-derive",
  "prost",
  "prost-build",
  "prost-derive",

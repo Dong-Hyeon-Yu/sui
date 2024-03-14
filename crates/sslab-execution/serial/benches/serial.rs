@@ -1,8 +1,7 @@
-use std::sync::Arc;
-
 use criterion::Throughput;
-use criterion::{criterion_group, criterion_main, Criterion, BatchSize};
+use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use ethers_providers::{MockProvider, Provider};
+use sslab_execution::executor::Executable;
 use sslab_execution::types::ExecutableEthereumBatch;
 use sslab_execution::utils::smallbank_contract_benchmark::default_memory_storage;
 use sslab_execution::utils::test_utils::{SmallBankTransactionHandler, DEFAULT_CHAIN_ID};
@@ -16,42 +15,42 @@ fn _get_smallbank_handler() -> SmallBankTransactionHandler {
 }
 
 fn _get_serial_executor() -> SerialExecutor {
-    let memory_storage = Arc::new(default_memory_storage());
-    SerialExecutor::new(memory_storage)
+    SerialExecutor::new(default_memory_storage())
 }
 
-fn _create_random_smallbank_workload(skewness: f32, batch_size: usize, block_concurrency: usize) -> Vec<ExecutableEthereumBatch> {
+fn _create_random_smallbank_workload(
+    skewness: f32,
+    batch_size: usize,
+    block_concurrency: usize,
+) -> Vec<ExecutableEthereumBatch> {
     let handler = _get_smallbank_handler();
 
-    handler.create_batches(batch_size, block_concurrency, skewness, 10_000)
+    handler.create_batches(batch_size, block_concurrency, skewness, 100_000)
 }
 
-
 fn serial(c: &mut Criterion) {
-    let param = 1..41;
+    let param = 1..81;
     let mut group = c.benchmark_group("Serial execution Benchmark according to batchsize");
     for i in param {
-        group.throughput(Throughput::Elements((DEFAULT_BATCH_SIZE*i) as u64));
+        group.throughput(Throughput::Elements((DEFAULT_BATCH_SIZE * i) as u64));
         group.bench_with_input(
             criterion::BenchmarkId::new("serial execution", i),
             &i,
             |b, i| {
-                b.iter_batched(
-                    || {
-                        let consensus_output = _create_random_smallbank_workload(0.0, DEFAULT_BATCH_SIZE*i, 1);
-                        let serial = _get_serial_executor();
-                        (serial, consensus_output)
-                    },
-                    |(serial, consensus_output)| {
-                        consensus_output
-                            .into_iter()
-                            .for_each(|batch| {
-                                serial._execute(batch);
-                            });
-                    },
-                    BatchSize::SmallInput
-                );
-            }
+                b.to_async(tokio::runtime::Runtime::new().unwrap())
+                    .iter_batched(
+                        || {
+                            let consensus_output =
+                                _create_random_smallbank_workload(0.0, DEFAULT_BATCH_SIZE, *i);
+                            let serial = _get_serial_executor();
+                            (serial, consensus_output)
+                        },
+                        |(mut serial, consensus_output)| async move {
+                            serial.execute(consensus_output).await;
+                        },
+                        BatchSize::SmallInput,
+                    );
+            },
         );
     }
 }

@@ -34,7 +34,7 @@ evm.workspace = true
 enumn = "0.1.11"
 ethers-core = { version = "^2.0.0" }
 flurry = "0.4.0"
-hashbrown = { version = "0.14.2", features = ["rayon", "inline-more", "default"]}
+hashbrown = { workspace = true, features = ["rayon", "inline-more", "default"]}
 rayon = "1.8.0"
 
 ethers = "^2.0.0"

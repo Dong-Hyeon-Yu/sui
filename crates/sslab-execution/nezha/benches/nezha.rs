@@ -51,43 +51,66 @@ fn _get_rw_sets(
 }
 
 fn block_concurrency(c: &mut Criterion) {
-    let param = 1..41;
+    let s = [0.0, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
+    let param = 1..81;
     let mut group = c.benchmark_group("Nezha Benchmark according to block concurrency");
+
     for i in param {
-        group.throughput(Throughput::Elements((DEFAULT_BATCH_SIZE * i) as u64));
-        // let effective_tps: std::rc::Rc<RwLock<Vec<(_,_)>>> =  std::rc::Rc::new(RwLock::new(Vec::new()));
-        group.bench_with_input(criterion::BenchmarkId::new("nezha", i), &i, |b, i| {
-            b.to_async(tokio::runtime::Runtime::new().unwrap())
-                .iter_batched(
-                    || {
-                        let consensus_output = _create_random_smallbank_workload(
-                            DEFAULT_SKEWNESS,
-                            DEFAULT_BATCH_SIZE,
-                            *i,
+        for skewness in s {
+            group.throughput(Throughput::Elements((DEFAULT_BATCH_SIZE * i) as u64));
+
+            // let effective_tps = std::sync::Arc::new(RwLock::new(Vec::new()));
+
+            group.bench_with_input(
+                criterion::BenchmarkId::new(
+                    "nezha",
+                    format!("skewness: {}, block_concurrency: {}", skewness, i),
+                ),
+                &i, //&(i, effective_tps.clone()),
+                |b, i| {
+                    //(i, effective_tps)| {
+
+                    b.to_async(tokio::runtime::Runtime::new().unwrap())
+                        .iter_batched(
+                            || {
+                                let consensus_output = _create_random_smallbank_workload(
+                                    skewness,
+                                    DEFAULT_BATCH_SIZE,
+                                    *i,
+                                );
+                                let nezha = _get_nezha_executor(*i);
+                                (nezha, consensus_output)
+                            },
+                            |(nezha, consensus_output)| async move {
+                                let SimulationResult { rw_sets, .. } =
+                                    nezha._simulate(consensus_output).await;
+                                let scheduled_info = AddressBasedConflictGraph::construct(rw_sets)
+                                    .hierarchcial_sort()
+                                    .reorder()
+                                    .extract_schedule();
+                                // effective_tps.write().push((
+                                //     scheduled_info.scheduled_txs_len(),
+                                //     scheduled_info.aborted_txs_len()
+                                //         + scheduled_info.scheduled_txs_len(),
+                                // ));
+                                nezha._concurrent_commit(scheduled_info, 1).await
+                            },
+                            BatchSize::SmallInput,
                         );
-                        let nezha = _get_nezha_executor(*i);
-                        (nezha, consensus_output)
-                    },
-                    |(nezha, consensus_output)| async move {
-                        let SimulationResult { rw_sets, .. } =
-                            nezha._simulate(consensus_output).await;
-                        let scheduled_info = AddressBasedConflictGraph::construct(rw_sets)
-                            .hierarchcial_sort()
-                            .reorder()
-                            .extract_schedule();
-                        // effective_tps.write().unwrap().push((scheduled_info.scheduled_txs_len(), scheduled_info.aborted_txs_len()+scheduled_info.scheduled_txs_len()));
-                        nezha._concurrent_commit(scheduled_info, 1).await
-                    },
-                    BatchSize::SmallInput,
-                );
-        });
-        // let (mut committed, mut total) = (0, 0);
-        // let len = effective_tps.read().unwrap().len();
-        // for (a, b) in effective_tps.read().unwrap().iter() {
-        //     committed += a;
-        //     total += b;
-        // }
-        // println!("committed: {:?} / total: {:?}", committed as f64/ len as f64, total as f64/ len as f64);
+                },
+            );
+            // let (mut committed, mut total) = (0, 0);
+            // let len = effective_tps.read().len();
+            // for (a, b) in effective_tps.read().iter() {
+            //     committed += a;
+            //     total += b;
+            // }
+            // println!(
+            //     "committed: {:?} / total: {:?}",
+            //     committed as f64 / len as f64,
+            //     total as f64 / len as f64
+            // );
+        }
     }
 }
 
@@ -232,6 +255,6 @@ fn block_concurrency_commit(c: &mut Criterion) {
     }
 }
 
-criterion_group!(benches, block_concurrency_scheduling);
+criterion_group!(benches, block_concurrency);
 // criterion_group!(benches, block_concurrency_simulation, block_concurrency_commit);
 criterion_main!(benches);

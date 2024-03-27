@@ -5,6 +5,13 @@ import sys
 MICRO = "µs"
 MILLI = "ms"
 
+def _parse_parallelism(log):
+    tmp = findall(r'total_tx: (\d+\.\d+), average_height: (\d+\.\d+), std_height: (\d+\.\d+), skewness of height: (\d+\.\d+), max_height: (\d+\.\d+), depth: (\d+\.\d+)', log)
+    metric = [(int(float(total_tx)), float(average_height), float(std_height), float(skewness), float(max_hieght), float(depth)) 
+              for total_tx, average_height, std_height, skewness, max_hieght, depth in tmp]
+    
+    return metric
+
 def _parse_scheduling(log): 
     tmp = findall(r'ACG construct: (\d+\.\d+)', log)
     construct = [float(t) for t in tmp]
@@ -88,6 +95,12 @@ def result(log):
         result += "\n[Schedule extraction]\n"
         for duration in extraction:
             result += f"{duration} \n"
+            
+    metrics = _parse_parallelism(log)
+    if metrics:
+        result += "\n[Parallelism]\n"
+        for total_tx, average_height, std_height, skewness, max_hieght, depth in metrics:
+            result += f"{total_tx} {average_height} {std_height} {skewness} {max_hieght} {depth} \n"
             
     committed = _parse_effective_throughput(log)
     if committed:

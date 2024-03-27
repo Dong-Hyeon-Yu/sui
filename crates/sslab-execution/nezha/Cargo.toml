@@ -16,10 +16,12 @@ narwhal-types.workspace = true
 sslab-execution.workspace = true
 evm.workspace = true
 
+cfg-if.workspace = true
+incr_stats = "1.0.2"
 ethers-core = { version = "^2.0.0" }
 rayon = "1.8.0"
 nohash-hasher = "0.2.0"
-hashbrown = { version = "0.14.2", features = ["inline-more", "default"]}
+hashbrown = { version = "0.14.2", features = ["inline-more", "default"] }
 
 
 [dev-dependencies]
@@ -27,7 +29,7 @@ ethers = "^2.0.0"
 ethers-signers = { version = "^2.0.0" }
 ethers-providers = { version = "^2.0.0" }
 rand_distr = "0.4.3"
-criterion = {workspace = true, features = ["async_tokio", "default"]}
+criterion = { workspace = true, features = ["async_tokio", "default"] }
 parking_lot.workspace = true
 
 [[bench]]

@@ -59,17 +59,13 @@ fn block_concurrency(c: &mut Criterion) {
         for skewness in s {
             group.throughput(Throughput::Elements((DEFAULT_BATCH_SIZE * i) as u64));
 
-            // let effective_tps = std::sync::Arc::new(RwLock::new(Vec::new()));
-
             group.bench_with_input(
                 criterion::BenchmarkId::new(
                     "nezha",
                     format!("skewness: {}, block_concurrency: {}", skewness, i),
                 ),
-                &i, //&(i, effective_tps.clone()),
+                &i,
                 |b, i| {
-                    //(i, effective_tps)| {
-
                     b.to_async(tokio::runtime::Runtime::new().unwrap())
                         .iter_batched(
                             || {
@@ -88,28 +84,76 @@ fn block_concurrency(c: &mut Criterion) {
                                     .hierarchcial_sort()
                                     .reorder()
                                     .extract_schedule();
-                                // effective_tps.write().push((
-                                //     scheduled_info.scheduled_txs_len(),
-                                //     scheduled_info.aborted_txs_len()
-                                //         + scheduled_info.scheduled_txs_len(),
-                                // ));
+
                                 nezha._concurrent_commit(scheduled_info, 1).await
                             },
                             BatchSize::SmallInput,
                         );
                 },
             );
-            // let (mut committed, mut total) = (0, 0);
-            // let len = effective_tps.read().len();
-            // for (a, b) in effective_tps.read().iter() {
-            //     committed += a;
-            //     total += b;
-            // }
-            // println!(
-            //     "committed: {:?} / total: {:?}",
-            //     committed as f64 / len as f64,
-            //     total as f64 / len as f64
-            // );
+        }
+    }
+}
+
+fn schedule_parallelism(c: &mut Criterion) {
+    let s = [0.0, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
+    let param = 80..81;
+    let mut group = c.benchmark_group("Parallelism Benchmark");
+
+    for i in param {
+        for skewness in s {
+            group.throughput(Throughput::Elements((DEFAULT_BATCH_SIZE * i) as u64));
+
+            let parallelism_metrics = std::sync::Arc::new(RwLock::new(Vec::new()));
+
+            group.bench_with_input(
+                criterion::BenchmarkId::new(
+                    "nezha",
+                    format!("skewness: {}, block_concurrency: {}", skewness, i),
+                ),
+                &(i, parallelism_metrics.clone()),
+                |b, (i, metrics)| {
+                    b.to_async(tokio::runtime::Runtime::new().unwrap())
+                        .iter_batched(
+                            || {
+                                let consensus_output = _create_random_smallbank_workload(
+                                    skewness,
+                                    DEFAULT_BATCH_SIZE,
+                                    *i,
+                                );
+                                let nezha = _get_nezha_executor(*i);
+                                (nezha, consensus_output)
+                            },
+                            |(nezha, consensus_output)| async move {
+                                metrics.write().push(
+                                    nezha
+                                        ._execute_and_return_parellism_metric(consensus_output)
+                                        .await,
+                                );
+                            },
+                            BatchSize::SmallInput,
+                        );
+                },
+            );
+
+            let (
+                mut total_tx,
+                mut average_height,
+                mut std_height,
+                mut skewness_height,
+                mut max_height,
+                mut depth,
+            ) = (0 as f64, 0 as f64, 0 as f64, 0 as f64, 0 as f64, 0 as u32);
+            let len = parallelism_metrics.read().len();
+            for (a1, a2, a3, a4, a5, a6) in parallelism_metrics.read().iter() {
+                total_tx += a1;
+                average_height += a2;
+                std_height += a3;
+                skewness_height += a4;
+                max_height += a5;
+                depth += a6;
+            }
+            println!("total_tx: {:.2}, average_height: {:.2}, std_height: {:.2}, skewness of height: {:.2}, max_height: {:.2}, depth: {:.2}", total_tx/len as f64, average_height/len as f64, std_height/len as f64, skewness_height/len as f64, max_height as f64/len as f64, depth as f64/len as f64)
         }
     }
 }
@@ -255,6 +299,6 @@ fn block_concurrency_commit(c: &mut Criterion) {
     }
 }
 
-criterion_group!(benches, block_concurrency);
+criterion_group!(benches, schedule_parallelism);
 // criterion_group!(benches, block_concurrency_simulation, block_concurrency_commit);
 criterion_main!(benches);

@@ -8,8 +8,9 @@ use sslab_execution::{
     types::{ExecutableEthereumBatch, ExecutionResult},
 };
 use std::{rc::Rc, sync::Arc};
-// use tokio::time::Instant;
 use tracing::{debug, error, warn};
+
+use incr_stats::incr::Stats;
 
 use crate::{AddressBasedConflictGraph, SimulationResult};
 
@@ -101,6 +102,49 @@ impl ConcurrencyLevelManager {
         // println!("{} transactions are aborted.", aborted_tx_len);
 
         digests
+    }
+
+    // #[cfg(feature = "test")]
+    pub async fn _execute_and_return_parellism_metric(
+        &self,
+        consensus_output: Vec<ExecutableEthereumBatch>,
+    ) -> (f64, f64, f64, f64, f64, u32) {
+        let mut stat = Stats::new();
+
+        let SimulationResult {
+            digests: _,
+            rw_sets,
+        } = self._simulate(consensus_output).await;
+        // let mut time = now.elapsed().as_millis();
+        // info!("Simulation took {} ms for {} transactions.", time, rw_sets.len());
+
+        // rw_sets.clone().iter().for_each(|rw_set| {
+        //     println!("rw_set: {:?}\n", rw_set);
+        // });
+
+        // now = Instant::now();
+        let ScheduledInfo {
+            scheduled_txs,
+            aborted_txs: _,
+        } = AddressBasedConflictGraph::construct(rw_sets)
+            .hierarchcial_sort()
+            .reorder()
+            .extract_schedule();
+
+        scheduled_txs.iter().for_each(|seq| {
+            stat.update(seq.len() as f64).ok();
+        });
+
+        let metric = (
+            stat.sum().unwrap_or_default(),
+            stat.mean().unwrap_or_default(),
+            stat.population_standard_deviation().unwrap_or_default(),
+            stat.population_skewness().unwrap_or_default(),
+            stat.max().unwrap_or_default(),
+            stat.count(),
+        );
+
+        metric
     }
 
     //TODO: create Simulator having a thread pool for cpu-bound jobs.

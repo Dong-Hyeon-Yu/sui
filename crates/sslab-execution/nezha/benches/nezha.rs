@@ -17,6 +17,7 @@ use sslab_execution_nezha::{
 const DEFAULT_BATCH_SIZE: usize = 200;
 const DEFAULT_BLOCK_CONCURRENCY: usize = 12;
 const DEFAULT_SKEWNESS: f32 = 0.0;
+const DEFAULT_ACCOUNT_NUM: u64 = 100000;
 
 fn _get_smallbank_handler() -> SmallBankTransactionHandler {
     let provider = Provider::<MockProvider>::new(MockProvider::default());
@@ -31,10 +32,11 @@ fn _create_random_smallbank_workload(
     skewness: f32,
     batch_size: usize,
     block_concurrency: usize,
+    account_num: u64,
 ) -> Vec<ExecutableEthereumBatch> {
     let handler = _get_smallbank_handler();
 
-    handler.create_batches(batch_size, block_concurrency, skewness, 100_000)
+    handler.create_batches(batch_size, block_concurrency, skewness, account_num)
 }
 
 fn _get_rw_sets(
@@ -70,6 +72,7 @@ fn block_concurrency_no_abort(c: &mut Criterion) {
                                     skewness,
                                     DEFAULT_BATCH_SIZE,
                                     *i,
+                                    DEFAULT_ACCOUNT_NUM,
                                 );
                                 let nezha = _get_nezha_executor(*i);
                                 (nezha, consensus_output)
@@ -86,56 +89,62 @@ fn block_concurrency_no_abort(c: &mut Criterion) {
 }
 
 fn block_concurrency_no_abort_latency(c: &mut Criterion) {
+    let account_nums = [200]; //[100000, 1400, 1200, 1000, 800, 600, 400, 200];
     let s = [0.0, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
-    let param = 1..81;
-    let mut group = c.benchmark_group("Nezha No Abort Benchmark according to block concurrency");
+    let param = 1..5;
+    let mut group = c.benchmark_group("Nezha No Abort Benchmark");
 
-    for skewness in s {
+    for account_num in account_nums {
         for i in param.clone() {
-            group.throughput(Throughput::Elements((DEFAULT_BATCH_SIZE * i) as u64));
+            for skewness in s {
+                group.throughput(Throughput::Elements((DEFAULT_BATCH_SIZE * i) as u64));
 
-            let latency_metrics = std::sync::Arc::new(RwLock::new(Vec::new()));
+                let latency_metrics = std::sync::Arc::new(RwLock::new(Vec::new()));
 
-            group.bench_with_input(
-                criterion::BenchmarkId::new(
-                    "nezha",
-                    format!("skewness: {}, block_concurrency: {}", skewness, i),
-                ),
-                &(i, latency_metrics.clone()),
-                |b, (i, latency_metrics)| {
-                    b.to_async(tokio::runtime::Runtime::new().unwrap())
-                        .iter_batched(
-                            || {
-                                let consensus_output = _create_random_smallbank_workload(
-                                    skewness,
-                                    DEFAULT_BATCH_SIZE,
-                                    *i,
-                                );
-                                let nezha = _get_nezha_executor(*i);
-                                (nezha, consensus_output)
-                            },
-                            |(nezha, consensus_output)| async move {
-                                latency_metrics.write().push(
-                                    nezha._execute_and_return_latency(consensus_output).await,
-                                );
-                            },
-                            BatchSize::SmallInput,
-                        );
-                },
-            );
+                group.bench_with_input(
+                    criterion::BenchmarkId::new(
+                        "latency",
+                        format!(
+                            "#account: {account_num}, block_concurrency: {i}, skewness: {skewness}"
+                        ),
+                    ),
+                    &(i, latency_metrics.clone()),
+                    |b, (i, latency_metrics)| {
+                        b.to_async(tokio::runtime::Runtime::new().unwrap())
+                            .iter_batched(
+                                || {
+                                    let consensus_output = _create_random_smallbank_workload(
+                                        skewness,
+                                        DEFAULT_BATCH_SIZE,
+                                        *i,
+                                        account_num,
+                                    );
+                                    let nezha = _get_nezha_executor(*i);
+                                    (nezha, consensus_output)
+                                },
+                                |(nezha, consensus_output)| async move {
+                                    latency_metrics.write().push(
+                                        nezha._execute_and_return_latency(consensus_output).await,
+                                    );
+                                },
+                                BatchSize::SmallInput,
+                            );
+                    },
+                );
 
-            let (mut total, mut simulation, mut scheduling, mut validation, mut commit) =
-                (0 as f64, 0 as f64, 0 as f64, 0 as f64, 0 as f64);
-            let len = latency_metrics.read().len() as f64;
-            for (a1, a2, a3, a4, a5) in latency_metrics.read().iter() {
-                total += *a1 as f64;
-                simulation += *a2 as f64;
-                scheduling += *a3 as f64;
-                validation += *a4 as f64;
-                commit += *a5 as f64;
+                let (mut total, mut simulation, mut scheduling, mut validation, mut commit) =
+                    (0 as f64, 0 as f64, 0 as f64, 0 as f64, 0 as f64);
+                let len = latency_metrics.read().len() as f64;
+                for (a1, a2, a3, a4, a5) in latency_metrics.read().iter() {
+                    total += *a1 as f64;
+                    simulation += *a2 as f64;
+                    scheduling += *a3 as f64;
+                    validation += *a4 as f64;
+                    commit += *a5 as f64;
+                }
+
+                println!("Total: {:.4}, Simulation: {:.4}, Scheduling: {:.4}, Validation: {:.4}, Commit: {:.4}", total / len, simulation / len, scheduling / len, validation / len, commit / len);
             }
-
-            println!("Total: {:.4}, Simulation: {:.4}, Scheduling: {:.4}, Validation: {:.4}, Commit: {:.4}", total / len, simulation / len, scheduling / len, validation / len, commit / len);
         }
     }
 }
@@ -159,6 +168,7 @@ fn block_concurrency(c: &mut Criterion) {
                                 DEFAULT_SKEWNESS,
                                 DEFAULT_BATCH_SIZE,
                                 *i,
+                                DEFAULT_ACCOUNT_NUM,
                             );
                             let nezha = _get_nezha_executor(*i);
                             (nezha, consensus_output)
@@ -237,6 +247,7 @@ fn block_concurrency_simulation(c: &mut Criterion) {
                             DEFAULT_SKEWNESS,
                             DEFAULT_BATCH_SIZE,
                             *i,
+                            DEFAULT_ACCOUNT_NUM,
                         );
                         let nezha = _get_nezha_executor(*i);
                         (nezha, consensus_output)
@@ -273,6 +284,7 @@ fn block_concurrency_scheduling(c: &mut Criterion) {
                                 DEFAULT_SKEWNESS,
                                 DEFAULT_BATCH_SIZE,
                                 *i,
+                                DEFAULT_ACCOUNT_NUM,
                             );
                             let nezha = std::sync::Arc::new(_get_nezha_executor(*i));
                             let rw_sets = _get_rw_sets(nezha.clone(), consensus_output.clone());
@@ -347,6 +359,7 @@ fn block_concurrency_commit(c: &mut Criterion) {
                             DEFAULT_SKEWNESS,
                             DEFAULT_BATCH_SIZE,
                             *i,
+                            DEFAULT_ACCOUNT_NUM,
                         );
                         let nezha = std::sync::Arc::new(_get_nezha_executor(*i));
                         let rw_sets = _get_rw_sets(nezha.clone(), consensus_output.clone());

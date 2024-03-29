@@ -192,7 +192,7 @@ impl ConcurrencyLevelManager {
         {
             let latency = Instant::now();
             let rw_sets = self._simulate(tx_list).await;
-            simulation_latency += latency.elapsed().as_micros();
+            simulation_latency += latency.elapsed().as_millis();
 
             let latency = Instant::now();
             let ScheduledInfo {
@@ -204,11 +204,11 @@ impl ConcurrencyLevelManager {
                 .reorder()
                 .par_extract_schedule()
                 .await;
-            scheduling_latency += latency.elapsed().as_micros();
+            scheduling_latency += latency.elapsed().as_millis();
 
             let latency = Instant::now();
             self._concurrent_commit(scheduled_txs).await;
-            commit_latency += latency.elapsed().as_micros();
+            commit_latency += latency.elapsed().as_millis();
 
             scheduled_aborted_txs = aborted_txs;
         }
@@ -230,7 +230,7 @@ impl ConcurrencyLevelManager {
                         .collect(),
                 )
                 .await;
-            simulation_latency += latency.elapsed().as_micros();
+            simulation_latency += latency.elapsed().as_millis();
 
             match self
                 ._validate_optimistic_assumption_and_return_latency(rw_sets)
@@ -251,7 +251,7 @@ impl ConcurrencyLevelManager {
         }
 
         (
-            total_latency.elapsed().as_micros(),
+            total_latency.elapsed().as_millis(),
             simulation_latency,
             scheduling_latency,
             validation_latency,
@@ -267,7 +267,7 @@ impl ConcurrencyLevelManager {
             let latency = Instant::now();
             self._concurrent_commit_2(rw_set).await;
 
-            return (None, 0, latency.elapsed().as_micros());
+            return (None, 0, latency.elapsed().as_millis());
         }
 
         let (send, recv) = tokio::sync::oneshot::channel();
@@ -304,11 +304,11 @@ impl ConcurrencyLevelManager {
         });
 
         let (valid_txs, invalid_txs) = recv.await.unwrap();
-        let validation_latency = latency.elapsed().as_micros();
+        let validation_latency = latency.elapsed().as_millis();
 
         let latency = Instant::now();
         self._concurrent_commit_2(valid_txs).await;
-        let commit_latency = latency.elapsed().as_micros();
+        let commit_latency = latency.elapsed().as_millis();
 
         (invalid_txs, validation_latency, commit_latency)
     }

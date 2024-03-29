@@ -45,10 +45,13 @@ def _parse_nezha(log):
     tmp = findall(r'Scheduling: (\d+\.\d+)', log)
     scheduling = [float(t) for t in tmp]
     
+    tmp = findall(r'Validation: (\d+\.\d+)', log)
+    validation = [float(t) for t in tmp]
+    
     tmp = findall(r'Commit: (\d+\.\d+)', log)
     commit = [float(t) for t in tmp]
     
-    return simulation, scheduling, commit
+    return simulation, scheduling, validation, commit
 
 def result(log):
     
@@ -57,19 +60,11 @@ def result(log):
     for duration in total:
         result += f"{duration} \n"
         
-    simulation, scheduling, commit = _parse_nezha(log)
-    if simulation:
-        result += "\n[Simulation]\n"
-        for duration in simulation:
-            result += f"{duration} \n"
-        
-        result += "\n[Scheduling]\n"
-        for duration in scheduling:
-            result += f"{duration} \n"
-            
-        result += "\n[Commit]\n"
-        for duration in commit:
-            result += f"{duration} \n"
+    
+    if overall_latency := _parse_nezha(log):
+        result += "\n[Overall Latency]\n"
+        for simulation, schedule, validation, commit in zip(*overall_latency, strict=True):     
+            result += f"{simulation:.6f} {schedule:.6f} {validation:.6f} {commit:.6f}\n"
     
     construct, sort, reorder, extraction = _parse_scheduling(log)
     if construct:

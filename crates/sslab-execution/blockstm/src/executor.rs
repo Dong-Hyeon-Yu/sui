@@ -2,16 +2,17 @@
 // SPDX-License-Identifier: Apache-2.0
 use crate::{
     errors::*,
+    infallible::Mutex,
+    mvhashmap::MVHashMap,
     outcome_array::OutcomeArray,
     scheduler::{Scheduler, SchedulerTask, TaskGuard, TxnIndex, Version},
     task::{ExecutionStatus, ExecutorTask, Transaction, TransactionOutput},
     txn_last_input_output::{ReadDescriptor, TxnLastInputOutput},
-    mvhashmap::MVHashMap,
-    infallible::Mutex,
 };
 use anyhow::{bail, Result as AResult};
 use ethers::types::H256;
 // use mvhashmap::MVHashMap;
+use evm::executor::stack::MultiversionView;
 use num_cpus;
 use rayon::{prelude::*, scope};
 use std::{
@@ -24,7 +25,6 @@ use std::{
     },
     thread::spawn,
 };
-use evm::executor::stack::MultiversionView;
 
 /// A struct that is always used by a single thread performing an execution task. The struct is
 /// passed to the VM and acts as a proxy to resolve reads first in the shared multi-version
@@ -49,7 +49,7 @@ impl MultiversionView for EtherMVHashMapView<'_> {
         self.versioned_map.take_reads()
     }
 
-    fn read(&self, address: &ethers::types::H160, key: &H256) -> Self::ReadResult {
+    fn read(&self, _address: &ethers::types::H160, key: &H256) -> Self::ReadResult {
         //TODO: how to separate contract address during execution?
         self.versioned_map.read(key)
     }

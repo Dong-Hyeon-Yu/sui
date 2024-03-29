@@ -10571,6 +10571,7 @@ dependencies = [
  "evm",
  "num_cpus",
  "once_cell",
+ "parking_lot 0.12.1",
  "proptest",
  "proptest-derive 0.4.0",
  "rand 0.8.5",

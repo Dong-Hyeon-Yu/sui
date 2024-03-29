@@ -17,6 +17,15 @@ def _parse_total(log):
         
     return total
 
+def _parse_latency(log):
+    tmp = findall(r'total: (\d+\.?\d*)', log)
+    total = [float(t) for t in tmp]
+    
+    tmp = findall(r'commit: (\d+\.?\d*)', log)
+    commit = [float(c) for c in tmp]
+        
+    return total, commit
+
 def result(log):
     
     total = _parse_total(log)
@@ -24,6 +33,12 @@ def result(log):
     result = "[total]\n"
     for duration in total:
         result += f"{duration} \n"
+        
+    if latency:= _parse_latency(log):
+        total, commit = latency
+        result += "\n[latency]\n"
+        for t, c in zip(total, commit, strict=True):
+            result += f"{t} {c}\n"
         
     return result
 

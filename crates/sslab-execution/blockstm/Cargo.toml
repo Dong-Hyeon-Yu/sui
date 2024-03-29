@@ -25,24 +25,25 @@ crossbeam = "0.8"
 arc-swap = "1.5.0"
 ethers = "^2.0.0"
 
-criterion = { version = "0.5.1", optional = true}
-proptest = { version = "1.0.0", optional = true}
-proptest-derive = { version = "0.4.0", optional = true}
+criterion = { version = "0.5.1", optional = true }
+proptest = { version = "1.0.0", optional = true }
+proptest-derive = { version = "0.4.0", optional = true }
 
 dashmap.workspace = true
 tracing.workspace = true
 
 sui-types.workspace = true
-sslab-execution = {workspace = true, features = ["blockstm"]}
-evm = {workspace = true, features = ["mvcc"] }
+sslab-execution = { workspace = true, features = ["blockstm"] }
+evm = { workspace = true, features = ["mvcc"] }
 
 [dev-dependencies]
-criterion = {workspace = true, features = ["async_tokio", "default"]}
+criterion = { workspace = true, features = ["async_tokio", "default"] }
 tokio.workspace = true
 rand = "0.8.3"
 proptest = "1.0.0"
 proptest-derive = "0.4.0"
 ethers-providers = { version = "^2.0.0" }
+parking_lot.workspace = true
 
 [features]
 fuzzing = ["criterion", "proptest", "proptest-derive"]

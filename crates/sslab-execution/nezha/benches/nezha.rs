@@ -89,7 +89,7 @@ fn block_concurrency_no_abort(c: &mut Criterion) {
 }
 
 fn block_concurrency_no_abort_latency(c: &mut Criterion) {
-    let account_nums = [200]; //[100000, 1400, 1200, 1000, 800, 600, 400, 200];
+    let account_nums = [200];
     let s = [0.0, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
     let param = 1..5;
     let mut group = c.benchmark_group("Nezha No Abort Benchmark");
@@ -142,8 +142,17 @@ fn block_concurrency_no_abort_latency(c: &mut Criterion) {
                     validation += *a4 as f64;
                     commit += *a5 as f64;
                 }
+                total /= len;
+                simulation /= len;
+                scheduling /= len;
+                validation /= len;
+                commit /= len;
+                let other = total - (simulation + scheduling + validation + commit);
 
-                println!("Total: {:.4}, Simulation: {:.4}, Scheduling: {:.4}, Validation: {:.4}, Commit: {:.4}", total / len, simulation / len, scheduling / len, validation / len, commit / len);
+                println!(
+                    "Simulation: {:.4}, Scheduling: {:.4}, Validation: {:.4}, Commit: {:.4}, Other: {:.4}",
+                    simulation, scheduling, validation, commit, other
+                );
             }
         }
     }

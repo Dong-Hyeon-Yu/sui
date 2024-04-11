@@ -85,61 +85,6 @@ fn block_concurrency_no_abort(c: &mut Criterion) {
     }
 }
 
-fn block_concurrency_no_abort_latency(c: &mut Criterion) {
-    let s = [0.0, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
-    let param = 1..81;
-    let mut group = c.benchmark_group("Nezha No Abort Benchmark according to block concurrency");
-
-    for skewness in s {
-        for i in param.clone() {
-            group.throughput(Throughput::Elements((DEFAULT_BATCH_SIZE * i) as u64));
-
-            let latency_metrics = std::sync::Arc::new(RwLock::new(Vec::new()));
-
-            group.bench_with_input(
-                criterion::BenchmarkId::new(
-                    "nezha",
-                    format!("skewness: {}, block_concurrency: {}", skewness, i),
-                ),
-                &(i, latency_metrics.clone()),
-                |b, (i, latency_metrics)| {
-                    b.to_async(tokio::runtime::Runtime::new().unwrap())
-                        .iter_batched(
-                            || {
-                                let consensus_output = _create_random_smallbank_workload(
-                                    skewness,
-                                    DEFAULT_BATCH_SIZE,
-                                    *i,
-                                );
-                                let nezha = _get_nezha_executor(*i);
-                                (nezha, consensus_output)
-                            },
-                            |(nezha, consensus_output)| async move {
-                                latency_metrics.write().push(
-                                    nezha._execute_and_return_latency(consensus_output).await,
-                                );
-                            },
-                            BatchSize::SmallInput,
-                        );
-                },
-            );
-
-            let (mut total, mut simulation, mut scheduling, mut validation, mut commit) =
-                (0 as f64, 0 as f64, 0 as f64, 0 as f64, 0 as f64);
-            let len = latency_metrics.read().len() as f64;
-            for (a1, a2, a3, a4, a5) in latency_metrics.read().iter() {
-                total += *a1 as f64;
-                simulation += *a2 as f64;
-                scheduling += *a3 as f64;
-                validation += *a4 as f64;
-                commit += *a5 as f64;
-            }
-
-            println!("Total: {:.4}, Simulation: {:.4}, Scheduling: {:.4}, Validation: {:.4}, Commit: {:.4}", total / len, simulation / len, scheduling / len, validation / len, commit / len);
-        }
-    }
-}
-
 fn block_concurrency(c: &mut Criterion) {
     let param = 1..81;
     let mut group = c.benchmark_group("Nezha Benchmark according to block concurrency");
@@ -224,37 +169,6 @@ fn block_concurrency(c: &mut Criterion) {
     }
 }
 
-fn block_concurrency_simulation(c: &mut Criterion) {
-    let mut group = c.benchmark_group("simulation according to block concurrency");
-    let param = 41..81;
-    for i in param {
-        group.throughput(Throughput::Elements((DEFAULT_BATCH_SIZE * i) as u64));
-        group.bench_with_input(criterion::BenchmarkId::new("nezha", i), &i, |b, i| {
-            b.to_async(tokio::runtime::Runtime::new().unwrap())
-                .iter_batched(
-                    || {
-                        let consensus_output = _create_random_smallbank_workload(
-                            DEFAULT_SKEWNESS,
-                            DEFAULT_BATCH_SIZE,
-                            *i,
-                        );
-                        let nezha = _get_nezha_executor(*i);
-                        (nezha, consensus_output)
-                    },
-                    |(nezha, consensus_output)| async move {
-                        let _ = nezha.simulate(consensus_output).await;
-                        // let scheduled_info = AddressBasedConflictGraph::construct(rw_sets)
-                        //     .hierarchcial_sort()
-                        //     .reorder()
-                        //     .extract_schedule();
-                        // nezha._concurrent_commit(scheduled_info, 1)
-                    },
-                    BatchSize::SmallInput,
-                );
-        });
-    }
-}
-
 fn block_concurrency_scheduling(c: &mut Criterion) {
     let param = 1..81;
     let mut group = c.benchmark_group("scheduling according to block concurrency");
@@ -334,37 +248,5 @@ fn block_concurrency_scheduling(c: &mut Criterion) {
     }
 }
 
-fn block_concurrency_commit(c: &mut Criterion) {
-    let param = 41..81;
-    let mut group = c.benchmark_group("concurrent commit according to block concurrency");
-    for i in param {
-        group.throughput(Throughput::Elements((DEFAULT_BATCH_SIZE * i) as u64));
-        group.bench_with_input(criterion::BenchmarkId::new("nezha", i), &i, |b, i| {
-            b.to_async(tokio::runtime::Runtime::new().unwrap())
-                .iter_batched(
-                    || {
-                        let consensus_output = _create_random_smallbank_workload(
-                            DEFAULT_SKEWNESS,
-                            DEFAULT_BATCH_SIZE,
-                            *i,
-                        );
-                        let nezha = std::sync::Arc::new(_get_nezha_executor(*i));
-                        let rw_sets = _get_rw_sets(nezha.clone(), consensus_output.clone());
-                        let scheduled_info = AddressBasedConflictGraph::construct(rw_sets)
-                            .hierarchcial_sort()
-                            .reorder()
-                            .extract_schedule();
-                        (nezha, scheduled_info)
-                    },
-                    |(nezha, scheduled_info)| async move {
-                        nezha._concurrent_commit(scheduled_info.scheduled_txs).await;
-                    },
-                    BatchSize::SmallInput,
-                );
-        });
-    }
-}
-
-criterion_group!(benches, block_concurrency_no_abort_latency);
-// criterion_group!(benches, block_concurrency_simulation, block_concurrency_commit);
+criterion_group!(benches, block_concurrency_no_abort);
 criterion_main!(benches);

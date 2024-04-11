@@ -1,6 +1,8 @@
 use reth::revm::InMemoryDB;
 
-use crate::evm_storage::{self, ConcurrentEVMStorage, SerialEVMStorage};
+use crate::evm_storage::{
+    self, backend::InMemoryConcurrentDB, ConcurrentEVMStorage, SerialEVMStorage,
+};
 
 pub const CONTRACT_BYTECODE: &str = include_str!("./DeployedSmallBank.bin");
 pub const DEFAULT_CONTRACT_ADDRESS: &str = "0x1000000000000000000000000000000000000000";
@@ -16,4 +18,12 @@ pub fn concurrent_evm_storage() -> ConcurrentEVMStorage {
 
 pub fn memory_database() -> InMemoryDB {
     evm_storage::memory_database(DEFAULT_CONTRACT_ADDRESS, CONTRACT_BYTECODE, ADMIN_ADDRESS)
+}
+
+pub fn concurrent_memory_database() -> InMemoryConcurrentDB {
+    evm_storage::concurrent_memory_database(
+        DEFAULT_CONTRACT_ADDRESS,
+        CONTRACT_BYTECODE,
+        ADMIN_ADDRESS,
+    )
 }

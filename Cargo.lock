@@ -3521,6 +3521,7 @@ dependencies = [
  "lock_api",
  "once_cell",
  "parking_lot_core 0.9.9",
+ "rayon",
 ]
 
 [[package]]
@@ -14341,6 +14342,7 @@ dependencies = [
  "bytes",
  "cfg-if",
  "criterion 0.4.0",
+ "dashmap",
  "enumn",
  "ethers",
  "ethers-core",

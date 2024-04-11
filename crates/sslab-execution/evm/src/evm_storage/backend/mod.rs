@@ -1,18 +1,24 @@
-use std::collections::BTreeMap;
 use ethers_core::types::H160;
-use evm::{backend::{Log, Apply}, Config, executor::stack::PrecompileFn};
+use evm::{
+    backend::{Apply, Log},
+    executor::stack::PrecompileFn,
+    Config,
+};
+use std::collections::BTreeMap;
 
 mod concurrent_memory_backend;
+mod concurrent_memory_db;
 mod memory_backend;
 
-pub use concurrent_memory_backend::{CMemoryBackend, CAccount};
+pub use concurrent_memory_backend::{CAccount, CMemoryBackend};
+pub use concurrent_memory_db::InMemoryConcurrentDB;
 pub use memory_backend::MemoryBackend;
 
 pub type ConcurrentHashMap<K, V> = flurry::HashMap<K, V>;
 
 pub struct ExecutionResult {
     pub logs: Vec<Log>,
-    pub effects: Vec::<Apply>,
+    pub effects: Vec<Apply>,
 }
 
 pub trait ApplyBackend {
@@ -20,7 +26,6 @@ pub trait ApplyBackend {
 }
 
 pub trait ExecutionBackend {
-
     fn config(&self) -> &Config;
 
     fn precompiles(&self) -> &BTreeMap<H160, PrecompileFn>;
@@ -32,9 +37,8 @@ pub trait ExecutionBackend {
     fn apply_local_effect(&self, effect: Vec<Apply>);
 }
 
-
 // #[derive(Debug, Default, Clone)]
-// pub struct FlurryHashMap<K, V> 
+// pub struct FlurryHashMap<K, V>
 // where
 //     K: Sync + Send + Clone + Hash + Ord + PartialEq + Eq,
 //     V: Sync + Send + Clone,
@@ -42,8 +46,7 @@ pub trait ExecutionBackend {
 //     pub map: flurry::HashMap<K, V>
 // }
 
-
-// impl <K, V> FlurryHashMap<K, V> 
+// impl <K, V> FlurryHashMap<K, V>
 // where
 //     K: Sync + Send + Clone + Hash + Ord + PartialEq + Eq,
 //     V: Sync + Send + Clone,
@@ -66,7 +69,7 @@ pub trait ExecutionBackend {
 // }
 
 // #[derive(Debug, Default, Clone)]
-// pub struct DashMap<K, V> 
+// pub struct DashMap<K, V>
 // where
 //     K: Sync + Send + Clone + Hash + Eq + PartialEq,
 //     V: Sync + Send,
@@ -74,8 +77,7 @@ pub trait ExecutionBackend {
 //     pub map: dashmap::DashMap<K, V>
 // }
 
-
-// impl<K, V> DashMap<K, V> 
+// impl<K, V> DashMap<K, V>
 // where
 //     K: Sync + Send + Clone + Hash + Eq + PartialEq,
 //     V: Sync + Send,
@@ -85,7 +87,7 @@ pub trait ExecutionBackend {
 //     }
 
 //     pub fn get(&self, key: &K) -> Option<dashmap::mapref::one::Ref<K, V>> {
-//         self.map.get(key) 
+//         self.map.get(key)
 //     }
 
 //     pub fn insert(&self, key: K, value: V) {
@@ -98,14 +100,13 @@ pub trait ExecutionBackend {
 // }
 
 // #[derive(Debug, Default, Clone)]
-// pub struct ShardedMap<K, V> 
+// pub struct ShardedMap<K, V>
 // where
 //     K: Sync + Send + Clone + Hash + Eq + PartialEq,
 //     V: Sync + Send,
 // {
 //     pub map: sharded::Map<K, V>
 // }
-
 
 // impl <K, V>  ShardedMap<K, V>
 // where
@@ -127,10 +128,9 @@ pub trait ExecutionBackend {
 //     pub fn remove(&self, key: &K) {
 //         self.map.remove(key.clone());
 //     }
-// } 
+// }
 
-
-// pub struct LeapfrogMap<K, V> 
+// pub struct LeapfrogMap<K, V>
 // where
 //     K: Sync + Send + Clone + Hash + Eq + PartialEq,
 //     V: Sync + Send,
@@ -138,7 +138,7 @@ pub trait ExecutionBackend {
 //     pub map: leapfrog::LeapMap<K, V>
 // }
 
-// impl<K, V> LeapfrogMap<K, V> 
+// impl<K, V> LeapfrogMap<K, V>
 // where
 //     K: Sync + Send + Clone + Hash + Eq + PartialEq + std::marker::Copy,
 //     V: Sync + Send + leapfrog::Value + std::marker::Copy + Clone + std::fmt::Debug,

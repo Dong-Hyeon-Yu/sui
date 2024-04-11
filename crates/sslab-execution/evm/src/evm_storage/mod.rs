@@ -14,7 +14,9 @@ use reth::{
     revm::InMemoryDB,
 };
 
-use self::backend::{CAccount, CMemoryBackend, ConcurrentHashMap, MemoryBackend};
+use self::backend::{
+    CAccount, CMemoryBackend, ConcurrentHashMap, InMemoryConcurrentDB, MemoryBackend,
+};
 
 pub type SerialEVMStorage = EvmStorage<MemoryBackend>;
 pub type ConcurrentEVMStorage = EvmStorage<CMemoryBackend>;
@@ -144,6 +146,39 @@ pub fn cmemory_backend(contract_addr: &str, bytecode: &str, admin_acc: &str) -> 
 
 pub fn memory_database(contract_addr: &str, bytecode: &str, admin_acc: &str) -> InMemoryDB {
     let mut db = InMemoryDB::default();
+
+    let admin_acc_info = reth::revm::primitives::state::AccountInfo::new(
+        reth::primitives::U256::MAX,
+        0u64,
+        reth::primitives::B256::ZERO,
+        reth::revm::primitives::Bytecode::new(),
+    );
+
+    db.insert_account_info(Address::from_str(admin_acc).unwrap(), admin_acc_info);
+
+    let reth_bytecode =
+        reth::revm::primitives::Bytecode::new_raw(Bytes::from_str(bytecode).unwrap());
+    let code_hash = reth_bytecode.hash_slow();
+    let smallbank_contract = reth::revm::primitives::state::AccountInfo::new(
+        reth::primitives::U256::MAX,
+        0u64,
+        code_hash,
+        reth_bytecode,
+    );
+
+    db.insert_account_info(
+        Address::from_str(contract_addr).unwrap(),
+        smallbank_contract,
+    );
+    db
+}
+
+pub fn concurrent_memory_database(
+    contract_addr: &str,
+    bytecode: &str,
+    admin_acc: &str,
+) -> InMemoryConcurrentDB {
+    let db = InMemoryConcurrentDB::default();
 
     let admin_acc_info = reth::revm::primitives::state::AccountInfo::new(
         reth::primitives::U256::MAX,

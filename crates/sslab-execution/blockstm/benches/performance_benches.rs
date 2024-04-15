@@ -36,18 +36,56 @@ fn _create_random_smallbank_workload(
     handler.create_batches(batch_size, block_concurrency, skewness, account_num)
 }
 
-fn batch_size(c: &mut Criterion) {
-    let s = [0.0, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
+fn batch(c: &mut Criterion) {
+    let s = [0.0];
     let param = 1..81;
-    let mut group = c.benchmark_group("BlockSTM Benchmark according to batch size");
+    let mut group = c.benchmark_group("BlockSTM");
 
     for skewness in s {
         for i in param.clone() {
             group.throughput(Throughput::Elements((DEFAULT_BATCH_SIZE * i) as u64));
             group.bench_with_input(
                 criterion::BenchmarkId::new(
-                    "blockstm",
-                    format!("skewness: {skewness}, batch size: {i}"),
+                    "batchsize",
+                    format!("zipfian: {skewness}, #batch: {i}"),
+                ),
+                &i,
+                |b, i| {
+                    b.to_async(tokio::runtime::Runtime::new().unwrap())
+                        .iter_batched(
+                            || {
+                                let consensus_output = _create_random_smallbank_workload(
+                                    skewness,
+                                    DEFAULT_BATCH_SIZE * i,
+                                    1,
+                                    DEFAULT_ACCOUNT_NUM,
+                                );
+                                let blockstm = _get_blockstm_executor();
+                                (blockstm, consensus_output)
+                            },
+                            |(blockstm, consensus_output)| async move {
+                                let _ = blockstm.execute(consensus_output).await;
+                            },
+                            BatchSize::SmallInput,
+                        );
+                },
+            );
+        }
+    }
+}
+
+fn skewness(c: &mut Criterion) {
+    let s = [0.0, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
+    let param = 80..81;
+    let mut group = c.benchmark_group("BlockSTM");
+
+    for skewness in s {
+        for i in param.clone() {
+            group.throughput(Throughput::Elements((DEFAULT_BATCH_SIZE * i) as u64));
+            group.bench_with_input(
+                criterion::BenchmarkId::new(
+                    "skewness",
+                    format!("zipfian: {skewness}, #batch: {i}"),
                 ),
                 &i,
                 |b, i| {
@@ -75,10 +113,10 @@ fn batch_size(c: &mut Criterion) {
 }
 
 fn latency(c: &mut Criterion) {
-    let account_nums = [100000, 1400, 1200, 1000, 800, 600, 400, 200];
+    let account_nums = [400];
     let s = [0.0, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
-    let param = 1..5;
-    let mut group = c.benchmark_group("BlockSTM Benchmark");
+    let param = 1..2;
+    let mut group = c.benchmark_group("BlockSTM");
 
     for account_num in account_nums {
         for i in param.clone() {
@@ -90,7 +128,7 @@ fn latency(c: &mut Criterion) {
                 group.bench_with_input(
                     criterion::BenchmarkId::new(
                         "latency",
-                        format!(" #account: {account_num}, skewness: {skewness}, #batch: {i},"),
+                        format!(" #account: {account_num}, zipfian: {skewness}, #batch: {i},"),
                     ),
                     &(i, latency_metrics.clone()),
                     |b, (i, latency_metrics)| {
@@ -137,5 +175,5 @@ fn latency(c: &mut Criterion) {
     }
 }
 
-criterion_group!(benches, latency);
-criterion_main!(benches);
+criterion_group!(blockstm, batch, skewness, latency);
+criterion_main!(blockstm);

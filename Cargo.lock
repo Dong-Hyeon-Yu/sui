@@ -10579,6 +10579,7 @@ dependencies = [
  "anyhow",
  "arc-swap",
  "async-trait",
+ "criterion 0.4.0",
  "criterion 0.5.1",
  "crossbeam",
  "crossbeam-queue",
@@ -10594,6 +10595,7 @@ dependencies = [
  "rayon",
  "sslab-execution",
  "sui-types",
+ "tokio",
  "tracing",
 ]
 

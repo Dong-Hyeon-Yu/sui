@@ -5,6 +5,12 @@ import sys
 MICRO = "µs"
 MILLI = "ms"
 
+def _parse_tps(log):
+    tmp = findall(r'ktps: (\d+\.\d+)', log)
+    ktps = [float(t) for t in tmp]
+    
+    return ktps
+
 def _parse_parallelism(log):
     tmp = findall(r'total_tx: (\d+\.\d+), average_height: (\d+\.\d+), std_height: (\d+\.\d+), skewness of height: (\d+\.\d+), max_height: (\d+\.\d+), depth: (\d+\.\d+)', log)
     metric = [(int(float(total_tx)), float(average_height), float(std_height), float(skewness), float(max_hieght), float(depth)) 
@@ -63,6 +69,11 @@ def result(log):
     result = "[total]\n"
     for duration in total:
         result += f"{duration} \n"
+        
+    if ktps := _parse_tps(log):
+        result += "\n[KTPS]\n"
+        for tps in ktps:
+            result += f"{tps} \n"
         
     simulation, scheduling, commit = _parse_nezha(log)
     if simulation:

@@ -1,7 +1,6 @@
-use ethers_core::types::H256;
 use itertools::Itertools;
 use narwhal_types::BatchDigest;
-use rayon::prelude::*;
+use rayon::{iter::Either, prelude::*};
 use sslab_execution::{
     evm_storage::{backend::ExecutionBackend, ConcurrentEVMStorage},
     executor::Executable,
@@ -98,7 +97,7 @@ impl ConcurrencyLevelManager {
     ) -> Vec<BatchDigest> {
         let (digests, tx_list) = Self::_unpack_batches(consensus_output).await;
 
-        let scheduled_aborted_txs: Vec<Vec<Arc<Transaction>>>;
+        let mut remains;
 
         // 1st execution
         {
@@ -116,58 +115,71 @@ impl ConcurrencyLevelManager {
 
             self._concurrent_commit(scheduled_txs).await;
 
-            scheduled_aborted_txs = aborted_txs;
+            remains = aborted_txs;
         }
 
-        for tx_list_to_re_execute in scheduled_aborted_txs.into_iter() {
-            // 2nd execution
-            //  (1) re-simulation  ----------------> (rw-sets are changed ??)  -------yes-------> (2') invalidate (or, fallback)
-            //                                                 |
-            //                                                no
-            //                                                 |
-            //                                          (2) commit
-
-            let rw_sets = self
-                ._simulate(
-                    tx_list_to_re_execute
-                        .iter()
-                        .map(|tx| tx.raw_tx().clone())
-                        .collect(),
-                )
+        let mut epoch = 1u32;
+        while !remains.is_empty() {
+            // optimistic scheduling
+            let ScheduledInfo {
+                scheduled_txs,
+                aborted_txs,
+            } = AddressBasedConflictGraph::par_optimistic_construct(remains)
+                .await
+                .hierarchcial_sort()
+                .reorder()
+                .par_extract_schedule()
                 .await;
 
-            match self._validate_optimistic_assumption(rw_sets).await {
-                None => {}
-                Some(invalid_txs) => {
-                    //* invalidate */
-                    tracing::debug!("invalidated txs: {:?}", invalid_txs);
+            if scheduled_txs.is_empty() {
+                println!(
+                    "(epoch # {}) aborted transactions({}): {:?}",
+                    epoch,
+                    aborted_txs.len(),
+                    aborted_txs
+                );
+                panic!("endless loop!");
+            }
 
-                    //* fallback */
-                    // let ScheduledInfo {scheduled_txs, aborted_txs } = AddressBasedConflictGraph::par_construct(rw_sets).await
-                    //     .hierarchcial_sort()
-                    //     .reorder()
-                    //     .par_extract_schedule().await;
+            // validation by speculative execution
+            for txs in scheduled_txs {
+                let raw_tx_list = txs.par_iter().map(|tx| tx.raw_tx()).cloned().collect();
+                let simulated_txs = self._simulate(raw_tx_list).await;
 
-                    // self._concurrent_commit(scheduled_txs).await;
+                match self
+                    ._validate_optimistic_assumption(txs, simulated_txs)
+                    .await
+                {
+                    Some(invalid_txs) => {
+                        // invalidate txs
+                        tracing::debug!(
+                            "(epoch # {}) invalidate txs: {:?}",
+                            epoch,
+                            invalid_txs.len()
+                        );
 
-                    //* 3rd execution (serial) for complex transactions */
-                    // let snapshot = self.global_state.clone();
-                    // tokio::task::spawn_blocking(move || {
-                    //     aborted_txs.into_iter()
-                    //         .flatten()
-                    //         .for_each(|tx| {
-                    //             match evm_utils::simulate_tx(tx.raw_tx(), snapshot.as_ref()) {
-                    //                 Ok(Some((effect, _, _))) => {
-                    //                     snapshot.apply_local_effect(effect);
-                    //                 },
-                    //                 _ => {
-                    //                     warn!("fail to execute a transaction {}", tx.id());
-                    //                 }
-                    //             }
-                    //         });
-                    // }).await.expect("fail to spawn a task for serial execution of aborted txs");
+                        /* fallback to serial execution */
+                        // let snapshot = self.global_state.clone();
+                        // tokio::task::spawn_blocking(move || {
+                        //     simulated_txs.into_iter()
+                        //         .for_each(|tx| {
+                        //             match evm_utils::simulate_tx(tx.raw_tx(), snapshot.as_ref()) {
+                        //                 Ok(Some((effect, _, _))) => {
+                        //                     snapshot.apply_local_effect(effect);
+                        //                 },
+                        //                 _ => {
+                        //                     warn!("fail to execute a transaction {}", tx.id());
+                        //                 }
+                        //             }
+                        //         });
+                        // }).await.expect("fail to spawn a task for serial execution of aborted txs");
+                    }
+                    None => {}
                 }
             }
+
+            remains = aborted_txs;
+            epoch += 1;
         }
 
         digests
@@ -249,49 +261,81 @@ impl ConcurrencyLevelManager {
 
     async fn _validate_optimistic_assumption(
         &self,
-        rw_set: Vec<SimulatedTransaction>,
+        previous_tx: Vec<ScheduledTransaction>,
+        mut rw_set: Vec<SimulatedTransaction>,
     ) -> Option<Vec<SimulatedTransaction>> {
         if rw_set.len() == 1 {
-            self._concurrent_commit_2(rw_set).await;
+            self._concurrent_commit(vec![vec![ScheduledTransaction::from(
+                rw_set.pop().unwrap(),
+            )]])
+            .await;
             return None;
         }
 
         let (send, recv) = tokio::sync::oneshot::channel();
         rayon::spawn(move || {
-            let mut valid_txs = vec![];
-            let mut invalid_txs = vec![];
-
-            let mut write_set = hashbrown::HashSet::<H256>::new();
-            for tx in rw_set.into_iter() {
-                match tx.write_set() {
-                    Some(ref set) => {
-                        if (set.len() <= write_set.len() && set.is_disjoint(&write_set)) // select smaller set using short-circuit evaluation
-                            || (set.len() > write_set.len() && write_set.is_disjoint(set))
-                        {
-                            write_set.extend(set);
-                            valid_txs.push(tx);
-                        } else {
-                            invalid_txs.push(tx);
-                        }
+            // validation optimistic assumption: RW keys are not changed after re-execution.
+            let (mut valid_list, _invalid_list): (Vec<_>, Vec<_>) =
+                previous_tx.iter().zip(rw_set).partition_map(|(prev, cur)| {
+                    let (prev_write_set, prev_read_set) = prev.rw_set();
+                    if prev_write_set == cur.write_set().unwrap()
+                        && prev_read_set == cur.read_set().unwrap()
+                    {
+                        Either::Left(cur)
+                    } else {
+                        Either::Right(cur)
                     }
-                    None => {
-                        valid_txs.push(tx);
+                });
+
+            // allow only one write in one key.
+            let mut invalid_list = vec![];
+            if _invalid_list.len() > 0 {
+                let mut write_set: hashbrown::HashSet<_> =
+                    valid_list
+                        .iter()
+                        .fold(hashbrown::HashSet::new(), |mut set, tx| {
+                            set.extend(tx.write_set().unwrap());
+                            set
+                        });
+
+                for tx in _invalid_list.into_iter() {
+                    match tx.write_set() {
+                        Some(ref set) => {
+                            if (set.len() <= write_set.len() && set.is_disjoint(&write_set)) // select smaller set using short-circuit evaluation
+                                || (set.len() > write_set.len() && write_set.is_disjoint(set))
+                            {
+                                write_set.extend(set);
+                                valid_list.push(tx);
+                            } else {
+                                invalid_list.push(tx);
+                            }
+                        }
+                        None => {
+                            valid_list.push(tx);
+                        }
                     }
                 }
             }
 
-            if invalid_txs.is_empty() {
-                let _ = send.send((valid_txs, None));
-            } else {
-                let _ = send.send((valid_txs, Some(invalid_txs)));
-            }
+            send.send((valid_list, invalid_list)).unwrap();
         });
 
-        let (valid_txs, invalid_txs) = recv.await.unwrap();
-
-        self._concurrent_commit_2(valid_txs).await;
-
-        invalid_txs
+        match recv.await {
+            Ok((valid_list, invalid_list)) => {
+                self._concurrent_commit_2(valid_list).await;
+                if invalid_list.len() > 0 {
+                    Some(invalid_list)
+                } else {
+                    None
+                }
+            }
+            Err(e) => {
+                panic!(
+                    "fail to receive validation result from the worker thread. {:?}",
+                    e
+                );
+            }
+        }
     }
 
     pub async fn _concurrent_commit_2(&self, scheduled_txs: Vec<SimulatedTransaction>) {
@@ -308,103 +352,9 @@ impl ConcurrencyLevelManager {
     }
 }
 
-#[cfg(all(feature = "parallelism-analysis", feature = "disable-early-detection"))]
-#[async_trait::async_trait]
-pub trait Benchmark {
-    async fn _analysis_parallelism_of_nezha_with_fuw(
-        &self,
-        consensus_output: Vec<ExecutableEthereumBatch>,
-    ) -> (f64, f64, f64, f64, f64, u32);
-
-    async fn _analysis_parallelism_of_optme(
-        &self,
-        consensus_output: Vec<ExecutableEthereumBatch>,
-    ) -> (f64, f64, f64, f64, f64, u32);
-}
-#[cfg(all(feature = "parallelism-analysis", feature = "disable-early-detection"))]
-use crate::address_based_conflict_graph::Benchmark as _;
-#[cfg(all(feature = "parallelism-analysis", feature = "disable-early-detection"))]
-use incr_stats::incr::Stats;
-
-#[cfg(all(feature = "parallelism-analysis", feature = "disable-early-detection"))]
-#[async_trait::async_trait]
-impl Benchmark for ConcurrencyLevelManager {
-    async fn _analysis_parallelism_of_nezha_with_fuw(
-        &self,
-        consensus_output: Vec<ExecutableEthereumBatch>,
-    ) -> (f64, f64, f64, f64, f64, u32) {
-        let (_, tx_list) = Self::_unpack_batches(consensus_output).await;
-        let rw_sets = self._simulate(tx_list).await;
-
-        let ScheduledInfo {
-            scheduled_txs,
-            aborted_txs: _,
-        } = AddressBasedConflictGraph::par_construct_without_early_detection(rw_sets)
-            .await
-            .hierarchcial_sort()
-            .reorder()
-            .par_extract_schedule()
-            .await;
-
-        let mut stat = Stats::new();
-        scheduled_txs.iter().for_each(|seq| {
-            stat.update(seq.len() as f64).ok();
-        });
-
-        let metric = (
-            stat.sum().unwrap_or_default(),
-            stat.mean().unwrap_or_default(),
-            stat.population_standard_deviation().unwrap_or_default(),
-            stat.population_skewness().unwrap_or_default(),
-            stat.max().unwrap_or_default(),
-            stat.count(),
-        );
-
-        metric
-    }
-
-    async fn _analysis_parallelism_of_optme(
-        &self,
-        consensus_output: Vec<ExecutableEthereumBatch>,
-    ) -> (f64, f64, f64, f64, f64, u32) {
-        let (_, tx_list) = Self::_unpack_batches(consensus_output).await;
-        let rw_sets = self._simulate(tx_list).await;
-
-        let ScheduledInfo {
-            scheduled_txs,
-            aborted_txs,
-        } = AddressBasedConflictGraph::par_construct(rw_sets)
-            .await
-            .hierarchcial_sort()
-            .reorder()
-            .par_extract_schedule()
-            .await;
-
-        let mut stat = Stats::new();
-        scheduled_txs.iter().for_each(|seq| {
-            stat.update(seq.len() as f64).ok();
-        });
-
-        aborted_txs.iter().for_each(|seq| {
-            stat.update(seq.len() as f64).ok();
-        });
-
-        let metric = (
-            stat.sum().unwrap_or_default(),
-            stat.mean().unwrap_or_default(),
-            stat.population_standard_deviation().unwrap_or_default(),
-            stat.population_skewness().unwrap_or_default(),
-            stat.max().unwrap_or_default(),
-            stat.count(),
-        );
-
-        metric
-    }
-}
-
 pub struct ScheduledInfo {
     pub scheduled_txs: Vec<Vec<ScheduledTransaction>>,
-    pub aborted_txs: Vec<Vec<Arc<Transaction>>>,
+    pub aborted_txs: Vec<Arc<Transaction>>,
 }
 
 impl ScheduledInfo {
@@ -412,8 +362,8 @@ impl ScheduledInfo {
         tx_list: FastHashMap<u64, Arc<Transaction>>,
         aborted_txs: Vec<Arc<Transaction>>,
     ) -> Self {
-        let aborted_txs = Self::_schedule_aborted_txs(aborted_txs, false);
-        let scheduled_txs = Self::_schedule_sorted_txs(tx_list, false);
+        let aborted_txs = Self::_process_aborted_txs(aborted_txs, false);
+        let scheduled_txs = Self::_schedule_for_sorted_txs(tx_list, false);
 
         Self {
             scheduled_txs,
@@ -425,8 +375,8 @@ impl ScheduledInfo {
         tx_list: FastHashMap<u64, Arc<Transaction>>,
         aborted_txs: Vec<Arc<Transaction>>,
     ) -> Self {
-        let aborted_txs = Self::_schedule_aborted_txs(aborted_txs, true);
-        let scheduled_txs = Self::_schedule_sorted_txs(tx_list, true);
+        let aborted_txs = Self::_process_aborted_txs(aborted_txs, true);
+        let scheduled_txs = Self::_schedule_for_sorted_txs(tx_list, true);
 
         Self {
             scheduled_txs,
@@ -448,7 +398,7 @@ impl ScheduledInfo {
         }
     }
 
-    fn _schedule_sorted_txs(
+    fn _schedule_for_sorted_txs(
         tx_list: FastHashMap<u64, Arc<Transaction>>,
         rayon: bool,
     ) -> Vec<Vec<ScheduledTransaction>> {
@@ -488,10 +438,10 @@ impl ScheduledInfo {
         scheduled_txs
     }
 
-    fn _schedule_aborted_txs(
+    fn _process_aborted_txs(
         mut aborted_txs: Vec<Arc<Transaction>>,
         rayon: bool,
-    ) -> Vec<Vec<Arc<Transaction>>> {
+    ) -> Vec<Arc<Transaction>> {
         if rayon {
             aborted_txs.par_iter().for_each(|tx| {
                 tx.clear_write_units();
@@ -504,58 +454,9 @@ impl ScheduledInfo {
             });
         };
 
-        // determine minimum #epoch in which tx have no conflicts with others --> by binary-search over a map (#epoch, writeset)
-        let mut epoch_map: Vec<hashbrown::HashSet<H256>> = vec![]; // (epoch, write set)
+        aborted_txs.sort_by_key(|tx| tx.id());
 
-        // store final schedule information
-        let mut schedule: Vec<Vec<Arc<Transaction>>> = vec![];
-
-        aborted_txs.sort_unstable_by_key(|tx| tx.id());
-
-        for tx in aborted_txs.iter() {
-            let tx_info = tx.abort_info.read();
-            let read_keys = tx_info.read_keys();
-            let write_keys = tx_info.write_keys();
-
-            let epoch =
-                Self::_find_minimun_epoch_with_no_conflicts(&read_keys, &write_keys, &epoch_map);
-
-            // update epoch_map & schedule
-            match epoch_map.get_mut(epoch) {
-                Some(w_map) => {
-                    w_map.extend(write_keys);
-                    schedule[epoch].push(tx.clone());
-                }
-                None => {
-                    epoch_map.push(write_keys);
-                    schedule.push(vec![tx.clone()]);
-                }
-            };
-        }
-
-        schedule
-    }
-
-    fn _find_minimun_epoch_with_no_conflicts(
-        read_keys_of_tx: &hashbrown::HashSet<H256>,
-        write_keys_of_tx: &hashbrown::HashSet<H256>,
-        epoch_map: &Vec<hashbrown::HashSet<H256>>,
-    ) -> usize {
-        // 1) ww dependencies are occured when the keys which are both read and written by latter tx are overlapped with the rw keys of the previous txs in the same epoch.
-        //   for simplicity, only single write is allowed for each key in the same epoch.
-
-        // 2) anti-rw dependencies are occured when the read keys of latter tx are overlapped with the write keys of the previous txs in the same epoch.
-        let keys_of_tx = read_keys_of_tx
-            .union(write_keys_of_tx)
-            .cloned()
-            .collect::<hashbrown::HashSet<_>>();
-
-        let mut epoch = 0;
-        while epoch_map.len() > epoch && !keys_of_tx.is_disjoint(&epoch_map[epoch]) {
-            epoch += 1;
-        }
-
-        epoch
+        aborted_txs
     }
 
     pub fn scheduled_txs_len(&self) -> usize {
@@ -563,31 +464,6 @@ impl ScheduledInfo {
     }
 
     pub fn aborted_txs_len(&self) -> usize {
-        self.aborted_txs.iter().map(|vec| vec.len()).sum()
-    }
-
-    pub fn parallism_metric(&self) -> (usize, f64, f64, usize, usize) {
-        let total_tx = self.scheduled_txs_len() + self.aborted_txs_len();
-        let max_width = self
-            .scheduled_txs
-            .iter()
-            .map(|vec| vec.len())
-            .max()
-            .unwrap_or(0);
-        let depth = self.scheduled_txs.len();
-        let average_width = self
-            .scheduled_txs
-            .iter()
-            .map(|vec| vec.len())
-            .sum::<usize>() as f64
-            / depth as f64;
-        let var_width = self
-            .scheduled_txs
-            .iter()
-            .map(|vec| vec.len())
-            .fold(0.0, |acc, len| acc + (len as f64 - average_width).powi(2))
-            / depth as f64;
-        let std_width = var_width.sqrt();
-        (total_tx, average_width, std_width, max_width, depth)
+        self.aborted_txs.len()
     }
 }

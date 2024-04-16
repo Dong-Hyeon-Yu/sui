@@ -65,6 +65,39 @@ impl AddressBasedConflictGraph {
         acg
     }
 
+    pub fn optimistic_construct(aborted_txs: Vec<Arc<Transaction>>) -> Self {
+        let mut acg = Self::new();
+
+        for tx in aborted_txs {
+            let (prev_write, prev_read);
+            {
+                let abort_info = tx.abort_info.read();
+                prev_write = abort_info.prev_write_map().clone();
+                prev_read = abort_info.prev_read_map().clone();
+            }
+            let mut write_units =
+                Self::_convert_to_units(&tx, UnitType::Write, prev_write, Some(&prev_read));
+
+            if acg._check_updater_already_exist_in_same_address(&write_units) {
+                tx.abort();
+                acg.ww_aborted_txs.push(tx);
+                continue;
+            }
+
+            let mut read_units = Self::_convert_to_units(&tx, UnitType::Read, prev_read, None);
+
+            // before inserting the units, wr-dependencies must be created b/w RW units.
+            Self::_set_wr_dependencies(&mut read_units, &mut write_units);
+
+            tx.set_write_units(write_units.clone());
+
+            acg.tx_list.insert(tx.id(), tx);
+            acg._add_units_to_address([read_units, write_units].concat());
+        }
+
+        acg
+    }
+
     async fn _par_construct<F, B>(simulation_result: Vec<B>, constructor: F) -> Self
     where
         B: Sync + Send + Clone + 'static,
@@ -105,6 +138,10 @@ impl AddressBasedConflictGraph {
 
     pub async fn par_construct(simulation_result: Vec<SimulatedTransaction>) -> Self {
         Self::_par_construct(simulation_result, Self::construct).await
+    }
+
+    pub async fn par_optimistic_construct(aborted_txs: Vec<Arc<Transaction>>) -> Self {
+        Self::_par_construct(aborted_txs, Self::optimistic_construct).await
     }
 
     pub fn hierarchcial_sort(&mut self) -> &mut Self {
@@ -317,62 +354,6 @@ impl AddressBasedConflictGraph {
             });
         self.tx_list.extend(other.tx_list);
         self.ww_aborted_txs.extend(other.ww_aborted_txs);
-    }
-}
-
-#[cfg(feature = "disable-early-detection")]
-#[async_trait::async_trait]
-pub trait Benchmark
-where
-    Self: 'static,
-{
-    fn construct_without_early_detection(
-        simulation_result: Vec<SimulatedTransaction>,
-    ) -> AddressBasedConflictGraph;
-
-    async fn par_construct_without_early_detection(
-        simulation_result: Vec<SimulatedTransaction>,
-    ) -> AddressBasedConflictGraph {
-        AddressBasedConflictGraph::_par_construct(
-            simulation_result,
-            Self::construct_without_early_detection,
-        )
-        .await
-    }
-}
-
-#[cfg(feature = "disable-early-detection")]
-#[async_trait::async_trait]
-impl Benchmark for AddressBasedConflictGraph {
-    fn construct_without_early_detection(
-        simulation_result: Vec<SimulatedTransaction>,
-    ) -> AddressBasedConflictGraph {
-        let mut acg = AddressBasedConflictGraph::new();
-
-        for tx in simulation_result {
-            let (_tx, rw_set) = Transaction::from(tx);
-            let tx = Arc::new(_tx);
-
-            let (read_set, write_set) = rw_set.destruct();
-            let mut write_units = AddressBasedConflictGraph::_convert_to_units(
-                &tx,
-                UnitType::Write,
-                write_set,
-                Some(&read_set),
-            );
-
-            let mut read_units =
-                AddressBasedConflictGraph::_convert_to_units(&tx, UnitType::Read, read_set, None);
-
-            // before inserting the units, wr-dependencies must be created b/w RW units.
-            AddressBasedConflictGraph::_set_wr_dependencies(&mut read_units, &mut write_units);
-            tx.set_write_units(write_units.clone());
-
-            acg.tx_list.insert(tx.id(), tx);
-            acg._add_units_to_address([read_units, write_units].concat());
-        }
-
-        acg
     }
 }
 

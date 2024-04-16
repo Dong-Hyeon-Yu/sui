@@ -42,10 +42,10 @@ fn _get_rw_sets(
     rx.recv().unwrap()
 }
 
-fn optme(c: &mut Criterion) {
+fn optme_baseline(c: &mut Criterion) {
     let s = [0.0];
     let param = 1..81;
-    let mut group = c.benchmark_group("OptME");
+    let mut group = c.benchmark_group("OptME(baseline)");
 
     for skewness in s {
         for i in param.clone() {
@@ -79,10 +79,10 @@ fn optme(c: &mut Criterion) {
     }
 }
 
-fn optme_skewness(c: &mut Criterion) {
+fn optme_baseline_skewness(c: &mut Criterion) {
     let s = [0.0, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
     let param = 80..81;
-    let mut group = c.benchmark_group("OptME");
+    let mut group = c.benchmark_group("OptME(baseline)");
 
     for skewness in s {
         for i in param.clone() {
@@ -116,5 +116,5 @@ fn optme_skewness(c: &mut Criterion) {
     }
 }
 
-criterion_group!(benches, optme, optme_skewness);
+criterion_group!(benches, optme_baseline, optme_baseline_skewness);
 criterion_main!(benches);

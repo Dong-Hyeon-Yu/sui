@@ -37,6 +37,7 @@ disable-early-detection = []
 parallelism = ["parallelism-analysis", "disable-early-detection"]
 optimizations = ["disable-early-detection"]
 optme = []
+latency = []
 
 [[bench]]
 name = "optme"
@@ -52,3 +53,8 @@ required-features = ["parallelism"]
 name = "optimizations"
 harness = false
 required-features = ["optimizations"]
+
+[[bench]]
+name = "latency"
+harness = false
+required-features = ["latency"]

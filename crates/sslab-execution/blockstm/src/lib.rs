@@ -23,7 +23,7 @@ use sslab_execution::{
     executor::Executable,
     types::EthereumTransaction,
 };
-use std::{sync::Arc, time::Instant};
+use std::sync::Arc;
 use sui_types::error::SuiError;
 use task::ExecutorTask;
 use tracing::{debug, warn};
@@ -140,6 +140,7 @@ impl Executable for BlockSTM {
     }
 }
 
+#[cfg(feature = "latency")]
 impl BlockSTM {
     pub async fn execute_and_return_commit_latency(
         &self,
@@ -160,7 +161,7 @@ impl BlockSTM {
             {
                 Ok(effects) => {
                     let _effects = effects.into_iter().flat_map(|output| output.0).collect();
-                    let latency = Instant::now();
+                    let latency = std::time::Instant::now();
                     self.global_state.apply_local_effect(_effects);
                     commit_latency += latency.elapsed().as_millis();
                 }

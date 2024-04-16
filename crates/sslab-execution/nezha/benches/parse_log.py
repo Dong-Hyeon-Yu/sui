@@ -25,17 +25,27 @@ def _parse_throughput(log):
     
     return [float(tps) for tps in tmp]
         
-def _parse_nezha(log):
-    tmp = findall(r'Simulation: (\d+\.\d+)', log)
-    simulation = [float(t) for t in tmp]
+
+def _parse_latency(log):
+    tmp = findall(r'Total: \d+\.\d+, Simulation: (\d+\.\d+), Scheduling: \d+\.\d+, Validation: \d+\.\d+, Commit: \d+\.\d+, Other: \d+\.\d+', log)
+    simulation = [float(s) for s in tmp]
     
-    tmp = findall(r'Scheduling: (\d+\.\d+)', log)
-    scheduling = [float(t) for t in tmp]
+    tmp = findall(r'Total: \d+\.\d+, Simulation: \d+\.\d+, Scheduling: (\d+\.\d+), Validation: \d+\.\d+, Commit: \d+\.\d+, Other: \d+\.\d+', log)
+    scheduling = [float(s) for s in tmp]
     
-    tmp = findall(r'Commit: (\d+\.\d+)', log)
-    commit = [float(t) for t in tmp]
+    tmp = findall(r'Total: \d+\.\d+, Simulation: \d+\.\d+, Scheduling: \d+\.\d+, Validation: (\d+\.\d+), Commit: \d+\.\d+, Other: \d+\.\d+', log)
+    validation = [float(s) for s in tmp]
     
-    return simulation, scheduling, commit
+    tmp = findall(r'Total: \d+\.\d+, Simulation: \d+\.\d+, Scheduling: \d+\.\d+, Validation: \d+\.\d+, Commit: (\d+\.\d+), Other: \d+\.\d+', log)
+    commit = [float(s) for s in tmp]
+    
+    tmp = findall(r'Total: \d+\.\d+, Simulation: \d+\.\d+, Scheduling: \d+\.\d+, Validation: \d+\.\d+, Commit: \d+\.\d+, Other: (\d+\.\d+)', log)
+    other = [float(s) for s in tmp]
+    
+    tmp = findall(r'Ktps: (\d+\.\d+)', log)
+    ktps = [float(t) for t in tmp]
+    
+    return ktps, simulation, scheduling, validation, commit, other
 
 def result(log):
     
@@ -44,21 +54,14 @@ def result(log):
     for ktps in total:
         result += f"{ktps} \n"
         
-    simulation, scheduling, commit = _parse_nezha(log)
-    if simulation:
-        result += "\n[Simulation]\n"
-        for duration in simulation:
-            result += f"{duration} \n"
         
-        result += "\n[Scheduling]\n"
-        for duration in scheduling:
-            result += f"{duration} \n"
-            
-        result += "\n[Commit]\n"
-        for duration in commit:
-            result += f"{duration} \n"
+    if latency:= _parse_latency(log):
+        ktps, simulation, scheduling, validation, commit, other = latency
+        result += "\n[Latency (Ktps; simulation (ms); scheduling (ms); validation (ms); commit (ms); other (ms))]\n"
+        for k, si, sc, v, c, o in zip(ktps, simulation, scheduling, validation, commit, other, strict=True):
+            result += f"{k} {si} {sc} {v} {c} {o}\n"
     
-    construct, sort, reorder, extraction = _parse_scheduling(log)
+    construct, sort, reorder, _ = _parse_scheduling(log)
     if construct:
         result += "\n[ACG construction]\n"
         for duration in construct:

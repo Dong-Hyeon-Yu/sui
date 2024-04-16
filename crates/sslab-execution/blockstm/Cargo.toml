@@ -47,6 +47,8 @@ parking_lot.workspace = true
 
 [features]
 fuzzing = ["criterion", "proptest", "proptest-derive"]
+latency = []
+
 
 [[bench]]
 name = "scheduler_benches"
@@ -56,3 +58,8 @@ required-features = ["fuzzing"]
 [[bench]]
 name = "performance_benches"
 harness = false
+
+[[bench]]
+name = "latency"
+harness = false
+required-features = ["latency"]

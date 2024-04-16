@@ -9,13 +9,16 @@ def _parse_throughput(log):
     return [float(tps) for tps in tmp]
 
 def _parse_latency(log):
-    tmp = findall(r'total: (\d+\.?\d*)', log)
-    total = [float(t) for t in tmp]
+    tmp = findall(r'execution: (\d+\.?\d*)', log)
+    execution = [float(e) for e in tmp]
     
     tmp = findall(r'commit: (\d+\.?\d*)', log)
     commit = [float(c) for c in tmp]
+    
+    tmp = findall(r'Ktps: (\d+\.?\d*)', log)
+    ktps = [float(t) for t in tmp]
         
-    return total, commit
+    return ktps, execution, commit
 
 def result(log):
     
@@ -25,10 +28,10 @@ def result(log):
         result += f"{ktps} \n"
         
     if latency:= _parse_latency(log):
-        total, commit = latency
-        result += "\n[latency]\n"
-        for t, c in zip(total, commit, strict=True):
-            result += f"{t} {c}\n"
+        ktps, execution, commit = latency
+        result += "\n[latency (Ktps; execution (ms); commit (ms))]\n"
+        for k, e, c in zip(ktps, execution, commit, strict=True):
+            result += f"{k} {e} {c}\n"
         
     return result
 

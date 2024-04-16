@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use criterion::Throughput;
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use ethers_providers::{MockProvider, Provider};
@@ -11,8 +10,6 @@ use sslab_execution::{
 use sslab_execution_nezha::{ConcurrencyLevelManager, SimulatedTransaction, SimulationResult};
 
 const DEFAULT_BATCH_SIZE: usize = 200;
-const DEFAULT_BLOCK_CONCURRENCY: usize = 12;
-const DEFAULT_SKEWNESS: f32 = 0.0;
 
 fn _get_smallbank_handler() -> SmallBankTransactionHandler {
     let provider = Provider::<MockProvider>::new(MockProvider::default());

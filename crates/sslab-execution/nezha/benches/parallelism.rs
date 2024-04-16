@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use criterion::Throughput;
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use ethers_providers::{MockProvider, Provider};
@@ -87,6 +86,12 @@ fn parallelism_of_first_committer_wins_rule(c: &mut Criterion) {
                 },
             );
 
+            let len = parallelism_metrics.read().len();
+
+            if len == 0 {
+                continue;
+            }
+
             let (
                 // mut total_tx,
                 mut average_height,
@@ -95,7 +100,7 @@ fn parallelism_of_first_committer_wins_rule(c: &mut Criterion) {
                 // mut max_height,
                 mut depth,
             ) = (0 as f64, 0 as u32);
-            let len = parallelism_metrics.read().len();
+
             for (_a1, a2, _a3, _a4, _a5, a6) in parallelism_metrics.read().iter() {
                 average_height += a2;
                 depth += a6;

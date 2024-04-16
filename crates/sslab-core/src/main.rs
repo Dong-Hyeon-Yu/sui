@@ -15,20 +15,22 @@ use fastcrypto::traits::KeyPair as _;
 use mysten_metrics::RegistryService;
 use narwhal_config::{Committee, Import, Parameters, WorkerCache, WorkerId};
 use narwhal_crypto::{KeyPair, NetworkKeyPair};
+use narwhal_network::client::{PrimaryNetworkClient, WorkerNetworkClient};
 use narwhal_node as node;
-use narwhal_node::{CertificateStoreCacheMetrics, NodeStorage, worker_node::WorkerNode, primary_node::PrimaryNode};
-use narwhal_network::client::{WorkerNetworkClient, PrimaryNetworkClient};
+use narwhal_node::{
+    primary_node::PrimaryNode, worker_node::WorkerNode, CertificateStoreCacheMetrics, NodeStorage,
+};
 use node::metrics::{primary_metrics_registry, start_prometheus_server, worker_metrics_registry};
 use prometheus::Registry;
-use sslab_execution::{executor::ParallelExecutor, transaction_validator::EthereumTxValidator};
 use sslab_core::consensus_handler::SimpleConsensusHandler;
-use sui_simulator::telemetry_subscribers;
+use sslab_execution::{executor::ParallelExecutor, transaction_validator::EthereumTxValidator};
 use std::sync::Arc;
 use sui_keys::keypair_file::{
     read_authority_keypair_from_file, read_network_keypair_from_file,
     write_authority_keypair_to_file, write_keypair_to_file,
 };
 use sui_protocol_config::{Chain, ProtocolConfig, ProtocolVersion};
+use sui_simulator::telemetry_subscribers;
 use sui_types::crypto::{get_key_pair_from_rng, AuthorityKeyPair, SuiKeyPair};
 use telemetry_subscribers::TelemetryGuards;
 use tracing::{info, warn};
@@ -282,30 +284,29 @@ async fn run(
 
             let client = WorkerNetworkClient::new_from_keypair(&primary_network_keypair);
 
-            let (tx_consensus_certificate, rx_consensus_certificate) = tokio::sync::mpsc::channel(5);
-            
+            let (tx_consensus_certificate, rx_consensus_certificate) =
+                tokio::sync::mpsc::channel(5);
 
             cfg_if::cfg_if! {
                 if #[cfg(feature = "nezha")] {
                     use sslab_execution::utils::smallbank_contract_benchmark::concurrent_evm_storage;
-                    
+
                     let memory_storage = concurrent_evm_storage();
                 } else if #[cfg(feature = "blockstm")] {
                     use sslab_execution_blockstm::utils::smallbank_contract_benchmark::concurrent_evm_storage;
-                    
+
                     let memory_storage = concurrent_evm_storage();
                 } else {
-                    use sslab_execution::utils::smallbank_contract_benchmark::default_memory_storage;
+                    use sslab_execution::utils::smallbank_contract_benchmark::concurrent_evm_storage;
 
-                    let memory_storage = default_memory_storage();
+                    let memory_storage = concurrent_evm_storage();
                 }
             }
-
 
             cfg_if::cfg_if! {
                 if #[cfg(feature = "nezha")] {
                     use sslab_execution_nezha::Nezha;
-                    
+
 
                     let concurrency_level = match matches.subcommand() {
                         ("primary", Some(sub_matches)) => {
@@ -331,17 +332,9 @@ async fn run(
                     let execution_model = SerialExecutor::new(Arc::new(memory_storage));
                 }
             }
-            
-            
-            let executor = ParallelExecutor::new(
-                rx_consensus_certificate,
-                execution_model
-            );
-            let consensus_handler = SimpleConsensusHandler::new(
-                executor,
-                tx_consensus_certificate,
-            );
-            
+
+            let executor = ParallelExecutor::new(rx_consensus_certificate, execution_model);
+            let consensus_handler = SimpleConsensusHandler::new(executor, tx_consensus_certificate);
 
             primary
                 .start(
@@ -373,7 +366,6 @@ async fn run(
                 parameters.clone(),
                 registry_service,
             );
-
 
             let client = PrimaryNetworkClient::new_from_keypair(&primary_network_keypair);
 

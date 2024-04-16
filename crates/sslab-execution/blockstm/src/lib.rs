@@ -23,7 +23,7 @@ use sslab_execution::{
     executor::Executable,
     types::EthereumTransaction,
 };
-use std::{sync::Arc, time::Instant};
+use std::sync::Arc;
 use sui_types::error::SuiError;
 use task::ExecutorTask;
 use tracing::{debug, warn};
@@ -137,39 +137,5 @@ impl Executable for BlockSTM {
                 }
             }
         }
-    }
-}
-
-impl BlockSTM {
-    pub async fn execute_and_return_commit_latency(
-        &self,
-        consensus_output: Vec<sslab_execution::types::ExecutableEthereumBatch>,
-    ) -> u128 {
-        let executor: ParallelTransactionExecutor<EtherTxn, EvmExecutorTask> =
-            ParallelTransactionExecutor::new();
-        let mut commit_latency = 0;
-
-        for batch in consensus_output.into_iter() {
-            let txn_to_execute = batch
-                .data()
-                .clone()
-                .into_iter()
-                .map(|txn| EtherTxn(txn))
-                .collect();
-            match executor.execute_transactions_parallel(self.global_state.clone(), txn_to_execute)
-            {
-                Ok(effects) => {
-                    let _effects = effects.into_iter().flat_map(|output| output.0).collect();
-                    let latency = Instant::now();
-                    self.global_state.apply_local_effect(_effects);
-                    commit_latency += latency.elapsed().as_millis();
-                }
-                Err(e) => {
-                    warn!("Error executing transaction: {:?}", e);
-                }
-            }
-        }
-
-        commit_latency
     }
 }

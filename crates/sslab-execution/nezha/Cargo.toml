@@ -34,6 +34,7 @@ criterion = { workspace = true, features = ["async_tokio", "default"] }
 [features]
 parallelism-analysis = ["incr_stats"]
 disable-early-detection = []
+parallelism = ["parallelism-analysis", "disable-early-detection"]
 optimizations = ["disable-early-detection"]
 optme = []
 
@@ -45,7 +46,7 @@ required-features = ["optme"]
 [[bench]]
 name = "parallelism"
 harness = false
-required-features = ["parallelism-analysis", "disable-early-detection"]
+required-features = ["parallelism"]
 
 [[bench]]
 name = "optimizations"

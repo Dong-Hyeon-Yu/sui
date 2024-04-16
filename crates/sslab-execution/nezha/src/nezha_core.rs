@@ -315,6 +315,11 @@ pub trait Benchmark {
         &self,
         consensus_output: Vec<ExecutableEthereumBatch>,
     ) -> (f64, f64, f64, f64, f64, u32);
+
+    async fn _analysis_parallelism_of_optme(
+        &self,
+        consensus_output: Vec<ExecutableEthereumBatch>,
+    ) -> (f64, f64, f64, f64, f64, u32);
 }
 #[cfg(all(feature = "parallelism-analysis", feature = "disable-early-detection"))]
 use crate::address_based_conflict_graph::Benchmark as _;
@@ -343,6 +348,44 @@ impl Benchmark for ConcurrencyLevelManager {
 
         let mut stat = Stats::new();
         scheduled_txs.iter().for_each(|seq| {
+            stat.update(seq.len() as f64).ok();
+        });
+
+        let metric = (
+            stat.sum().unwrap_or_default(),
+            stat.mean().unwrap_or_default(),
+            stat.population_standard_deviation().unwrap_or_default(),
+            stat.population_skewness().unwrap_or_default(),
+            stat.max().unwrap_or_default(),
+            stat.count(),
+        );
+
+        metric
+    }
+
+    async fn _analysis_parallelism_of_optme(
+        &self,
+        consensus_output: Vec<ExecutableEthereumBatch>,
+    ) -> (f64, f64, f64, f64, f64, u32) {
+        let (_, tx_list) = Self::_unpack_batches(consensus_output).await;
+        let rw_sets = self._simulate(tx_list).await;
+
+        let ScheduledInfo {
+            scheduled_txs,
+            aborted_txs,
+        } = AddressBasedConflictGraph::par_construct(rw_sets)
+            .await
+            .hierarchcial_sort()
+            .reorder()
+            .par_extract_schedule()
+            .await;
+
+        let mut stat = Stats::new();
+        scheduled_txs.iter().for_each(|seq| {
+            stat.update(seq.len() as f64).ok();
+        });
+
+        aborted_txs.iter().for_each(|seq| {
             stat.update(seq.len() as f64).ok();
         });
 

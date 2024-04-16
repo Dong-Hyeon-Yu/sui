@@ -53,7 +53,7 @@ fn optme(c: &mut Criterion) {
             group.bench_with_input(
                 criterion::BenchmarkId::new(
                     "blocksize",
-                    format!("zipfian: {}, block_concurrency: {}", skewness, i),
+                    format!("(zipfian: {}, block_concurrency: {})", skewness, i),
                 ),
                 &i,
                 |b, i| {
@@ -90,7 +90,7 @@ fn optme_skewness(c: &mut Criterion) {
             group.bench_with_input(
                 criterion::BenchmarkId::new(
                     "skewness",
-                    format!("zipfian: {}, block_concurrency: {}", skewness, i),
+                    format!("(zipfian: {}, block_concurrency: {})", skewness, i),
                 ),
                 &i,
                 |b, i| {

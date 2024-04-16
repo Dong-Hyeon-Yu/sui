@@ -7,15 +7,7 @@ def _parse_throughput(log):
     tmp = findall(r'thrpt:  \[\d+\.\d+ Kelem/s (\d+\.\d+) Kelem/s \d+\.\d+ Kelem/s\]', log)
     
     return [float(tps) for tps in tmp]
-
-def _parse_latency(log):
-    tmp = findall(r'total: (\d+\.?\d*)', log)
-    total = [float(t) for t in tmp]
-    
-    tmp = findall(r'commit: (\d+\.?\d*)', log)
-    commit = [float(c) for c in tmp]
         
-    return total, commit
 
 def result(log):
     
@@ -23,12 +15,6 @@ def result(log):
     result = "[Throughput (ktps)]\n"
     for ktps in total:
         result += f"{ktps} \n"
-        
-    if latency:= _parse_latency(log):
-        total, commit = latency
-        result += "\n[latency]\n"
-        for t, c in zip(total, commit, strict=True):
-            result += f"{t} {c}\n"
         
     return result
 

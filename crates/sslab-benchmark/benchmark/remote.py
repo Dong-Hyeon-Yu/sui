@@ -65,8 +65,7 @@ class Bench:
             'sudo apt-get -y autoremove',
 
             # The following dependencies prevent the error: [error: linker `cc` not found].
-            'sudo apt-get -y install build-essential',
-            'sudo apt-get -y install cmake',
+            'sudo apt-get -y install build-essential cmake libpq-dev',
 
             # Install rust (non-interactive).
             'sudo apt-get -y install curl',

@@ -3,14 +3,12 @@ use std::sync::Arc;
 use criterion::Throughput;
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use ethers_providers::{MockProvider, Provider};
-use parking_lot::RwLock;
 
 use sslab_execution::executor::Executable;
 use sslab_execution::types::ExecutableEthereumBatch;
 use sslab_execution::utils::test_utils::SmallBankTransactionHandler;
 use sslab_execution_blockstm::utils::smallbank_contract_benchmark::concurrent_evm_storage;
 use sslab_execution_blockstm::BlockSTM;
-use tokio::time::Instant;
 
 const DEFAULT_BATCH_SIZE: usize = 200;
 const DEFAULT_CHAIN_ID: u64 = 9;
@@ -46,7 +44,7 @@ fn batch(c: &mut Criterion) {
             group.throughput(Throughput::Elements((DEFAULT_BATCH_SIZE * i) as u64));
             group.bench_with_input(
                 criterion::BenchmarkId::new(
-                    "batchsize",
+                    "blocksize",
                     format!("zipfian: {skewness}, #batch: {i}"),
                 ),
                 &i,

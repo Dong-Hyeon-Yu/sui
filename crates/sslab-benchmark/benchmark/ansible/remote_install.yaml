@@ -21,6 +21,7 @@
         - tmux
         - git
         - protobuf-compiler
+        - libpq-dev
         - clang       # RocksDB
         - pkg-config  # RocksDB
         - libssl-dev  # RocksDB        

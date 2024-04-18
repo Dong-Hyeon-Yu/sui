@@ -220,7 +220,7 @@ impl ConcurrencyLevelManager {
                 .into_par_iter()
                 .filter_map(|tx| {
                     let mut evm = EvmBuilder::default()
-                        .with_db(state.clone())
+                        .with_db(state.snapshot())
                         .with_cfg_env_with_handler_cfg(cfg_env.clone())
                         .build();
 

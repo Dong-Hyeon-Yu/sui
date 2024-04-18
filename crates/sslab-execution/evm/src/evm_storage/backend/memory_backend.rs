@@ -1,3 +1,4 @@
+//! Deprecated
 use std::{collections::BTreeMap, sync::Arc};
 
 use ethers_core::types::{H160, H256, U256};

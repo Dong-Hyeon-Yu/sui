@@ -3,13 +3,13 @@ use dashmap::mapref::{
     one::{Ref, RefMut},
 };
 use reth::revm::{
-    db::{DatabaseCommit, DatabaseRef, EmptyDB},
+    db::{AccountState, DatabaseCommit, DatabaseRef, EmptyDB},
     primitives::{
         db::Database, Account, AccountInfo, Address, Bytecode, HashMap, B256, KECCAK_EMPTY, U256,
     },
 };
 
-use std::sync::Arc;
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 // pub enum DatabaseError {
 //     NotFound,
@@ -122,16 +122,16 @@ pub struct CacheDB<ExtDB> {
     /// The underlying database ([DatabaseRef]) that is used to load data.
     ///
     /// Note: this is read-only, data is never written to this database.
-    pub db: Arc<ExtDB>,
+    pub db: ExtDB,
 }
 
-impl<ExtDB: Default> Default for CacheDB<ExtDB> {
+impl<ExtDB: Default + Clone> Default for CacheDB<ExtDB> {
     fn default() -> Self {
         Self::new(ExtDB::default())
     }
 }
 
-impl<ExtDB> CacheDB<ExtDB> {
+impl<ExtDB: Clone> CacheDB<ExtDB> {
     pub fn new(db: ExtDB) -> Self {
         let contracts = ChashMap::new();
         contracts.insert(KECCAK_EMPTY, Bytecode::new());
@@ -141,7 +141,45 @@ impl<ExtDB> CacheDB<ExtDB> {
             contracts: Arc::new(contracts),
             // logs: Vec::default(),
             block_hashes: Arc::new(ChashMap::new()),
-            db: Arc::new(db),
+            db,
+        }
+    }
+
+    pub fn snapshot(&self) -> reth::revm::db::CacheDB<ExtDB> {
+        let _accounts = self.accounts.clone();
+        let _contracts = self.contracts.clone();
+        let _block_hashes = self.block_hashes.clone();
+        let mut accounts = HashMap::new();
+        let mut contracts = HashMap::new();
+        let mut block_hashes = HashMap::new();
+
+        rayon::scope(|s| {
+            s.spawn(|_| {
+                _accounts.iter().for_each(|item| {
+                    accounts.insert(
+                        *item.key(),
+                        Into::<reth::revm::db::DbAccount>::into(item.value().clone()),
+                    );
+                });
+            });
+            s.spawn(|_| {
+                _contracts.iter().for_each(|item| {
+                    contracts.insert(*item.key(), item.value().clone());
+                });
+            });
+            s.spawn(|_| {
+                _block_hashes.iter().for_each(|item| {
+                    block_hashes.insert(*item.key(), *item.value());
+                });
+            });
+        });
+
+        reth::revm::db::CacheDB {
+            accounts: Rc::new(RefCell::new(accounts)),
+            contracts: Rc::new(RefCell::new(contracts)),
+            block_hashes: Rc::new(RefCell::new(block_hashes)),
+            db: self.db.clone(),
+            logs: Rc::new(RefCell::new(vec![])),
         }
     }
 
@@ -243,7 +281,7 @@ impl<ExtDB: DatabaseRef> CacheDB<ExtDB> {
     }
 }
 
-impl<ExtDB> DatabaseCommit for CacheDB<ExtDB> {
+impl<ExtDB: Clone> DatabaseCommit for CacheDB<ExtDB> {
     fn commit(&self, changes: HashMap<Address, Account>) {
         for (address, mut account) in changes {
             if !account.is_touched() {
@@ -453,26 +491,13 @@ impl From<AccountInfo> for DbAccount {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub enum AccountState {
-    /// Before Spurious Dragon hardfork there was a difference between empty and not existing.
-    /// And we are flagging it here.
-    NotExisting,
-    /// EVM touched this account. For newer hardfork this means it can be cleared/removed from state.
-    Touched,
-    /// EVM cleared storage of this account, mostly by selfdestruct, we don't ask database for storage slots
-    /// and assume they are U256::ZERO
-    StorageCleared,
-    /// EVM didn't interacted with this account
-    #[default]
-    None,
-}
-
-impl AccountState {
-    /// Returns `true` if EVM cleared storage of this account
-    pub fn is_storage_cleared(&self) -> bool {
-        matches!(self, AccountState::StorageCleared)
+impl Into<reth::revm::db::DbAccount> for DbAccount {
+    fn into(self) -> reth::revm::db::DbAccount {
+        reth::revm::db::DbAccount {
+            info: self.info,
+            account_state: self.account_state,
+            storage: self.storage.into_iter().collect(),
+        }
     }
 }
 

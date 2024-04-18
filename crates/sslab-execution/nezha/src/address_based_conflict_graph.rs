@@ -23,7 +23,6 @@ pub struct KeyBasedConflictGraph {
     key_nodes: HashMap<KdgKey, KeyNode>,
     tx_list: FastHashMap<u64, Arc<Transaction>>, // tx_id -> transaction
     aborted_txs: Vec<Arc<Transaction>>, // transactions that are aborted due to read-write conflict (used for reordering).
-    ww_aborted_txs: Vec<Arc<Transaction>>, // transactions that are aborted due to the write-write conflict.
 }
 
 impl KeyBasedConflictGraph {
@@ -32,7 +31,6 @@ impl KeyBasedConflictGraph {
             key_nodes: HashMap::new(),
             tx_list: FastHashMap::default(),
             aborted_txs: Vec::new(),
-            ww_aborted_txs: Vec::new(),
         }
     }
 
@@ -49,7 +47,7 @@ impl KeyBasedConflictGraph {
 
             if acg._check_updater_already_exist_in_same_address(&write_units) {
                 tx.abort();
-                acg.ww_aborted_txs.push(tx);
+                acg.aborted_txs.push(tx);
                 continue;
             }
 
@@ -158,8 +156,7 @@ impl KeyBasedConflictGraph {
     #[must_use]
     pub fn extract_schedule(&mut self) -> ScheduledInfo {
         let tx_list = std::mem::replace(&mut self.tx_list, hashbrown::HashMap::default());
-        let mut aborted_txs = std::mem::take(&mut self.aborted_txs);
-        aborted_txs.extend(std::mem::take(&mut self.ww_aborted_txs));
+        let aborted_txs = std::mem::take(&mut self.aborted_txs);
 
         self.key_nodes.clear();
         self.key_nodes.shrink_to_fit();
@@ -169,8 +166,7 @@ impl KeyBasedConflictGraph {
 
     pub async fn par_extract_schedule(&mut self) -> ScheduledInfo {
         let tx_list = std::mem::take(&mut self.tx_list);
-        let mut aborted_txs = std::mem::take(&mut self.aborted_txs);
-        aborted_txs.extend(std::mem::take(&mut self.ww_aborted_txs));
+        let aborted_txs = std::mem::take(&mut self.aborted_txs);
 
         self.key_nodes.clear();
         self.key_nodes.shrink_to_fit();
@@ -316,7 +312,7 @@ impl KeyBasedConflictGraph {
                 }
             });
         self.tx_list.extend(other.tx_list);
-        self.ww_aborted_txs.extend(other.ww_aborted_txs);
+        self.aborted_txs.extend(other.aborted_txs);
     }
 }
 

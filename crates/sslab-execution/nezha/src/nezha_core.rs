@@ -6,7 +6,7 @@ use reth::{
     primitives::TransactionSignedEcRecovered,
     revm::{
         primitives::{CfgEnv, CfgEnvWithHandlerCfg, SpecId},
-        DatabaseCommit, EvmBuilder, InMemoryDB,
+        DatabaseCommit, EvmBuilder,
     },
 };
 use sslab_execution::{
@@ -49,7 +49,7 @@ impl Nezha {
 
 pub struct ConcurrencyLevelManager {
     concurrency_level: usize,
-    global_state: Arc<InMemoryConcurrentDB>,
+    global_state: InMemoryConcurrentDB,
     cfg_env: CfgEnvWithHandlerCfg,
 }
 
@@ -59,7 +59,7 @@ impl ConcurrencyLevelManager {
         cfg_env.chain_id = 9;
 
         Self {
-            global_state: Arc::new(global_state),
+            global_state,
             concurrency_level,
             cfg_env: CfgEnvWithHandlerCfg::new_with_spec_id(cfg_env, SpecId::ISTANBUL),
         }
@@ -214,12 +214,13 @@ impl ConcurrencyLevelManager {
         // a new thread is created, and a new thread pool is created on the thread. (specifically, rayon's thread pool is created)
         let (send, recv) = tokio::sync::oneshot::channel();
         let cfg_env = self.cfg_env.clone();
+        let state = self.global_state.clone();
         rayon::spawn(move || {
             let result = tx_list
                 .into_par_iter()
                 .filter_map(|tx| {
                     let mut evm = EvmBuilder::default()
-                        .with_db(InMemoryDB::default()) //TODO: create snapshot (CacheDB) from the external DB
+                        .with_db(state.clone())
                         .with_cfg_env_with_handler_cfg(cfg_env.clone())
                         .build();
 

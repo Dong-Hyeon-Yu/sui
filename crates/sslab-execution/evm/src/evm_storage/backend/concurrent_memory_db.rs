@@ -5,12 +5,11 @@ use dashmap::mapref::{
 use reth::revm::{
     db::{DatabaseCommit, DatabaseRef, EmptyDB},
     primitives::{
-        db::Database, Account, AccountInfo, Address, Bytecode, HashMap, Log, B256, KECCAK_EMPTY,
-        U256,
+        db::Database, Account, AccountInfo, Address, Bytecode, HashMap, B256, KECCAK_EMPTY, U256,
     },
 };
 
-use std::vec::Vec;
+use std::sync::Arc;
 
 // pub enum DatabaseError {
 //     NotFound,
@@ -113,17 +112,17 @@ type ChashMap<K, V> = dashmap::DashMap<K, V>;
 pub struct CacheDB<ExtDB> {
     /// Account info where None means it is not existing. Not existing state is needed for Pre TANGERINE forks.
     /// `code` is always `None`, and bytecode can be found in `contracts`.
-    pub accounts: ChashMap<Address, DbAccount>,
+    pub accounts: Arc<ChashMap<Address, DbAccount>>,
     /// Tracks all contracts by their code hash.
-    pub contracts: ChashMap<B256, Bytecode>,
+    pub contracts: Arc<ChashMap<B256, Bytecode>>,
     /// All logs that were committed via [DatabaseCommit::commit].
-    pub logs: Vec<Log>,
+    // pub logs: Vec<Log>,
     /// All cached block hashes from the [DatabaseRef].
-    pub block_hashes: ChashMap<U256, B256>,
+    pub block_hashes: Arc<ChashMap<U256, B256>>,
     /// The underlying database ([DatabaseRef]) that is used to load data.
     ///
     /// Note: this is read-only, data is never written to this database.
-    pub db: ExtDB,
+    pub db: Arc<ExtDB>,
 }
 
 impl<ExtDB: Default> Default for CacheDB<ExtDB> {
@@ -138,11 +137,11 @@ impl<ExtDB> CacheDB<ExtDB> {
         contracts.insert(KECCAK_EMPTY, Bytecode::new());
         contracts.insert(B256::ZERO, Bytecode::new());
         Self {
-            accounts: ChashMap::new(),
-            contracts,
-            logs: Vec::default(),
-            block_hashes: ChashMap::new(),
-            db,
+            accounts: Arc::new(ChashMap::new()),
+            contracts: Arc::new(contracts),
+            // logs: Vec::default(),
+            block_hashes: Arc::new(ChashMap::new()),
+            db: Arc::new(db),
         }
     }
 

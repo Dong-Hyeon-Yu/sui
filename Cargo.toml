@@ -512,6 +512,7 @@ sslab-execution-serial = { path = "crates/sslab-execution/serial" }
 sslab-execution-blockstm = { path = "crates/sslab-execution/blockstm" }
 sslab-execution = { path = "crates/sslab-execution/evm" }
 sslab-execution-nezha = { path = "crates/sslab-execution/nezha" }
+reth = { git = "https://github.com/Dong-Hyeon-Yu/reth.git", branch = "release/v0.1.0-alpha.22" }
 evm = { git = "https://github.com/Dong-Hyeon-Yu/evm.git", rev = "d81889d9303491a61f91560399ed292e09b91739" }
 
 anemo-benchmark = { path = "crates/anemo-benchmark" }

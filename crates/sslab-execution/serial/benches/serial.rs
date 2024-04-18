@@ -34,31 +34,26 @@ fn _create_random_smallbank_workload(
 
 fn serial(c: &mut Criterion) {
     let param = 1..81;
-    let mut group = c.benchmark_group("Serial execution Benchmark according to batchsize");
+    let mut group = c.benchmark_group("Serial");
     for i in param {
         group.throughput(Throughput::Elements((DEFAULT_BATCH_SIZE * i) as u64));
-        group.bench_with_input(
-            criterion::BenchmarkId::new("serial execution", i),
-            &i,
-            |b, i| {
-                b.to_async(tokio::runtime::Runtime::new().unwrap())
-                    .iter_batched(
-                        || {
-                            let consensus_output =
-                                _create_random_smallbank_workload(0.0, DEFAULT_BATCH_SIZE, *i);
-                            let serial = _get_serial_executor();
-                            (serial, consensus_output)
-                        },
-                        |(serial, consensus_output)| async move {
-                            let _ = serial.execute(consensus_output).await;
-                        },
-                        BatchSize::SmallInput,
-                    );
-            },
-        );
+        group.bench_with_input(criterion::BenchmarkId::new("blocksize", i), &i, |b, i| {
+            b.to_async(tokio::runtime::Runtime::new().unwrap())
+                .iter_batched(
+                    || {
+                        let consensus_output =
+                            _create_random_smallbank_workload(0.0, DEFAULT_BATCH_SIZE, *i);
+                        let serial = _get_serial_executor();
+                        (serial, consensus_output)
+                    },
+                    |(serial, consensus_output)| async move {
+                        let _ = serial.execute(consensus_output).await;
+                    },
+                    BatchSize::SmallInput,
+                );
+        });
     }
 }
 
 criterion_group!(benches, serial);
-// criterion_group!(benches, simulation, nezha, commit, block_concurrency);
 criterion_main!(benches);

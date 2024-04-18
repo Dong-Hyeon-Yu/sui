@@ -1,12 +1,10 @@
+pub mod address_based_conflict_graph;
 pub mod nezha_core;
 pub mod types;
-pub mod address_based_conflict_graph;
-mod evm_utils;
 pub use {
-    nezha_core::{Nezha, ConcurrencyLevelManager},
-    address_based_conflict_graph::AddressBasedConflictGraph,
-    types::{SimulationResult, SimulatedTransaction},
+    address_based_conflict_graph::KeyBasedConflictGraph,
+    nezha_core::{ConcurrencyLevelManager, Nezha},
+    types::{SimulatedTransactionV2, SimulationResultV2},
 };
-
 
 pub mod tests;

@@ -1,27 +1,36 @@
-use ethers_core::types::H256;
 use itertools::Itertools;
 use narwhal_types::BatchDigest;
 use rayon::prelude::*;
-use sslab_execution::{
-    evm_storage::{backend::ExecutionBackend, ConcurrentEVMStorage},
-    executor::Executable,
-    types::{
-        EthereumTransaction, ExecutableEthereumBatch, ExecutionResult, IndexedEthereumTransaction,
+use reth::{
+    core::node_config::ConfigureEvmEnv,
+    primitives::TransactionSignedEcRecovered,
+    revm::{
+        primitives::{CfgEnv, CfgEnvWithHandlerCfg, SpecId},
+        DatabaseCommit, EvmBuilder, InMemoryDB,
     },
 };
+use sslab_execution::{
+    evm_storage::backend::InMemoryConcurrentDB,
+    executor::Executable,
+    types::{ExecutableEthereumBatch, ExecutionResult, IndexedEthereumTransaction},
+    EthEvmConfig,
+};
 use std::sync::Arc;
-use tracing::warn;
 
 use crate::{
-    address_based_conflict_graph::FastHashMap, types::ScheduledTransaction,
-    AddressBasedConflictGraph, SimulationResult,
+    address_based_conflict_graph::{FastHashMap, KdgKey},
+    types::{ScheduledTransaction, SimulatedTransactionV2, SimulationResultV2},
+    KeyBasedConflictGraph,
 };
 
-use super::{address_based_conflict_graph::Transaction, types::SimulatedTransaction};
+use super::address_based_conflict_graph::Transaction;
 
 #[async_trait::async_trait(?Send)]
-impl Executable<EthereumTransaction> for Nezha {
-    async fn execute(&self, consensus_output: Vec<ExecutableEthereumBatch<EthereumTransaction>>) {
+impl Executable<TransactionSignedEcRecovered> for Nezha {
+    async fn execute(
+        &self,
+        consensus_output: Vec<ExecutableEthereumBatch<TransactionSignedEcRecovered>>,
+    ) {
         let _ = self.inner.prepare_execution(consensus_output).await;
     }
 }
@@ -31,7 +40,7 @@ pub struct Nezha {
 }
 
 impl Nezha {
-    pub fn new(global_state: ConcurrentEVMStorage, concurrency_level: usize) -> Self {
+    pub fn new(global_state: InMemoryConcurrentDB, concurrency_level: usize) -> Self {
         Self {
             inner: ConcurrencyLevelManager::new(global_state, concurrency_level),
         }
@@ -40,27 +49,32 @@ impl Nezha {
 
 pub struct ConcurrencyLevelManager {
     concurrency_level: usize,
-    global_state: Arc<ConcurrentEVMStorage>,
+    global_state: Arc<InMemoryConcurrentDB>,
+    cfg_env: CfgEnvWithHandlerCfg,
 }
 
 impl ConcurrencyLevelManager {
-    pub fn new(global_state: ConcurrentEVMStorage, concurrency_level: usize) -> Self {
+    pub fn new(global_state: InMemoryConcurrentDB, concurrency_level: usize) -> Self {
+        let mut cfg_env = CfgEnv::default();
+        cfg_env.chain_id = 9;
+
         Self {
             global_state: Arc::new(global_state),
             concurrency_level,
+            cfg_env: CfgEnvWithHandlerCfg::new_with_spec_id(cfg_env, SpecId::ISTANBUL),
         }
     }
 
     async fn prepare_execution(
         &self,
-        consensus_output: Vec<ExecutableEthereumBatch<EthereumTransaction>>,
+        consensus_output: Vec<ExecutableEthereumBatch<TransactionSignedEcRecovered>>,
     ) -> ExecutionResult {
         let mut result = vec![];
         let mut target = consensus_output;
 
         while !target.is_empty() {
             let split_idx = std::cmp::min(self.concurrency_level, target.len());
-            let remains: Vec<ExecutableEthereumBatch<EthereumTransaction>> =
+            let remains: Vec<ExecutableEthereumBatch<TransactionSignedEcRecovered>> =
                 target.split_off(split_idx);
 
             result.extend(self._execute(target).await);
@@ -72,7 +86,7 @@ impl ConcurrencyLevelManager {
     }
 
     async fn _unpack_batches(
-        consensus_output: Vec<ExecutableEthereumBatch<EthereumTransaction>>,
+        consensus_output: Vec<ExecutableEthereumBatch<TransactionSignedEcRecovered>>,
     ) -> (Vec<BatchDigest>, Vec<IndexedEthereumTransaction>) {
         let (send, recv) = tokio::sync::oneshot::channel();
 
@@ -97,7 +111,7 @@ impl ConcurrencyLevelManager {
 
     pub async fn _execute(
         &self,
-        consensus_output: Vec<ExecutableEthereumBatch<EthereumTransaction>>,
+        consensus_output: Vec<ExecutableEthereumBatch<TransactionSignedEcRecovered>>,
     ) -> Vec<BatchDigest> {
         let (digests, tx_list) = Self::_unpack_batches(consensus_output).await;
 
@@ -110,7 +124,7 @@ impl ConcurrencyLevelManager {
             let ScheduledInfo {
                 scheduled_txs,
                 aborted_txs,
-            } = AddressBasedConflictGraph::par_construct(rw_sets)
+            } = KeyBasedConflictGraph::par_construct(rw_sets)
                 .await
                 .hierarchcial_sort()
                 .reorder()
@@ -178,38 +192,49 @@ impl ConcurrencyLevelManager {
 
     pub async fn simulate(
         &self,
-        consensus_output: Vec<ExecutableEthereumBatch<EthereumTransaction>>,
-    ) -> SimulationResult {
+        consensus_output: Vec<ExecutableEthereumBatch<TransactionSignedEcRecovered>>,
+    ) -> SimulationResultV2 {
         let (digests, tx_list) = Self::_unpack_batches(consensus_output).await;
         let rw_sets = self._simulate(tx_list).await;
 
-        SimulationResult { digests, rw_sets }
+        SimulationResultV2 { digests, rw_sets }
     }
 
     async fn _simulate(
         &self,
         tx_list: Vec<IndexedEthereumTransaction>,
-    ) -> Vec<SimulatedTransaction> {
-        let snapshot = self.global_state.clone();
-
+    ) -> Vec<SimulatedTransactionV2> {
         // Parallel simulation requires heavy cpu usages.
         // CPU-bound jobs would make the I/O-bound tokio threads starve.
         // To this end, a separated thread pool need to be used for cpu-bound jobs.
         // a new thread is created, and a new thread pool is created on the thread. (specifically, rayon's thread pool is created)
         let (send, recv) = tokio::sync::oneshot::channel();
+        let cfg_env = self.cfg_env.clone();
         rayon::spawn(move || {
             let result = tx_list
                 .into_par_iter()
                 .filter_map(|tx| {
-                    match crate::evm_utils::simulate_tx(tx.data(), snapshot.as_ref()) {
-                        Ok(Some((effect, log, rw_set))) => {
-                            Some(SimulatedTransaction::new(Some(rw_set), effect, log, tx))
-                        }
-                        _ => {
-                            warn!("fail to execute a transaction {}", tx.digest_u64());
-                            None
-                        }
-                    }
+                    let mut evm = EvmBuilder::default()
+                        .with_db(InMemoryDB::default()) //TODO: create snapshot (CacheDB) from the external DB
+                        .with_cfg_env_with_handler_cfg(cfg_env.clone())
+                        .build();
+
+                    EthEvmConfig::fill_tx_env(
+                        evm.tx_mut(),
+                        tx.data().as_ref(),
+                        tx.data().signer(),
+                        (),
+                    );
+
+                    let execution_result = evm.transact().unwrap();
+                    let (read_set, write_set) = evm.extract_rw_set();
+
+                    Some(SimulatedTransactionV2::new(
+                        execution_result,
+                        read_set,
+                        write_set,
+                        tx,
+                    ))
                 })
                 .collect();
 
@@ -241,7 +266,7 @@ impl ConcurrencyLevelManager {
             for txs_to_commit in scheduled_txs {
                 txs_to_commit.into_par_iter().for_each(|tx| {
                     let effect = tx.extract();
-                    _storage.apply_local_effect(effect)
+                    _storage.commit(effect)
                 })
             }
             let _ = send.send(());
@@ -252,8 +277,8 @@ impl ConcurrencyLevelManager {
 
     async fn _validate_optimistic_assumption(
         &self,
-        rw_set: Vec<SimulatedTransaction>,
-    ) -> Option<Vec<SimulatedTransaction>> {
+        rw_set: Vec<SimulatedTransactionV2>,
+    ) -> Option<Vec<SimulatedTransactionV2>> {
         if rw_set.len() == 1 {
             self._concurrent_commit_2(rw_set).await;
             return None;
@@ -264,12 +289,12 @@ impl ConcurrencyLevelManager {
             let mut valid_txs = vec![];
             let mut invalid_txs = vec![];
 
-            let mut write_set = hashbrown::HashSet::<H256>::new();
+            let mut write_set = hashbrown::HashSet::<KdgKey>::new();
             for tx in rw_set.into_iter() {
                 match tx.write_set() {
-                    Some(ref set) => {
+                    Some(set) => {
                         if (set.len() <= write_set.len() && set.is_disjoint(&write_set)) // select smaller set using short-circuit evaluation
-                            || (set.len() > write_set.len() && write_set.is_disjoint(set))
+                            || (set.len() > write_set.len() && write_set.is_disjoint(&set))
                         {
                             write_set.extend(set);
                             valid_txs.push(tx);
@@ -297,11 +322,11 @@ impl ConcurrencyLevelManager {
         invalid_txs
     }
 
-    pub async fn _concurrent_commit_2(&self, scheduled_txs: Vec<SimulatedTransaction>) {
+    pub async fn _concurrent_commit_2(&self, scheduled_txs: Vec<SimulatedTransactionV2>) {
         let scheduled_txs = vec![tokio::task::spawn_blocking(move || {
             scheduled_txs
                 .into_par_iter()
-                .map(|tx| ScheduledTransaction::from(tx))
+                .map(ScheduledTransaction::from)
                 .collect()
         })
         .await
@@ -414,7 +439,7 @@ impl ScheduledInfo {
         };
 
         // determine minimum #epoch in which tx have no conflicts with others --> by binary-search over a map (#epoch, writeset)
-        let mut epoch_map: Vec<hashbrown::HashSet<H256>> = vec![]; // (epoch, write set)
+        let mut epoch_map: Vec<hashbrown::HashSet<KdgKey>> = vec![]; // (epoch, write set)
 
         // store final schedule information
         let mut schedule: Vec<Vec<Arc<Transaction>>> = vec![];
@@ -446,9 +471,9 @@ impl ScheduledInfo {
     }
 
     fn _find_minimun_epoch_with_no_conflicts(
-        read_keys_of_tx: &hashbrown::HashSet<H256>,
-        write_keys_of_tx: &hashbrown::HashSet<H256>,
-        epoch_map: &Vec<hashbrown::HashSet<H256>>,
+        read_keys_of_tx: &hashbrown::HashSet<KdgKey>,
+        write_keys_of_tx: &hashbrown::HashSet<KdgKey>,
+        epoch_map: &Vec<hashbrown::HashSet<KdgKey>>,
     ) -> usize {
         // 1) ww dependencies are occured when the keys which are both read and written by latter tx are overlapped with the rw keys of the previous txs in the same epoch.
         //   for simplicity, only single write is allowed for each key in the same epoch.

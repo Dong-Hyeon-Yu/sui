@@ -20,23 +20,10 @@ def _parse_scheduling(log):
         
     return construct, sort, reorder, extraction
 
-def _parse_effective_throughput(log):
-    tmp = findall(r'committed: (\d+\.\d+)', log)
-    committed = [float(t) for t in tmp]
+def _parse_throughput(log):
+    tmp = findall(r'thrpt:  \[\d+\.\d+ Kelem/s (\d+\.\d+) Kelem/s \d+\.\d+ Kelem/s\]', log)
     
-    return committed
-
-def _parse_total(log):
-    tmp = findall(r'time:   \[\d+\.\d+ [µ|m]s (\d+\.\d+) ([µ|m]s) \d+\.\d+ [µ|m]s\]', log)
-    
-    total = []
-    for duration, unit in tmp:
-        duration = float(duration)
-        if unit == MICRO:
-            duration /= 1000
-        total.append(duration)
-        
-    return total
+    return [float(tps) for tps in tmp]
         
 def _parse_nezha(log):
     tmp = findall(r'Simulation: (\d+\.\d+)', log)
@@ -52,10 +39,10 @@ def _parse_nezha(log):
 
 def result(log):
     
-    total = _parse_total(log)
-    result = "[total]\n"
-    for duration in total:
-        result += f"{duration} \n"
+    total = _parse_throughput(log)
+    result = "[Throughput (ktps)]\n"
+    for ktps in total:
+        result += f"{ktps} \n"
         
     simulation, scheduling, commit = _parse_nezha(log)
     if simulation:
@@ -85,15 +72,6 @@ def result(log):
         for duration in reorder:
             result += f"{duration} \n"
             
-        result += "\n[Schedule extraction]\n"
-        for duration in extraction:
-            result += f"{duration} \n"
-            
-    committed = _parse_effective_throughput(log)
-    if committed:
-        result += "\n[Committed txn]\n"
-        for c in committed:
-            result += f"{c:.3f} \n"
         
     return result
 

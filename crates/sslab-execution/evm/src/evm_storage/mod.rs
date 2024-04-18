@@ -9,10 +9,8 @@ use ethers_core::{
 };
 use evm::backend::{MemoryAccount, MemoryVicinity};
 pub use evm_storage::*;
-use reth::{
-    primitives::{Address, Bytes},
-    revm::InMemoryDB,
-};
+use reth::primitives::{Address, Bytes};
+use reth::revm::InMemoryDB;
 
 use self::backend::{
     CAccount, CMemoryBackend, ConcurrentHashMap, InMemoryConcurrentDB, MemoryBackend,

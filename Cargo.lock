@@ -1551,9 +1551,9 @@ dependencies = [
 
 [[package]]
 name = "backon"
-version = "0.4.3"
+version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c491fa80d69c03084223a4e73c378dd9f9a1e612eb54051213f88b2d5249b458"
+checksum = "d67782c3f868daa71d3533538e98a8e13713231969def7536e8039606fc46bf0"
 dependencies = [
  "fastrand 2.0.1",
  "futures-core",
@@ -2607,7 +2607,7 @@ checksum = "67ba02a97a2bd10f4b59b25c7973101c79642302776489e030cd13cdab09ed15"
 [[package]]
 name = "codecs-derive"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "convert_case 0.6.0",
  "parity-scale-codec 3.5.0",
@@ -2748,13 +2748,13 @@ dependencies = [
 
 [[package]]
 name = "comfy-table"
-version = "7.1.0"
+version = "7.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7c64043d6c7b7a4c58e39e7efccfdea7b93d885a795d0c054a69dbbf4dd52686"
+checksum = "b34115915337defe99b2aff5c2ce6771e5fbc4079f4b506301f5cf394c8452f7"
 dependencies = [
  "crossterm 0.27.0",
- "strum 0.25.0",
- "strum_macros 0.25.3",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
  "unicode-width",
 ]
 
@@ -2792,7 +2792,7 @@ dependencies = [
  "directories 5.0.1",
  "serde 1.0.193",
  "thiserror",
- "toml 0.8.11",
+ "toml 0.8.12",
 ]
 
 [[package]]
@@ -6448,9 +6448,9 @@ dependencies = [
 
 [[package]]
 name = "indoc"
-version = "2.0.4"
+version = "2.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e186cfbae8084e513daff4240b4797e342f988cecda4fb6c939150f96315fd8"
+checksum = "b248f5224d1d606005e02c97f5aa4e88eeb230488bcc03bc9ca4d7991399f2b5"
 
 [[package]]
 name = "inferno"
@@ -11449,7 +11449,7 @@ checksum = "8c31b5c4033f8fdde8700e4657be2c497e7288f01515be52168c631e2e4d4086"
 [[package]]
 name = "reth"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "alloy-chains",
  "alloy-rlp",
@@ -11457,7 +11457,7 @@ dependencies = [
  "backon",
  "boyer-moore-magiclen",
  "clap 4.4.10",
- "comfy-table 7.1.0",
+ "comfy-table 7.1.1",
  "confy",
  "crossterm 0.27.0",
  "eyre",
@@ -11522,14 +11522,14 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tokio",
- "toml 0.8.11",
+ "toml 0.8.12",
  "tracing",
 ]
 
 [[package]]
 name = "reth-auto-seal-consensus"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "futures-util",
  "reth-beacon-consensus",
@@ -11548,7 +11548,7 @@ dependencies = [
 [[package]]
 name = "reth-basic-payload-builder"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "alloy-rlp",
  "futures-core",
@@ -11571,7 +11571,7 @@ dependencies = [
 [[package]]
 name = "reth-beacon-consensus"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "cfg-if",
  "futures",
@@ -11601,7 +11601,7 @@ dependencies = [
 [[package]]
 name = "reth-beacon-consensus-core"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "reth-consensus-common",
  "reth-interfaces",
@@ -11611,7 +11611,7 @@ dependencies = [
 [[package]]
 name = "reth-blockchain-tree"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "aquamarine",
  "linked_hash_set",
@@ -11632,7 +11632,7 @@ dependencies = [
 [[package]]
 name = "reth-codecs"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "alloy-primitives",
  "bytes",
@@ -11642,7 +11642,7 @@ dependencies = [
 [[package]]
 name = "reth-config"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "humantime-serde",
  "reth-discv4",
@@ -11658,7 +11658,7 @@ dependencies = [
 [[package]]
 name = "reth-consensus-common"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "alloy-chains",
  "cfg-if",
@@ -11670,7 +11670,7 @@ dependencies = [
 [[package]]
 name = "reth-db"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "arbitrary",
  "bytes",
@@ -11702,7 +11702,7 @@ dependencies = [
 [[package]]
 name = "reth-discv4"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "alloy-rlp",
  "discv5",
@@ -11724,7 +11724,7 @@ dependencies = [
 [[package]]
 name = "reth-dns-discovery"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "alloy-chains",
  "alloy-rlp",
@@ -11749,7 +11749,7 @@ dependencies = [
 [[package]]
 name = "reth-downloaders"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "alloy-rlp",
  "futures",
@@ -11774,7 +11774,7 @@ dependencies = [
 [[package]]
 name = "reth-ecies"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "aes 0.8.2",
  "alloy-rlp",
@@ -11805,7 +11805,7 @@ dependencies = [
 [[package]]
 name = "reth-eth-wire"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "alloy-chains",
  "alloy-rlp",
@@ -11831,7 +11831,7 @@ dependencies = [
 [[package]]
 name = "reth-ethereum-forks"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "alloy-chains",
  "alloy-primitives",
@@ -11847,7 +11847,7 @@ dependencies = [
 [[package]]
 name = "reth-ethereum-payload-builder"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "reth-basic-payload-builder",
  "reth-payload-builder",
@@ -11862,7 +11862,7 @@ dependencies = [
 [[package]]
 name = "reth-interfaces"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "auto_impl",
  "clap 4.4.10",
@@ -11880,7 +11880,7 @@ dependencies = [
 [[package]]
 name = "reth-ipc"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "async-trait",
  "bytes",
@@ -11900,7 +11900,7 @@ dependencies = [
 [[package]]
 name = "reth-libmdbx"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "bitflags 2.4.2",
  "byteorder",
@@ -11918,7 +11918,7 @@ dependencies = [
 [[package]]
 name = "reth-mdbx-sys"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "bindgen 0.69.4",
  "cc",
@@ -11928,7 +11928,7 @@ dependencies = [
 [[package]]
 name = "reth-metrics"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "futures",
  "metrics",
@@ -11940,7 +11940,7 @@ dependencies = [
 [[package]]
 name = "reth-metrics-derive"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "once_cell",
  "proc-macro2 1.0.66",
@@ -11952,7 +11952,7 @@ dependencies = [
 [[package]]
 name = "reth-net-common"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "pin-project",
  "reth-primitives",
@@ -11962,7 +11962,7 @@ dependencies = [
 [[package]]
 name = "reth-net-nat"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "igd-next",
  "pin-project-lite",
@@ -11976,7 +11976,7 @@ dependencies = [
 [[package]]
 name = "reth-network"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "alloy-rlp",
  "aquamarine",
@@ -12022,7 +12022,7 @@ dependencies = [
 [[package]]
 name = "reth-network-api"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "alloy-chains",
  "async-trait",
@@ -12038,7 +12038,7 @@ dependencies = [
 [[package]]
 name = "reth-nippy-jar"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "anyhow",
  "bincode",
@@ -12057,7 +12057,7 @@ dependencies = [
 [[package]]
 name = "reth-node-api"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "reth-primitives",
  "reth-rpc-types",
@@ -12070,7 +12070,7 @@ dependencies = [
 [[package]]
 name = "reth-node-builder"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "confy",
  "eyre",
@@ -12103,7 +12103,7 @@ dependencies = [
 [[package]]
 name = "reth-node-core"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "alloy-chains",
  "alloy-rlp",
@@ -12169,7 +12169,7 @@ dependencies = [
 [[package]]
 name = "reth-node-ethereum"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "eyre",
  "reth-basic-payload-builder",
@@ -12190,7 +12190,7 @@ dependencies = [
 [[package]]
 name = "reth-payload-builder"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "alloy-rlp",
  "async-trait",
@@ -12217,7 +12217,7 @@ dependencies = [
 [[package]]
 name = "reth-payload-validator"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "reth-primitives",
  "reth-rpc-types",
@@ -12227,7 +12227,7 @@ dependencies = [
 [[package]]
 name = "reth-primitives"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "alloy-chains",
  "alloy-eips",
@@ -12270,7 +12270,7 @@ dependencies = [
 [[package]]
 name = "reth-provider"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "alloy-rlp",
  "auto_impl",
@@ -12297,7 +12297,7 @@ dependencies = [
 [[package]]
 name = "reth-prune"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "itertools 0.12.1",
  "metrics",
@@ -12319,7 +12319,7 @@ dependencies = [
 [[package]]
 name = "reth-revm"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "reth-consensus-common",
  "reth-interfaces",
@@ -12334,7 +12334,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "alloy-dyn-abi",
  "alloy-primitives",
@@ -12349,7 +12349,7 @@ dependencies = [
  "hyper",
  "jsonrpsee 0.20.3",
  "jsonwebtoken",
- "lazy_static 1.4.0",
+ "lazy_static 0.2.11",
  "metrics",
  "pin-project",
  "rand 0.8.5",
@@ -12388,7 +12388,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-api"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "jsonrpsee 0.20.3",
  "reth-node-api",
@@ -12401,7 +12401,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-builder"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "hyper",
  "jsonrpsee 0.20.3",
@@ -12426,7 +12426,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-engine-api"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "async-trait",
  "jsonrpsee-core 0.20.3",
@@ -12452,7 +12452,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-types"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "alloy-primitives",
  "alloy-rlp",
@@ -12476,7 +12476,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-types-compat"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "alloy-rlp",
  "alloy-rpc-types",
@@ -12488,7 +12488,7 @@ dependencies = [
 [[package]]
 name = "reth-snapshot"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "clap 4.4.10",
  "reth-db",
@@ -12504,7 +12504,7 @@ dependencies = [
 [[package]]
 name = "reth-stages"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "aquamarine",
  "auto_impl",
@@ -12533,7 +12533,7 @@ dependencies = [
 [[package]]
 name = "reth-tasks"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "dyn-clone",
  "futures-util",
@@ -12548,7 +12548,7 @@ dependencies = [
 [[package]]
 name = "reth-tokio-util"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "tokio",
  "tokio-stream",
@@ -12557,7 +12557,7 @@ dependencies = [
 [[package]]
 name = "reth-tracing"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "clap 4.4.10",
  "eyre",
@@ -12572,7 +12572,7 @@ dependencies = [
 [[package]]
 name = "reth-transaction-pool"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "alloy-rlp",
  "aquamarine",
@@ -12604,7 +12604,7 @@ dependencies = [
 [[package]]
 name = "reth-trie"
 version = "0.1.0-alpha.22"
-source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#974f3b118ae010727a3d583e15101bc2de718425"
+source = "git+https://github.com/Dong-Hyeon-Yu/reth.git?branch=release/v0.1.0-alpha.22#ab01206839c246bb8c01b7976867f943c6d1e707"
 dependencies = [
  "alloy-chains",
  "alloy-rlp",
@@ -12621,7 +12621,7 @@ dependencies = [
 [[package]]
 name = "revm"
 version = "6.2.0"
-source = "git+https://github.com/bluealloy/revm?rev=34e636b#34e636b2818a20b66448fec41ff2d9ee207a8ee7"
+source = "git+https://github.com/Dong-Hyeon-Yu/revm.git?rev=606b9af664d97f15d4c51dd5e03edc1a90427770#606b9af664d97f15d4c51dd5e03edc1a90427770"
 dependencies = [
  "auto_impl",
  "cfg-if",
@@ -12634,7 +12634,7 @@ dependencies = [
 [[package]]
 name = "revm-inspectors"
 version = "0.1.0"
-source = "git+https://github.com/paradigmxyz/evm-inspectors?rev=1ae72ff#1ae72ffd4b677a8151db71a9fd8ce04530173022"
+source = "git+https://github.com/Dong-Hyeon-Yu/evm-inspectors.git?rev=8aeb58314399bed92d2df962d84dd65fb1607f50#8aeb58314399bed92d2df962d84dd65fb1607f50"
 dependencies = [
  "alloy-primitives",
  "alloy-rpc-trace-types",
@@ -12652,7 +12652,7 @@ dependencies = [
 [[package]]
 name = "revm-interpreter"
 version = "3.1.0"
-source = "git+https://github.com/bluealloy/revm?rev=34e636b#34e636b2818a20b66448fec41ff2d9ee207a8ee7"
+source = "git+https://github.com/Dong-Hyeon-Yu/revm.git?rev=606b9af664d97f15d4c51dd5e03edc1a90427770#606b9af664d97f15d4c51dd5e03edc1a90427770"
 dependencies = [
  "revm-primitives",
  "serde 1.0.193",
@@ -12661,7 +12661,7 @@ dependencies = [
 [[package]]
 name = "revm-precompile"
 version = "4.1.0"
-source = "git+https://github.com/bluealloy/revm?rev=34e636b#34e636b2818a20b66448fec41ff2d9ee207a8ee7"
+source = "git+https://github.com/Dong-Hyeon-Yu/revm.git?rev=606b9af664d97f15d4c51dd5e03edc1a90427770#606b9af664d97f15d4c51dd5e03edc1a90427770"
 dependencies = [
  "aurora-engine-modexp",
  "c-kzg",
@@ -12677,7 +12677,7 @@ dependencies = [
 [[package]]
 name = "revm-primitives"
 version = "2.1.0"
-source = "git+https://github.com/bluealloy/revm?rev=34e636b#34e636b2818a20b66448fec41ff2d9ee207a8ee7"
+source = "git+https://github.com/Dong-Hyeon-Yu/revm.git?rev=606b9af664d97f15d4c51dd5e03edc1a90427770#606b9af664d97f15d4c51dd5e03edc1a90427770"
 dependencies = [
  "alloy-primitives",
  "auto_impl",
@@ -14407,10 +14407,8 @@ dependencies = [
  "async-trait",
  "criterion 0.4.0",
  "ethers",
- "ethers-core",
  "ethers-providers",
  "ethers-signers",
- "evm",
  "hashbrown 0.14.2",
  "itertools 0.10.5",
  "narwhal-types",
@@ -14419,6 +14417,7 @@ dependencies = [
  "parking_lot 0.12.1",
  "rand_distr",
  "rayon",
+ "reth",
  "sslab-execution",
  "sui-types",
  "tokio",
@@ -14435,7 +14434,6 @@ dependencies = [
  "ethers",
  "ethers-providers",
  "ethers-signers",
- "evm",
  "parking_lot 0.12.1",
  "rand_distr",
  "reth",
@@ -17243,14 +17241,14 @@ dependencies = [
 
 [[package]]
 name = "toml"
-version = "0.8.11"
+version = "0.8.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af06656561d28735e9c1cd63dfd57132c8155426aa6af24f36a00a351f88c48e"
+checksum = "e9dd1545e8208b4a5af1aa9bbd0b4cf7e9ea08fabc5d0a5c67fcaafa17433aa3"
 dependencies = [
  "serde 1.0.193",
  "serde_spanned",
  "toml_datetime 0.6.5",
- "toml_edit 0.22.7",
+ "toml_edit 0.22.9",
 ]
 
 [[package]]
@@ -17318,9 +17316,9 @@ dependencies = [
 
 [[package]]
 name = "toml_edit"
-version = "0.22.7"
+version = "0.22.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "18769cd1cec395d70860ceb4d932812a0b4d06b1a4bb336745a4d21b9496e992"
+checksum = "8e40bb779c5187258fd7aad0eb68cb8706a0a81fa712fbea808ab43c4b8374c4"
 dependencies = [
  "indexmap 2.2.5",
  "serde 1.0.193",

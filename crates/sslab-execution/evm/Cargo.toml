@@ -42,7 +42,7 @@ hashbrown = { version = "0.14.2", features = [
 rayon.workspace = true
 dashmap = { workspace = true, features = ['rayon', 'inline'] }
 
-reth = { git = "https://github.com/Dong-Hyeon-Yu/reth.git", branch = "release/v0.1.0-alpha.22" }
+reth.workspace = true
 
 ethers = "^2.0.0"
 ethers-signers = { version = "^2.0.0" }

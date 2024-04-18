@@ -5,6 +5,7 @@ use ethers_core::utils::rlp::Rlp;
 use evm::{Config, Context, Runtime};
 use fastcrypto::hash::Hash;
 use narwhal_types::{BatchDigest, ConsensusOutput, ConsensusOutputDigest};
+use reth::primitives::{TransactionSignedEcRecovered, B256};
 use serde::{Deserialize, Serialize};
 use std::rc::Rc;
 
@@ -122,27 +123,27 @@ impl std::hash::Hash for EthereumTransaction {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct IndexedEthereumTransaction {
-    pub tx: EthereumTransaction,
+    pub tx: TransactionSignedEcRecovered,
     pub id: u64,
 }
 
 impl IndexedEthereumTransaction {
-    pub fn new(tx: EthereumTransaction, id: u64) -> Self {
+    pub fn new(tx: TransactionSignedEcRecovered, id: u64) -> Self {
         Self { tx, id }
     }
 
-    pub fn data(&self) -> &EthereumTransaction {
+    pub fn data(&self) -> &TransactionSignedEcRecovered {
         &self.tx
     }
 
-    pub fn digest(&self) -> H256 {
-        self.tx.digest()
+    pub fn digest(&self) -> B256 {
+        self.tx.hash()
     }
 
     pub fn digest_u64(&self) -> u64 {
-        self.tx.digest_u64()
+        self.id
     }
 }
 

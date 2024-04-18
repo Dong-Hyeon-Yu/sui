@@ -4,19 +4,18 @@ use reth::{
     core::node_config::ConfigureEvmEnv,
     primitives::TransactionSignedEcRecovered,
     revm::{
-        primitives::{CfgEnv, CfgEnvWithHandlerCfg, SpecId},
-        Evm, EvmBuilder, InMemoryDB,
+        primitives::{CfgEnv, CfgEnvWithHandlerCfg, ResultAndState, SpecId},
+        DatabaseCommit as _, Evm, EvmBuilder, InMemoryDB,
     },
 };
 use sslab_execution::{
     executor::Executable,
     types::{ExecutableEthereumBatch, ExecutionResult},
+    EthEvmConfig,
 };
 
 use tokio::sync::Mutex;
 use tracing::{debug, warn};
-
-use crate::evm_utils::EthEvmConfig;
 
 #[async_trait::async_trait(?Send)]
 impl Executable<TransactionSignedEcRecovered> for SerialExecutor {
@@ -61,14 +60,13 @@ impl SerialExecutor {
         for tx in batch.take_data() {
             EthEvmConfig::fill_tx_env(evm.tx_mut(), tx.as_ref(), tx.signer(), ());
 
-            match evm.transact_commit() {
-                Ok(result) => {
-                    if !result.is_success() {
-                        debug!(
-                            "Transaction failed (but this is normal evm error): {:?}",
-                            result
-                        );
-                    }
+            match evm.transact() {
+                Ok(ResultAndState { result, state }) => {
+                    evm.context.evm.db.commit(state);
+                    debug!(
+                        "Transaction failed (but this is normal evm error): {:?}",
+                        result
+                    );
                 }
                 Err(e) => warn!("fail to execute a transaction {:?}", e),
             }

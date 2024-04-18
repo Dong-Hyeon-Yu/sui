@@ -5,6 +5,7 @@ use reth::{
     core::node_config::ConfigureEvmEnv,
     primitives::TransactionSignedEcRecovered,
     revm::{
+        db::CacheDB,
         primitives::{CfgEnv, CfgEnvWithHandlerCfg, SpecId},
         DatabaseCommit, EvmBuilder,
     },
@@ -220,7 +221,7 @@ impl ConcurrencyLevelManager {
                 .into_par_iter()
                 .filter_map(|tx| {
                     let mut evm = EvmBuilder::default()
-                        .with_db(state.clone())
+                        .with_db(CacheDB::new(state.clone()))
                         .with_cfg_env_with_handler_cfg(cfg_env.clone())
                         .build();
 

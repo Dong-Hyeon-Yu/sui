@@ -1,41 +1,37 @@
-use std::fmt::Debug;
-use ethers_core::types::{U256, H256, H160};
-use evm::backend::{MemoryVicinity, Backend, Basic, Apply};
+//! Deprecated
 use super::{ApplyBackend, ConcurrentHashMap};
-
+use ethers_core::types::{H160, H256, U256};
+use evm::backend::{Apply, Backend, Basic, MemoryVicinity};
+use std::fmt::Debug;
 
 #[derive(Debug, Default, Clone)]
 pub struct CAccount {
-    	/// Account nonce.
-	pub nonce: U256,
-	/// Account balance.
-	pub balance: U256,
-	/// Full account storage.
-	pub storage: ConcurrentHashMap<H256, H256>,
-	/// Account code.
-	pub code: Vec<u8>,
+    /// Account nonce.
+    pub nonce: U256,
+    /// Account balance.
+    pub balance: U256,
+    /// Full account storage.
+    pub storage: ConcurrentHashMap<H256, H256>,
+    /// Account code.
+    pub code: Vec<u8>,
 }
 
 #[derive(Debug, Clone)]
 pub struct CMemoryBackend {
     vicinity: MemoryVicinity,
-    state: ConcurrentHashMap<H160, CAccount>
+    state: ConcurrentHashMap<H160, CAccount>,
 }
 
 impl CMemoryBackend {
+    /// Create a new memory backend.
+    pub fn new(vicinity: MemoryVicinity, state: ConcurrentHashMap<H160, CAccount>) -> Self {
+        Self { vicinity, state }
+    }
 
-	/// Create a new memory backend.
-	pub fn new(vicinity: MemoryVicinity, state: ConcurrentHashMap<H160, CAccount>) -> Self {
-		Self {
-			vicinity,
-			state,
-		}
-	}
-
-	/// Get the underlying `BTreeMap` storing the state.
-	pub fn state(&self) -> &ConcurrentHashMap<H160, CAccount> {
-		&self.state
-	}
+    /// Get the underlying `BTreeMap` storing the state.
+    pub fn state(&self) -> &ConcurrentHashMap<H160, CAccount> {
+        &self.state
+    }
 }
 
 impl Default for CMemoryBackend {
@@ -107,7 +103,8 @@ impl Backend for CMemoryBackend {
     }
 
     fn basic(&self, address: H160) -> Basic {
-        self.state.pin()
+        self.state
+            .pin()
             .get(&address)
             .map(|a| Basic {
                 balance: a.balance,
@@ -117,7 +114,8 @@ impl Backend for CMemoryBackend {
     }
 
     fn code(&self, address: H160) -> Vec<u8> {
-        self.state.pin()
+        self.state
+            .pin()
             .get(&address)
             .map(|v| v.code.clone())
             .unwrap_or_default()
@@ -125,11 +123,9 @@ impl Backend for CMemoryBackend {
 
     fn storage(&self, address: H160, index: H256) -> H256 {
         match self.state.pin().get(&address) {
-            Some(v) => {
-                match v.storage.pin().get(&index) {
-                    Some(v) => v.clone(),
-                    None => H256::default(),
-                }
+            Some(v) => match v.storage.pin().get(&index) {
+                Some(v) => v.clone(),
+                None => H256::default(),
             },
             None => H256::default(),
         }
@@ -143,60 +139,61 @@ impl Backend for CMemoryBackend {
 impl ApplyBackend for CMemoryBackend {
     fn apply(&self, values: Vec<Apply>, delete_empty: bool) {
         for apply in values {
-			match apply {
-				Apply::Modify {
-					address,
-					basic,
-					code,
-					storage,
-					reset_storage,
-				} => {
+            match apply {
+                Apply::Modify {
+                    address,
+                    basic,
+                    code,
+                    storage,
+                    reset_storage,
+                } => {
                     let state = self.state.pin();
-					let is_empty = {
+                    let is_empty = {
                         let mut account = state.get(&address).cloned().unwrap_or_default();
 
-						account.balance = basic.balance;
-						account.nonce = basic.nonce;
-						if let Some(code) = code {
-							account.code = code;
-						}
+                        account.balance = basic.balance;
+                        account.nonce = basic.nonce;
+                        if let Some(code) = code {
+                            account.code = code;
+                        }
 
-						if reset_storage {
-							account.storage = ConcurrentHashMap::default();
-						}
+                        if reset_storage {
+                            account.storage = ConcurrentHashMap::default();
+                        }
 
-						let zeros = account
-							.storage.pin()
-							.iter()
-							.filter(|(_, value)| *value == &H256::default())
-							.map(|(key, _)| key.to_owned())
-							.collect::<Vec<H256>>();
+                        let zeros = account
+                            .storage
+                            .pin()
+                            .iter()
+                            .filter(|(_, value)| *value == &H256::default())
+                            .map(|(key, _)| key.to_owned())
+                            .collect::<Vec<H256>>();
 
-						for zero in zeros.iter() {
-							account.storage.pin().remove(zero);
-						}
+                        for zero in zeros.iter() {
+                            account.storage.pin().remove(zero);
+                        }
 
-						for (index, value) in storage {
-							if value == H256::default() {
-								account.storage.pin().remove(&index);
-							} else {
-								account.storage.pin().insert(index, value);
-							}
-						}
+                        for (index, value) in storage {
+                            if value == H256::default() {
+                                account.storage.pin().remove(&index);
+                            } else {
+                                account.storage.pin().insert(index, value);
+                            }
+                        }
 
-						account.balance == U256::zero()
-							&& account.nonce == U256::zero()
-							&& account.code.is_empty()
-					};
+                        account.balance == U256::zero()
+                            && account.nonce == U256::zero()
+                            && account.code.is_empty()
+                    };
 
-					if is_empty && delete_empty {
-						state.remove(&address);
-					}
-				}
-				Apply::Delete { address } => {
-					self.state.pin().remove(&address);
-				}
-			}
-		}
-	}
+                    if is_empty && delete_empty {
+                        state.remove(&address);
+                    }
+                }
+                Apply::Delete { address } => {
+                    self.state.pin().remove(&address);
+                }
+            }
+        }
+    }
 }

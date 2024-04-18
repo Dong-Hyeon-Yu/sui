@@ -1,9 +1,6 @@
-use dashmap::mapref::{
-    entry::Entry,
-    one::{Ref, RefMut},
-};
+use dashmap::mapref::one::{Ref, RefMut};
 use reth::revm::{
-    db::{DatabaseCommit, DatabaseRef, EmptyDB},
+    db::{AccountState, DatabaseCommit, DatabaseRef, EmptyDB},
     primitives::{
         db::Database, Account, AccountInfo, Address, Bytecode, HashMap, B256, KECCAK_EMPTY, U256,
     },
@@ -122,16 +119,16 @@ pub struct CacheDB<ExtDB> {
     /// The underlying database ([DatabaseRef]) that is used to load data.
     ///
     /// Note: this is read-only, data is never written to this database.
-    pub db: Arc<ExtDB>,
+    pub db: ExtDB,
 }
 
-impl<ExtDB: Default> Default for CacheDB<ExtDB> {
+impl<ExtDB: Default + Clone> Default for CacheDB<ExtDB> {
     fn default() -> Self {
         Self::new(ExtDB::default())
     }
 }
 
-impl<ExtDB> CacheDB<ExtDB> {
+impl<ExtDB: Clone> CacheDB<ExtDB> {
     pub fn new(db: ExtDB) -> Self {
         let contracts = ChashMap::new();
         contracts.insert(KECCAK_EMPTY, Bytecode::new());
@@ -141,7 +138,7 @@ impl<ExtDB> CacheDB<ExtDB> {
             contracts: Arc::new(contracts),
             // logs: Vec::default(),
             block_hashes: Arc::new(ChashMap::new()),
-            db: Arc::new(db),
+            db,
         }
     }
 
@@ -178,20 +175,22 @@ impl<ExtDB: DatabaseRef> CacheDB<ExtDB> {
     ///
     /// If the account was not found in the cache, it will be loaded from the underlying database.
     pub fn load_account(&self, address: Address) -> Result<Ref<Address, DbAccount>, ExtDB::Error> {
-        let db = &self.db;
-        match self.accounts.entry(address) {
-            Entry::Occupied(entry) => Ok(entry.into_ref().downgrade()),
-            Entry::Vacant(entry) => Ok(entry
-                .insert_entry(
-                    db.basic_ref(address)?
+        match self.accounts.get(&address) {
+            Some(account) => Ok(account),
+            None => {
+                self.accounts.insert(
+                    address,
+                    self.db
+                        .basic_ref(address)?
                         .map(|info| DbAccount {
                             info,
                             ..Default::default()
                         })
                         .unwrap_or_else(DbAccount::new_not_existing),
-                )
-                .into_ref()
-                .downgrade()),
+                );
+
+                Ok(self.accounts.get(&address).unwrap())
+            }
         }
     }
 
@@ -202,19 +201,22 @@ impl<ExtDB: DatabaseRef> CacheDB<ExtDB> {
         &self,
         address: Address,
     ) -> Result<RefMut<Address, DbAccount>, ExtDB::Error> {
-        let db = &self.db;
-        match self.accounts.entry(address) {
-            Entry::Occupied(entry) => Ok(entry.into_ref()),
-            Entry::Vacant(entry) => Ok(entry
-                .insert_entry(
-                    db.basic_ref(address)?
+        match self.accounts.get_mut(&address) {
+            Some(account) => Ok(account),
+            None => {
+                self.accounts.insert(
+                    address,
+                    self.db
+                        .basic_ref(address)?
                         .map(|info| DbAccount {
                             info,
                             ..Default::default()
                         })
                         .unwrap_or_else(DbAccount::new_not_existing),
-                )
-                .into_ref()),
+                );
+
+                Ok(self.accounts.get_mut(&address).unwrap())
+            }
         }
     }
 
@@ -243,7 +245,7 @@ impl<ExtDB: DatabaseRef> CacheDB<ExtDB> {
     }
 }
 
-impl<ExtDB> DatabaseCommit for CacheDB<ExtDB> {
+impl<ExtDB: Clone> DatabaseCommit for CacheDB<ExtDB> {
     fn commit(&self, changes: HashMap<Address, Account>) {
         for (address, mut account) in changes {
             if !account.is_touched() {
@@ -284,31 +286,33 @@ impl<ExtDB: DatabaseRef> Database for CacheDB<ExtDB> {
     type Error = ExtDB::Error;
 
     fn basic(&self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
-        let basic_info = match self.accounts.entry(address) {
-            Entry::Occupied(entry) => entry.get().info(),
-            Entry::Vacant(entry) => entry
-                .insert_entry(
-                    self.db
-                        .basic_ref(address)?
-                        .map(|info| DbAccount {
-                            info,
-                            ..Default::default()
-                        })
-                        .unwrap_or_else(DbAccount::new_not_existing),
-                )
-                .get()
-                .info(),
-        };
-        Ok(basic_info)
+        match self.accounts.get(&address) {
+            Some(basic) => Ok(basic.info()),
+            None => {
+                let new_account = self
+                    .db
+                    .basic_ref(address)?
+                    .map(|info| DbAccount {
+                        info,
+                        ..Default::default()
+                    })
+                    .unwrap_or_else(DbAccount::new_not_existing);
+
+                let basic_info = new_account.info();
+
+                self.accounts.insert(address, new_account);
+
+                Ok(basic_info)
+            }
+        }
     }
 
     fn code_by_hash(&self, code_hash: B256) -> Result<Bytecode, Self::Error> {
-        match self.contracts.entry(code_hash) {
-            Entry::Occupied(entry) => Ok(entry.get().clone()),
-            Entry::Vacant(entry) => {
-                // if you return code bytes when basic fn is called this function is not needed.
+        match self.contracts.get(&code_hash) {
+            Some(bytecode) => Ok(bytecode.value().clone()),
+            None => {
                 let bytecode = self.db.code_by_hash_ref(code_hash)?;
-                entry.insert(bytecode.clone());
+                self.contracts.insert(code_hash, bytecode.clone());
                 Ok(bytecode)
             }
         }
@@ -318,48 +322,48 @@ impl<ExtDB: DatabaseRef> Database for CacheDB<ExtDB> {
     ///
     /// It is assumed that account is already loaded.
     fn storage(&self, address: Address, index: U256) -> Result<U256, Self::Error> {
-        match self.accounts.entry(address) {
-            Entry::Occupied(mut acc_entry) => {
-                let acc_entry = acc_entry.get_mut();
-                match acc_entry.storage.entry(index) {
-                    Entry::Occupied(entry) => Ok(*entry.get()),
-                    Entry::Vacant(entry) => {
-                        if matches!(
-                            acc_entry.account_state,
-                            AccountState::StorageCleared | AccountState::NotExisting
-                        ) {
-                            Ok(U256::ZERO)
-                        } else {
-                            let slot = self.db.storage_ref(address, index)?;
-                            entry.insert(slot);
-                            Ok(slot)
-                        }
-                    }
+        match self.accounts.get(&address) {
+            Some(account) => {
+                if let Some(slot) = account.storage.get(&index) {
+                    return Ok(*slot);
+                }
+
+                if matches!(
+                    account.account_state,
+                    AccountState::StorageCleared | AccountState::NotExisting
+                ) {
+                    return Ok(U256::ZERO);
+                } else {
+                    let slot = self.db.storage_ref(address, index)?;
+                    account.storage.insert(index, slot);
+                    return Ok(slot);
                 }
             }
-            Entry::Vacant(acc_entry) => {
-                // acc needs to be loaded for us to access slots.
+            None => {
                 let info = self.db.basic_ref(address)?;
-                let (account, value) = if info.is_some() {
+                let value = if info.is_some() {
                     let value = self.db.storage_ref(address, index)?;
                     let account: DbAccount = info.into();
                     account.storage.insert(index, value);
-                    (account, value)
+                    value
                 } else {
-                    (info.into(), U256::ZERO)
+                    let value = U256::ZERO;
+                    let account = info.into();
+                    self.accounts.insert(address, account);
+                    value
                 };
-                acc_entry.insert(account);
+
                 Ok(value)
             }
         }
     }
 
     fn block_hash(&self, number: U256) -> Result<B256, Self::Error> {
-        match self.block_hashes.entry(number) {
-            Entry::Occupied(entry) => Ok(*entry.get()),
-            Entry::Vacant(entry) => {
+        match self.block_hashes.get(&number) {
+            Some(block_hash) => Ok(*block_hash),
+            None => {
                 let hash = self.db.block_hash_ref(number)?;
-                entry.insert(hash);
+                self.block_hashes.insert(number, hash);
                 Ok(hash)
             }
         }
@@ -453,26 +457,13 @@ impl From<AccountInfo> for DbAccount {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub enum AccountState {
-    /// Before Spurious Dragon hardfork there was a difference between empty and not existing.
-    /// And we are flagging it here.
-    NotExisting,
-    /// EVM touched this account. For newer hardfork this means it can be cleared/removed from state.
-    Touched,
-    /// EVM cleared storage of this account, mostly by selfdestruct, we don't ask database for storage slots
-    /// and assume they are U256::ZERO
-    StorageCleared,
-    /// EVM didn't interacted with this account
-    #[default]
-    None,
-}
-
-impl AccountState {
-    /// Returns `true` if EVM cleared storage of this account
-    pub fn is_storage_cleared(&self) -> bool {
-        matches!(self, AccountState::StorageCleared)
+impl Into<reth::revm::db::DbAccount> for DbAccount {
+    fn into(self) -> reth::revm::db::DbAccount {
+        reth::revm::db::DbAccount {
+            info: self.info,
+            account_state: self.account_state,
+            storage: self.storage.into_iter().collect(),
+        }
     }
 }
 

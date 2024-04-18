@@ -85,7 +85,7 @@ impl SmallBankTransactionHandler {
             .map(|_| self.random_operation(zipfian_coef, account_num))
             .collect::<hashbrown::HashSet<_>>();
 
-        while buffer.len() == target_tnx_num {
+        while buffer.len() < target_tnx_num {
             buffer.insert(self.random_operation(zipfian_coef, account_num));
         }
 
@@ -121,7 +121,7 @@ impl SmallBankTransactionHandler {
             })
             .collect::<hashbrown::HashSet<_>>();
 
-        while buffer.len() == target_tnx_num {
+        while buffer.len() < target_tnx_num {
             buffer.insert(
                 reth::primitives::TransactionSigned::decode_enveloped(
                     &mut self
@@ -157,7 +157,7 @@ impl SmallBankTransactionHandler {
             .map(|_| self.random_operation_raw(zipfian_coef, account_num))
             .collect::<hashbrown::HashSet<_>>();
 
-        while buffer.len() == target_tnx_num {
+        while buffer.len() < target_tnx_num {
             buffer.insert(self.random_operation_raw(zipfian_coef, account_num));
         }
 

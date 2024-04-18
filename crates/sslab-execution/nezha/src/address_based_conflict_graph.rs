@@ -78,7 +78,9 @@ impl KeyBasedConflictGraph {
                 .par_chunks(std::cmp::max(num_of_txn / ncpu, 1))
                 .map(|chunk| constructor(chunk.to_vec()))
                 .collect::<Vec<Self>>();
-
+            if sub_graphs.is_empty() {
+                panic!("Empty sub_graphs, (#txn: {num_of_txn})")
+            }
             while sub_graphs.len() > 1 {
                 sub_graphs = sub_graphs
                     .into_par_iter()

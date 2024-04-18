@@ -29,6 +29,16 @@ ethers-providers = { version = "^2.0.0" }
 rand_distr = "0.4.3"
 criterion = { workspace = true, features = ["async_tokio", "default"] }
 
+[features]
+latency = []
+optme = []
+
 [[bench]]
-name = "nezha"
+name = "optme"
 harness = false
+required-features = ["optme"]
+
+[[bench]]
+name = "latency"
+harness = false
+required-features = ["latency"]

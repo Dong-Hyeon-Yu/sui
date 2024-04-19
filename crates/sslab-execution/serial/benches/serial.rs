@@ -5,7 +5,7 @@ use reth::primitives::TransactionSignedEcRecovered;
 use sslab_execution::executor::Executable;
 use sslab_execution::types::ExecutableEthereumBatch;
 use sslab_execution::utils::{
-    smallbank_contract_benchmark::memory_database,
+    smallbank_contract_benchmark::concurrent_memory_database,
     test_utils::{SmallBankTransactionHandler, DEFAULT_CHAIN_ID},
 };
 use sslab_execution_serial::SerialExecutor;
@@ -18,7 +18,7 @@ fn _get_smallbank_handler() -> SmallBankTransactionHandler {
 }
 
 fn _get_serial_executor() -> SerialExecutor {
-    let memory_storage = memory_database();
+    let memory_storage = concurrent_memory_database();
     SerialExecutor::new(memory_storage)
 }
 

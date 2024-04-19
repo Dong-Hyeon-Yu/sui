@@ -5,10 +5,11 @@ use reth::{
     primitives::TransactionSignedEcRecovered,
     revm::{
         primitives::{CfgEnv, CfgEnvWithHandlerCfg, ResultAndState, SpecId},
-        DatabaseCommit as _, Evm, EvmBuilder, InMemoryDB,
+        DatabaseCommit as _, Evm, EvmBuilder,
     },
 };
 use sslab_execution::{
+    evm_storage::backend::InMemoryConcurrentDB,
     executor::Executable,
     types::{ExecutableEthereumBatch, ExecutionResult},
     EthEvmConfig,
@@ -30,11 +31,11 @@ impl Executable<TransactionSignedEcRecovered> for SerialExecutor {
 }
 
 pub struct SerialExecutor {
-    evm: Arc<Mutex<Evm<'static, (), InMemoryDB>>>,
+    evm: Arc<Mutex<Evm<'static, (), InMemoryConcurrentDB>>>,
 }
 
 impl SerialExecutor {
-    pub fn new(global_state: InMemoryDB) -> Self {
+    pub fn new(global_state: InMemoryConcurrentDB) -> Self {
         let mut cfg_env = CfgEnv::default();
         cfg_env.chain_id = 9;
         let cfg_env = CfgEnvWithHandlerCfg::new_with_spec_id(cfg_env, SpecId::ISTANBUL);

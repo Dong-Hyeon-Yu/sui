@@ -8,90 +8,6 @@ use reth::revm::{
 
 use std::sync::Arc;
 
-// pub enum DatabaseError {
-//     NotFound,
-//     Other,
-// }
-
-// #[derive(Debug, Clone, Default)]
-// pub struct ConcurrentStateBackend {
-//     pub accounts: ChashMap<Address, DbAccount>,
-//     pub bytecodes: ChashMap<B256, Bytecode>,
-//     pub block_hashes: ChashMap<U256, B256>,
-// }
-
-// impl Database for ConcurrentStateBackend {
-//     #[doc = r" The database error type."]
-//     type Error = DatabaseError;
-
-//     #[doc = r" Get basic account information."]
-//     fn basic(&mut self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
-//         todo!()
-//     }
-
-//     #[doc = r" Get account code by its hash."]
-//     fn code_by_hash(&mut self, code_hash: B256) -> Result<Bytecode, Self::Error> {
-//         todo!()
-//     }
-
-//     #[doc = r" Get storage value of address at index."]
-//     fn storage(&mut self, address: Address, index: U256) -> Result<U256, Self::Error> {
-//         todo!()
-//     }
-
-//     #[doc = r" Get block hash by block number."]
-//     fn block_hash(&mut self, number: U256) -> Result<B256, Self::Error> {
-//         todo!()
-//     }
-// }
-
-// impl DatabaseRef for ConcurrentStateBackend {
-//     #[doc = r" The database error type."]
-//     type Error = DatabaseError;
-
-//     #[doc = r" Get basic account information."]
-//     fn basic_ref(&self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
-//         match self.accounts.entry(address) {
-//             Entry::Occupied(entry) => Ok(Some(entry.get().info.clone())),
-//             Entry::Vacant(_) => Ok(None),
-//         }
-//     }
-
-//     #[doc = r" Get account code by its hash."]
-//     fn code_by_hash_ref(&self, code_hash: B256) -> Result<Bytecode, Self::Error> {
-//         match self.bytecodes.entry(code_hash) {
-//             Entry::Occupied(entry) => Ok(entry.get().clone()),
-//             Entry::Vacant(_) => Err(DatabaseError::NotFound),
-//         }
-//     }
-
-//     #[doc = r" Get storage value of address at index."]
-//     fn storage_ref(&self, address: Address, index: U256) -> Result<U256, Self::Error> {
-//         match self.accounts.entry(address) {
-//             Entry::Occupied(entry) => match entry.get().storage.get(&index) {
-//                 Some(value) => Ok(*value),
-//                 None => Ok(U256::ZERO),
-//             },
-//             Entry::Vacant(_) => Ok(U256::ZERO),
-//         }
-//     }
-
-//     #[doc = r" Get block hash by block number."]
-//     fn block_hash_ref(&self, number: U256) -> Result<B256, Self::Error> {
-//         match self.block_hashes.entry(number) {
-//             Entry::Occupied(entry) => Ok(*entry.get()),
-//             Entry::Vacant(_) => Err(DatabaseError::NotFound),
-//         }
-//     }
-// }
-
-// impl DatabaseCommit for ConcurrentStateBackend {
-//     #[doc = r" Commit changes to the database."]
-//     fn commit(&mut self, changes: HashMap<Address, Account>) {
-//         todo!()
-//     }
-// }
-
 /// A [Database] implementation that stores all state changes in memory.
 pub type InMemoryConcurrentDB = CacheDB<EmptyDB>;
 
@@ -275,8 +191,8 @@ impl<ExtDB: Clone> DatabaseCommit for CacheDB<ExtDB> {
             };
 
             let db_account = db_account.downgrade();
-            account.storage.into_iter().for_each(|(key, value)| {
-                db_account.storage.insert(key, value.present_value());
+            account.storage.iter().for_each(|(key, value)| {
+                db_account.storage.insert(*key, value.present_value());
             });
         }
     }
@@ -300,7 +216,7 @@ impl<ExtDB: DatabaseRef> Database for CacheDB<ExtDB> {
 
                 let basic_info = new_account.info();
 
-                self.accounts.insert(address, new_account);
+                // self.accounts.insert(address, new_account);
 
                 Ok(basic_info)
             }

@@ -63,6 +63,7 @@ impl<ExtDB: Clone> CacheDB<ExtDB> {
     /// Accounts objects and code are stored separately in the cache, this will take the code from the account and instead map it to the code hash.
     ///
     /// Note: This will not insert into the underlying external database.
+    #[inline]
     pub fn insert_contract(&self, account: &mut AccountInfo) {
         if let Some(code) = &account.code {
             if !code.is_empty() {
@@ -80,6 +81,7 @@ impl<ExtDB: Clone> CacheDB<ExtDB> {
     }
 
     /// Insert account info but not override storage
+    #[inline]
     pub fn insert_account_info(&self, address: Address, mut info: AccountInfo) {
         self.insert_contract(&mut info);
         self.accounts.entry(address).or_default().info = info;
@@ -90,6 +92,7 @@ impl<ExtDB: DatabaseRef> CacheDB<ExtDB> {
     /// Returns the account for the given address.
     ///
     /// If the account was not found in the cache, it will be loaded from the underlying database.
+    #[inline]
     pub fn load_account(&self, address: Address) -> Result<Ref<Address, DbAccount>, ExtDB::Error> {
         match self.accounts.get(&address) {
             Some(account) => Ok(account),
@@ -113,6 +116,7 @@ impl<ExtDB: DatabaseRef> CacheDB<ExtDB> {
     /// Returns the account for the given address.
     ///
     /// If the account was not found in the cache, it will be loaded from the underlying database.
+    #[inline]
     pub fn load_account_mut(
         &self,
         address: Address,
@@ -137,6 +141,7 @@ impl<ExtDB: DatabaseRef> CacheDB<ExtDB> {
     }
 
     /// insert account storage without overriding account info
+    #[inline]
     pub fn insert_account_storage(
         &self,
         address: Address,
@@ -149,6 +154,7 @@ impl<ExtDB: DatabaseRef> CacheDB<ExtDB> {
     }
 
     /// replace account storage without overriding account info
+    #[inline]
     pub fn replace_account_storage(
         &self,
         address: Address,
@@ -162,6 +168,7 @@ impl<ExtDB: DatabaseRef> CacheDB<ExtDB> {
 }
 
 impl<ExtDB: Clone> DatabaseCommit for CacheDB<ExtDB> {
+    #[inline]
     fn commit(&self, changes: HashMap<Address, Account>) {
         for (address, mut account) in changes {
             if !account.is_touched() {
@@ -201,6 +208,7 @@ impl<ExtDB: Clone> DatabaseCommit for CacheDB<ExtDB> {
 impl<ExtDB: DatabaseRef> Database for CacheDB<ExtDB> {
     type Error = ExtDB::Error;
 
+    #[inline]
     fn basic(&self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
         match self.accounts.get(&address) {
             Some(basic) => Ok(basic.info()),
@@ -223,6 +231,7 @@ impl<ExtDB: DatabaseRef> Database for CacheDB<ExtDB> {
         }
     }
 
+    #[inline]
     fn code_by_hash(&self, code_hash: B256) -> Result<Bytecode, Self::Error> {
         match self.contracts.get(&code_hash) {
             Some(bytecode) => Ok(bytecode.value().clone()),
@@ -237,6 +246,7 @@ impl<ExtDB: DatabaseRef> Database for CacheDB<ExtDB> {
     /// Get the value in an account's storage slot.
     ///
     /// It is assumed that account is already loaded.
+    #[inline]
     fn storage(&self, address: Address, index: U256) -> Result<U256, Self::Error> {
         match self.accounts.get(&address) {
             Some(account) => {
@@ -274,6 +284,7 @@ impl<ExtDB: DatabaseRef> Database for CacheDB<ExtDB> {
         }
     }
 
+    #[inline]
     fn block_hash(&self, number: U256) -> Result<B256, Self::Error> {
         match self.block_hashes.get(&number) {
             Some(block_hash) => Ok(*block_hash),
@@ -289,6 +300,7 @@ impl<ExtDB: DatabaseRef> Database for CacheDB<ExtDB> {
 impl<ExtDB: DatabaseRef> DatabaseRef for CacheDB<ExtDB> {
     type Error = ExtDB::Error;
 
+    #[inline]
     fn basic_ref(&self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
         match self.accounts.get(&address) {
             Some(acc) => Ok(acc.info()),
@@ -296,6 +308,7 @@ impl<ExtDB: DatabaseRef> DatabaseRef for CacheDB<ExtDB> {
         }
     }
 
+    #[inline]
     fn code_by_hash_ref(&self, code_hash: B256) -> Result<Bytecode, Self::Error> {
         match self.contracts.get(&code_hash) {
             Some(entry) => Ok(entry.clone()),
@@ -303,6 +316,7 @@ impl<ExtDB: DatabaseRef> DatabaseRef for CacheDB<ExtDB> {
         }
     }
 
+    #[inline]
     fn storage_ref(&self, address: Address, index: U256) -> Result<U256, Self::Error> {
         match self.accounts.get(&address) {
             Some(acc_entry) => match acc_entry.storage.get(&index) {
@@ -322,6 +336,7 @@ impl<ExtDB: DatabaseRef> DatabaseRef for CacheDB<ExtDB> {
         }
     }
 
+    #[inline]
     fn block_hash_ref(&self, number: U256) -> Result<B256, Self::Error> {
         match self.block_hashes.get(&number) {
             Some(entry) => Ok(*entry),

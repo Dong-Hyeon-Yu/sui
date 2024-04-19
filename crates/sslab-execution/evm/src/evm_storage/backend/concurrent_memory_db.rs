@@ -1,4 +1,3 @@
-use dashmap::mapref::one::{Ref, RefMut};
 use reth::revm::{
     db::{AccountState, DatabaseCommit, DatabaseRef, EmptyDB},
     primitives::{
@@ -95,7 +94,7 @@ use std::sync::Arc;
 /// A [Database] implementation that stores all state changes in memory.
 pub type InMemoryConcurrentDB = CacheDB<EmptyDB>;
 
-type ChashMap<K, V> = dashmap::DashMap<K, V>;
+type ChashMap<K, V> = flurry::HashMap<K, V>;
 
 /// A [Database] implementation that stores all state changes in memory.
 ///
@@ -131,8 +130,8 @@ impl<ExtDB: Default + Clone> Default for CacheDB<ExtDB> {
 impl<ExtDB: Clone> CacheDB<ExtDB> {
     pub fn new(db: ExtDB) -> Self {
         let contracts = ChashMap::new();
-        contracts.insert(KECCAK_EMPTY, Bytecode::new());
-        contracts.insert(B256::ZERO, Bytecode::new());
+        contracts.pin().insert(KECCAK_EMPTY, Bytecode::new());
+        contracts.pin().insert(B256::ZERO, Bytecode::new());
         Self {
             accounts: Arc::new(ChashMap::new()),
             contracts: Arc::new(contracts),
@@ -154,8 +153,9 @@ impl<ExtDB: Clone> CacheDB<ExtDB> {
                     account.code_hash = code.hash_slow();
                 }
                 self.contracts
-                    .entry(account.code_hash)
-                    .or_insert_with(|| code.clone());
+                    .pin()
+                    .try_insert(account.code_hash, code.clone())
+                    .ok();
             }
         }
         if account.code_hash == B256::ZERO {
@@ -166,7 +166,14 @@ impl<ExtDB: Clone> CacheDB<ExtDB> {
     /// Insert account info but not override storage
     pub fn insert_account_info(&self, address: Address, mut info: AccountInfo) {
         self.insert_contract(&mut info);
-        self.accounts.entry(address).or_default().info = info;
+        let mut account = self
+            .accounts
+            .pin()
+            .get(&address)
+            .cloned()
+            .unwrap_or_default();
+        account.info = info;
+        self.accounts.pin().insert(address, account);
     }
 }
 
@@ -174,11 +181,11 @@ impl<ExtDB: DatabaseRef> CacheDB<ExtDB> {
     /// Returns the account for the given address.
     ///
     /// If the account was not found in the cache, it will be loaded from the underlying database.
-    pub fn load_account(&self, address: Address) -> Result<Ref<Address, DbAccount>, ExtDB::Error> {
-        match self.accounts.get(&address) {
-            Some(account) => Ok(account),
+    pub fn load_account(&self, address: Address) -> Result<DbAccount, ExtDB::Error> {
+        match self.accounts.pin().get(&address) {
+            Some(account) => Ok(account.clone()),
             None => {
-                self.accounts.insert(
+                self.accounts.pin().insert(
                     address,
                     self.db
                         .basic_ref(address)?
@@ -189,33 +196,7 @@ impl<ExtDB: DatabaseRef> CacheDB<ExtDB> {
                         .unwrap_or_else(DbAccount::new_not_existing),
                 );
 
-                Ok(self.accounts.get(&address).unwrap())
-            }
-        }
-    }
-
-    /// Returns the account for the given address.
-    ///
-    /// If the account was not found in the cache, it will be loaded from the underlying database.
-    pub fn load_account_mut(
-        &self,
-        address: Address,
-    ) -> Result<RefMut<Address, DbAccount>, ExtDB::Error> {
-        match self.accounts.get_mut(&address) {
-            Some(account) => Ok(account),
-            None => {
-                self.accounts.insert(
-                    address,
-                    self.db
-                        .basic_ref(address)?
-                        .map(|info| DbAccount {
-                            info,
-                            ..Default::default()
-                        })
-                        .unwrap_or_else(DbAccount::new_not_existing),
-                );
-
-                Ok(self.accounts.get_mut(&address).unwrap())
+                Ok(self.accounts.pin().get(&address).cloned().unwrap())
             }
         }
     }
@@ -228,7 +209,8 @@ impl<ExtDB: DatabaseRef> CacheDB<ExtDB> {
         value: U256,
     ) -> Result<(), ExtDB::Error> {
         let account = self.load_account(address)?;
-        account.storage.insert(slot, value);
+        account.storage.pin().insert(slot, value);
+        self.accounts.pin().insert(address, account);
         Ok(())
     }
 
@@ -238,9 +220,10 @@ impl<ExtDB: DatabaseRef> CacheDB<ExtDB> {
         address: Address,
         storage: HashMap<U256, U256>,
     ) -> Result<(), ExtDB::Error> {
-        let mut account = self.load_account_mut(address)?;
+        let mut account = self.load_account(address)?;
         account.account_state = AccountState::StorageCleared;
         account.storage = storage.into_iter().collect();
+        self.accounts.pin().insert(address, account);
         Ok(())
     }
 }
@@ -252,20 +235,31 @@ impl<ExtDB: Clone> DatabaseCommit for CacheDB<ExtDB> {
                 continue;
             }
             if account.is_selfdestructed() {
-                let mut db_account = self.accounts.entry(address).or_default();
-                db_account.storage.clear();
+                let mut db_account = self
+                    .accounts
+                    .pin()
+                    .get(&address)
+                    .cloned()
+                    .unwrap_or_default();
+                db_account.storage.pin().clear();
                 db_account.account_state = AccountState::NotExisting;
                 db_account.info = AccountInfo::default();
+                self.accounts.pin().insert(address, db_account);
                 continue;
             }
             let is_newly_created = account.is_created();
             self.insert_contract(&mut account.info);
 
-            let mut db_account = self.accounts.entry(address).or_default();
+            let mut db_account = self
+                .accounts
+                .pin()
+                .get(&address)
+                .cloned()
+                .unwrap_or_default();
             db_account.info = account.info;
 
             db_account.account_state = if is_newly_created {
-                db_account.storage.clear();
+                db_account.storage.pin().clear();
                 AccountState::StorageCleared
             } else if db_account.account_state.is_storage_cleared() {
                 // Preserve old account state if it already exists
@@ -274,10 +268,13 @@ impl<ExtDB: Clone> DatabaseCommit for CacheDB<ExtDB> {
                 AccountState::Touched
             };
 
-            let db_account = db_account.downgrade();
-            account.storage.into_iter().for_each(|(key, value)| {
-                db_account.storage.insert(key, value.present_value());
-            });
+            {
+                let _pin = db_account.storage.pin();
+                account.storage.iter().for_each(|(key, value)| {
+                    _pin.insert(*key, value.present_value());
+                });
+            }
+            self.accounts.pin().insert(address, db_account);
         }
     }
 }
@@ -286,7 +283,7 @@ impl<ExtDB: DatabaseRef> Database for CacheDB<ExtDB> {
     type Error = ExtDB::Error;
 
     fn basic(&self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
-        match self.accounts.get(&address) {
+        match self.accounts.pin().get(&address) {
             Some(basic) => Ok(basic.info()),
             None => {
                 let new_account = self
@@ -300,7 +297,7 @@ impl<ExtDB: DatabaseRef> Database for CacheDB<ExtDB> {
 
                 let basic_info = new_account.info();
 
-                self.accounts.insert(address, new_account);
+                self.accounts.pin().insert(address, new_account);
 
                 Ok(basic_info)
             }
@@ -308,11 +305,11 @@ impl<ExtDB: DatabaseRef> Database for CacheDB<ExtDB> {
     }
 
     fn code_by_hash(&self, code_hash: B256) -> Result<Bytecode, Self::Error> {
-        match self.contracts.get(&code_hash) {
-            Some(bytecode) => Ok(bytecode.value().clone()),
+        match self.contracts.pin().get(&code_hash) {
+            Some(bytecode) => Ok(bytecode.clone()),
             None => {
                 let bytecode = self.db.code_by_hash_ref(code_hash)?;
-                self.contracts.insert(code_hash, bytecode.clone());
+                self.contracts.pin().insert(code_hash, bytecode.clone());
                 Ok(bytecode)
             }
         }
@@ -322,9 +319,9 @@ impl<ExtDB: DatabaseRef> Database for CacheDB<ExtDB> {
     ///
     /// It is assumed that account is already loaded.
     fn storage(&self, address: Address, index: U256) -> Result<U256, Self::Error> {
-        match self.accounts.get(&address) {
+        match self.accounts.pin().get(&address) {
             Some(account) => {
-                if let Some(slot) = account.storage.get(&index) {
+                if let Some(slot) = account.storage.pin().get(&index) {
                     return Ok(*slot);
                 }
 
@@ -335,7 +332,7 @@ impl<ExtDB: DatabaseRef> Database for CacheDB<ExtDB> {
                     return Ok(U256::ZERO);
                 } else {
                     let slot = self.db.storage_ref(address, index)?;
-                    account.storage.insert(index, slot);
+                    account.storage.pin().insert(index, slot);
                     return Ok(slot);
                 }
             }
@@ -344,12 +341,12 @@ impl<ExtDB: DatabaseRef> Database for CacheDB<ExtDB> {
                 let value = if info.is_some() {
                     let value = self.db.storage_ref(address, index)?;
                     let account: DbAccount = info.into();
-                    account.storage.insert(index, value);
+                    account.storage.pin().insert(index, value);
                     value
                 } else {
                     let value = U256::ZERO;
                     let account = info.into();
-                    self.accounts.insert(address, account);
+                    self.accounts.pin().insert(address, account);
                     value
                 };
 
@@ -359,11 +356,11 @@ impl<ExtDB: DatabaseRef> Database for CacheDB<ExtDB> {
     }
 
     fn block_hash(&self, number: U256) -> Result<B256, Self::Error> {
-        match self.block_hashes.get(&number) {
+        match self.block_hashes.pin().get(&number) {
             Some(block_hash) => Ok(*block_hash),
             None => {
                 let hash = self.db.block_hash_ref(number)?;
-                self.block_hashes.insert(number, hash);
+                self.block_hashes.pin().insert(number, hash);
                 Ok(hash)
             }
         }
@@ -374,22 +371,22 @@ impl<ExtDB: DatabaseRef> DatabaseRef for CacheDB<ExtDB> {
     type Error = ExtDB::Error;
 
     fn basic_ref(&self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
-        match self.accounts.get(&address) {
+        match self.accounts.pin().get(&address) {
             Some(acc) => Ok(acc.info()),
             None => self.db.basic_ref(address),
         }
     }
 
     fn code_by_hash_ref(&self, code_hash: B256) -> Result<Bytecode, Self::Error> {
-        match self.contracts.get(&code_hash) {
+        match self.contracts.pin().get(&code_hash) {
             Some(entry) => Ok(entry.clone()),
             None => self.db.code_by_hash_ref(code_hash),
         }
     }
 
     fn storage_ref(&self, address: Address, index: U256) -> Result<U256, Self::Error> {
-        match self.accounts.get(&address) {
-            Some(acc_entry) => match acc_entry.storage.get(&index) {
+        match self.accounts.pin().get(&address) {
+            Some(acc_entry) => match acc_entry.storage.pin().get(&index) {
                 Some(entry) => Ok(*entry),
                 None => {
                     if matches!(
@@ -407,7 +404,7 @@ impl<ExtDB: DatabaseRef> DatabaseRef for CacheDB<ExtDB> {
     }
 
     fn block_hash_ref(&self, number: U256) -> Result<B256, Self::Error> {
-        match self.block_hashes.get(&number) {
+        match self.block_hashes.pin().get(&number) {
             Some(entry) => Ok(*entry),
             None => self.db.block_hash_ref(number),
         }
@@ -453,16 +450,6 @@ impl From<AccountInfo> for DbAccount {
             info,
             account_state: AccountState::None,
             ..Default::default()
-        }
-    }
-}
-
-impl Into<reth::revm::db::DbAccount> for DbAccount {
-    fn into(self) -> reth::revm::db::DbAccount {
-        reth::revm::db::DbAccount {
-            info: self.info,
-            account_state: self.account_state,
-            storage: self.storage.into_iter().collect(),
         }
     }
 }

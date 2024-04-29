@@ -351,7 +351,7 @@ pub trait LatencyBenchmark {
     async fn _execute_and_return_latency(
         &self,
         consensus_output: Vec<ExecutableEthereumBatch<TransactionSignedEcRecovered>>,
-    ) -> (u128, u128, u128, u128, u128);
+    ) -> (u128, u128, u128, (u128, u128), u128);
 
     async fn _validate_optimistic_assumption_and_return_latency(
         &self,
@@ -365,7 +365,7 @@ impl LatencyBenchmark for ConcurrencyLevelManager {
     async fn _execute_and_return_latency(
         &self,
         consensus_output: Vec<ExecutableEthereumBatch<TransactionSignedEcRecovered>>,
-    ) -> (u128, u128, u128, u128, u128) {
+    ) -> (u128, u128, u128, (u128, u128), u128) {
         let (_, tx_list) = Self::_unpack_batches(consensus_output).await;
 
         if tx_list.is_empty() {
@@ -377,6 +377,7 @@ impl LatencyBenchmark for ConcurrencyLevelManager {
         let mut simulation_latency = 0;
         let mut scheduling_latency = 0;
         let mut validation_latency = 0;
+        let mut validation_execute_latency = 0;
         let mut commit_latency = 0;
 
         let total_latency = Instant::now();
@@ -419,7 +420,7 @@ impl LatencyBenchmark for ConcurrencyLevelManager {
 
             let latency = Instant::now();
             let rw_sets = self._simulate(txss).await;
-            simulation_latency += latency.elapsed().as_micros();
+            validation_execute_latency += latency.elapsed().as_micros();
 
             match self
                 ._validate_optimistic_assumption_and_return_latency(rw_sets)
@@ -443,7 +444,7 @@ impl LatencyBenchmark for ConcurrencyLevelManager {
             total_latency.elapsed().as_micros(),
             simulation_latency,
             scheduling_latency,
-            validation_latency,
+            (validation_latency, validation_execute_latency),
             commit_latency,
         )
     }
@@ -460,8 +461,9 @@ impl LatencyBenchmark for ConcurrencyLevelManager {
 
             let latency = Instant::now();
             self._concurrent_commit(scheduled_txs).await;
+            let c_latency = latency.elapsed().as_micros();
 
-            return (None, 0, latency.elapsed().as_micros());
+            return (None, 0, c_latency);
         }
 
         let (send, recv) = tokio::sync::oneshot::channel();
@@ -511,12 +513,8 @@ impl LatencyBenchmark for ConcurrencyLevelManager {
 
         let commit_latency = Instant::now();
         self._concurrent_commit(scheduled_txs).await;
-
-        (
-            invalid_txs,
-            validation_latency,
-            commit_latency.elapsed().as_micros(),
-        )
+        let c_latency = commit_latency.elapsed().as_micros();
+        (invalid_txs, validation_latency, c_latency)
     }
 }
 

@@ -27,25 +27,28 @@ def _parse_throughput(log):
         
 
 def _parse_latency(log):
-    tmp = findall(r'Total: \d+\.\d+, Simulation: (\d+\.\d+), Scheduling: \d+\.\d+, Validation: \d+\.\d+, Commit: \d+\.\d+, Other: \d+\.\d+', log)
+    tmp = findall(r'Total: \d+\.\d+, Simulation: (\d+\.\d+), Scheduling: \d+\.\d+, Validation: \(execute: \d+\.\d+, validate: \d+\.\d+\), Commit: \d+\.\d+, Other: \d+\.\d+', log)
     simulation = [float(s) for s in tmp]
     
-    tmp = findall(r'Total: \d+\.\d+, Simulation: \d+\.\d+, Scheduling: (\d+\.\d+), Validation: \d+\.\d+, Commit: \d+\.\d+, Other: \d+\.\d+', log)
+    tmp = findall(r'Total: \d+\.\d+, Simulation: \d+\.\d+, Scheduling: (\d+\.\d+), Validation: \(execute: \d+\.\d+, validate: \d+\.\d+\), Commit: \d+\.\d+, Other: \d+\.\d+', log)
     scheduling = [float(s) for s in tmp]
     
-    tmp = findall(r'Total: \d+\.\d+, Simulation: \d+\.\d+, Scheduling: \d+\.\d+, Validation: (\d+\.\d+), Commit: \d+\.\d+, Other: \d+\.\d+', log)
-    validation = [float(s) for s in tmp]
+    tmp = findall(r'Total: \d+\.\d+, Simulation: \d+\.\d+, Scheduling: \d+\.\d+, Validation: \(execute: (\d+\.\d+), validate: \d+\.\d+\), Commit: \d+\.\d+, Other: \d+\.\d+', log)
+    v_exec = [float(e) for e in tmp]
     
-    tmp = findall(r'Total: \d+\.\d+, Simulation: \d+\.\d+, Scheduling: \d+\.\d+, Validation: \d+\.\d+, Commit: (\d+\.\d+), Other: \d+\.\d+', log)
+    tmp = findall(r'Total: \d+\.\d+, Simulation: \d+\.\d+, Scheduling: \d+\.\d+, Validation: \(execute: \d+\.\d+, validate: (\d+\.\d+)\), Commit: \d+\.\d+, Other: \d+\.\d+', log)
+    v_val = [float(v) for v in tmp]
+    
+    tmp = findall(r'Total: \d+\.\d+, Simulation: \d+\.\d+, Scheduling: \d+\.\d+, Validation: \(execute: \d+\.\d+, validate: \d+\.\d+\), Commit: (\d+\.\d+), Other: \d+\.\d+', log)
     commit = [float(s) for s in tmp]
     
-    tmp = findall(r'Total: \d+\.\d+, Simulation: \d+\.\d+, Scheduling: \d+\.\d+, Validation: \d+\.\d+, Commit: \d+\.\d+, Other: (\d+\.\d+)', log)
+    tmp = findall(r'Total: \d+\.\d+, Simulation: \d+\.\d+, Scheduling: \d+\.\d+, Validation: \(execute: \d+\.\d+, validate: \d+\.\d+\), Commit: \d+\.\d+, Other: (\d+\.\d+)', log)
     other = [float(s) for s in tmp]
     
     tmp = findall(r'Ktps: (\d+\.\d+)', log)
     ktps = [float(t) for t in tmp]
     
-    return ktps, simulation, scheduling, validation, commit, other
+    return ktps, simulation, scheduling, v_exec, v_val, commit, other
 
 def result(log):
     result = ""
@@ -57,10 +60,10 @@ def result(log):
         
         
     if latency:= _parse_latency(log):
-        ktps, simulation, scheduling, validation, commit, other = latency
+        ktps, simulation, scheduling, v_exec, v_val, commit, other = latency
         result += "\n[Latency (Ktps; simulation (ms); scheduling (ms); validation (ms); commit (ms); other (ms))]\n"
-        for k, si, sc, v, c, o in zip(ktps, simulation, scheduling, validation, commit, other, strict=True):
-            result += f"{k} {si} {sc} {v} {c} {o}\n"
+        for k, si, sc, ve, vv, c, o in zip(ktps, simulation, scheduling, v_exec, v_val, commit, other, strict=True):
+            result += f"{k} {si} {sc} {ve} {vv} {c} {o}\n"
     
     construct, sort, reorder, _ = _parse_scheduling(log)
     if construct:

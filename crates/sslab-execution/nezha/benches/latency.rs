@@ -32,9 +32,9 @@ fn _create_random_smallbank_workload(
 }
 
 fn optme_latency_inspection(c: &mut Criterion) {
-    let account_nums = [400];
+    let account_nums = [100_000];
     let s = [0.0, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
-    let param = 1..2;
+    let param = 80..81;
     let mut group = c.benchmark_group("Latency");
 
     for account_num in account_nums {
@@ -77,26 +77,35 @@ fn optme_latency_inspection(c: &mut Criterion) {
                     continue;
                 }
 
-                let (mut total, mut simulation, mut scheduling, mut validation, mut commit) =
-                    (0 as f64, 0 as f64, 0 as f64, 0 as f64, 0 as f64);
+                let (
+                    mut total,
+                    mut simulation,
+                    mut scheduling,
+                    mut validation,
+                    mut validation_execute,
+                    mut commit,
+                ) = (0 as f64, 0 as f64, 0 as f64, 0 as f64, 0 as f64, 0 as f64);
 
                 for (a1, a2, a3, a4, a5) in latency_metrics.read().iter() {
                     total += *a1 as f64;
                     simulation += *a2 as f64;
                     scheduling += *a3 as f64;
-                    validation += *a4 as f64;
+                    validation += a4.0 as f64;
+                    validation_execute += a4.1 as f64;
                     commit += *a5 as f64;
                 }
                 total /= len;
                 simulation /= len;
                 scheduling /= len;
                 validation /= len;
+                validation_execute /= len;
                 commit /= len;
-                let other = total - (simulation + scheduling + validation + commit);
+                let other =
+                    total - (simulation + scheduling + validation + validation_execute + commit);
 
                 println!(
-                    "Total: {:.4}, Simulation: {:.4}, Scheduling: {:.4}, Validation: {:.4}, Commit: {:.4}, Other: {:.4}",
-                    total /1000.0, simulation /1000.0, scheduling/1000.0, validation/1000.0, commit/1000.0, other/1000.0
+                    "Total: {:.4}, Simulation: {:.4}, Scheduling: {:.4}, Validation: (execute: {:.4}, validate: {:.4}), Commit: {:.4}, Other: {:.4}",
+                    total /1000.0, simulation /1000.0, scheduling/1000.0, validation_execute/1000.0, validation/1000.0, commit/1000.0, other/1000.0
                 );
                 println!(
                     "Ktps: {:.4}",

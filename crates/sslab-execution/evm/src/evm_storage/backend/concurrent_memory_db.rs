@@ -185,9 +185,10 @@ impl<ExtDB: Clone> DatabaseCommit for CacheDB<ExtDB> {
             self.insert_contract(&mut account.info);
 
             let mut db_account = self.accounts.entry(address).or_default();
-            db_account.info = account.info;
+            db_account.info = account.info; //TODO: make this operation as atomic not to use mutable reference (i.e., write lock)
 
             db_account.account_state = if is_newly_created {
+                //TODO: only set account state if it has been changed
                 db_account.storage.clear();
                 AccountState::StorageCleared
             } else if db_account.account_state.is_storage_cleared() {

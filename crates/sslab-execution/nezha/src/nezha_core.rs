@@ -252,10 +252,7 @@ impl ConcurrencyLevelManager {
         rw_set: Vec<SimulatedTransaction>,
     ) -> Option<Vec<SimulatedTransaction>> {
         if rw_set.len() == 1 {
-            let (_, _, state, _, _) = rw_set[0].clone().deconstruct();
-
-            self.global_state.apply_local_effect(state);
-
+            self._concurrent_commit_2(rw_set).await;
             return None;
         }
 
@@ -301,20 +298,7 @@ impl ConcurrencyLevelManager {
     pub async fn _concurrent_commit_2(&self, scheduled_txs: Vec<SimulatedTransaction>) {
         let scheduled_txs = vec![_convert(scheduled_txs).await];
 
-        let storage = self.global_state.clone();
-        let (send, recv) = tokio::sync::oneshot::channel();
-        rayon::spawn(move || {
-            let _storage = &storage;
-            for txs_to_commit in scheduled_txs {
-                txs_to_commit.into_iter().for_each(|tx| {
-                    let effect = tx.extract();
-                    _storage.apply_local_effect(effect)
-                })
-            }
-            let _ = send.send(());
-        });
-
-        let _ = recv.await;
+        self._concurrent_commit(scheduled_txs).await;
     }
 }
 #[cfg(feature = "latency")]
@@ -421,10 +405,13 @@ impl LatencyBenchmark for ConcurrencyLevelManager {
         rw_set: Vec<SimulatedTransaction>,
     ) -> (Option<Vec<SimulatedTransaction>>, u128, u128) {
         if rw_set.len() == 1 {
-            let (_, _, state, _, _) = rw_set[0].clone().deconstruct();
+            let scheduled_txs = vec![rw_set
+                .into_iter()
+                .map(ScheduledTransaction::from)
+                .collect_vec()];
 
             let latency = Instant::now();
-            self.global_state.apply_local_effect(state);
+            self._concurrent_commit(scheduled_txs).await;
             let c_latency = latency.elapsed().as_micros();
 
             return (None, 0, c_latency);
@@ -469,20 +456,7 @@ impl LatencyBenchmark for ConcurrencyLevelManager {
         let scheduled_txs = vec![_convert(valid_txs).await];
 
         let commit_latency = Instant::now();
-        let storage = self.global_state.clone();
-        let (send, recv) = tokio::sync::oneshot::channel();
-        rayon::spawn(move || {
-            let _storage = &storage;
-            for txs_to_commit in scheduled_txs {
-                txs_to_commit.into_iter().for_each(|tx| {
-                    let effect = tx.extract();
-                    _storage.apply_local_effect(effect)
-                })
-            }
-            let _ = send.send(());
-        });
-
-        let _ = recv.await;
+        self._concurrent_commit(scheduled_txs).await;
         let c_latency = commit_latency.elapsed().as_micros();
         (invalid_txs, validation_latency, c_latency)
     }

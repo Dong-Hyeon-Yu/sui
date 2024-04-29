@@ -170,9 +170,8 @@ impl KeyBasedDependencyGraph {
         let tx_list = std::mem::take(&mut self.tx_list);
         let aborted_txs = std::mem::take(&mut self.aborted_txs);
 
-        {
-            let _ = std::mem::take(&mut self.key_nodes);
-        }
+        self.key_nodes.clear();
+        self.key_nodes.shrink_to_fit();
 
         let (send, recv) = tokio::sync::oneshot::channel();
         rayon::spawn(move || {

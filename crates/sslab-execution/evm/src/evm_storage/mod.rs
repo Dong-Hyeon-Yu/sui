@@ -10,7 +10,7 @@ use ethers_core::{
 use evm::backend::{MemoryAccount, MemoryVicinity};
 pub use evm_storage::*;
 use reth::primitives::{Address, Bytes};
-use reth::revm::InMemoryDB;
+use reth::revm::{interpreter::analysis::to_analysed, InMemoryDB};
 
 use self::backend::{
     CAccount, CMemoryBackend, ConcurrentHashMap, InMemoryConcurrentDB, MemoryBackend,
@@ -161,7 +161,7 @@ pub fn memory_database(contract_addr: &str, bytecode: &str, admin_acc: &str) -> 
         reth::primitives::U256::MAX,
         0u64,
         code_hash,
-        reth_bytecode,
+        to_analysed(reth_bytecode),
     );
 
     db.insert_account_info(
@@ -194,7 +194,7 @@ pub fn concurrent_memory_database(
         reth::primitives::U256::MAX,
         0u64,
         code_hash,
-        reth_bytecode,
+        to_analysed(reth_bytecode),
     );
 
     db.insert_account_info(

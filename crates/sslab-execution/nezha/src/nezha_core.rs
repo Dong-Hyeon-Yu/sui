@@ -294,15 +294,9 @@ impl ConcurrencyLevelManager {
         invalid_txs
     }
 
+    #[inline]
     pub async fn _concurrent_commit_2(&self, scheduled_txs: Vec<SimulatedTransaction>) {
-        let scheduled_txs = vec![tokio::task::spawn_blocking(move || {
-            scheduled_txs
-                .into_par_iter()
-                .map(|tx| ScheduledTransaction::from(tx))
-                .collect()
-        })
-        .await
-        .expect("fail to spawn a task for convert SimulatedTransaction to ScheduledTransaction")];
+        let scheduled_txs = vec![_convert(scheduled_txs).await];
 
         self._concurrent_commit(scheduled_txs).await;
     }
@@ -459,14 +453,7 @@ impl LatencyBenchmark for ConcurrencyLevelManager {
         let (valid_txs, invalid_txs) = recv.await.unwrap();
         let validation_latency = latency.elapsed().as_micros();
 
-        let scheduled_txs = vec![tokio::task::spawn_blocking(move || {
-            valid_txs
-                .into_par_iter()
-                .map(ScheduledTransaction::from)
-                .collect()
-        })
-        .await
-        .expect("fail to spawn a task for convert SimulatedTransaction to ScheduledTransaction")];
+        let scheduled_txs = vec![_convert(valid_txs).await];
 
         let commit_latency = Instant::now();
         self._concurrent_commit(scheduled_txs).await;
@@ -743,6 +730,7 @@ impl ScheduledInfo {
     }
 }
 
+#[inline]
 fn _unwrap(tx: Arc<Transaction>) -> Transaction {
     match Arc::try_unwrap(tx) {
         Ok(tx) => tx,
@@ -755,4 +743,18 @@ fn _unwrap(tx: Arc<Transaction>) -> Transaction {
             );
         }
     }
+}
+
+#[inline]
+async fn _convert(txs: Vec<SimulatedTransaction>) -> Vec<ScheduledTransaction> {
+    let (send, recv) = tokio::sync::oneshot::channel();
+    rayon::spawn(move || {
+        let result = txs
+            .into_iter()
+            .map(ScheduledTransaction::from)
+            .collect_vec();
+
+        let _ = send.send(result).unwrap();
+    });
+    recv.await.unwrap()
 }

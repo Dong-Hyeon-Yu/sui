@@ -19,13 +19,13 @@ pub struct KdgKey {
     pub state_key: Key,
 }
 
-pub struct KeyBasedConflictGraph {
+pub struct KeyBasedDependencyGraph {
     key_nodes: HashMap<KdgKey, KeyNode>,
     tx_list: FastHashMap<u64, Arc<Transaction>>, // tx_id -> transaction
     aborted_txs: Vec<Arc<Transaction>>, // transactions that are aborted due to read-write conflict (used for reordering).
 }
 
-impl KeyBasedConflictGraph {
+impl KeyBasedDependencyGraph {
     fn new() -> Self {
         Self {
             key_nodes: HashMap::new(),
@@ -35,33 +35,33 @@ impl KeyBasedConflictGraph {
     }
 
     pub fn construct(simulation_result: Vec<SimulatedTransactionV2>) -> Self {
-        let mut acg = Self::new();
+        let mut kdg = Self::new();
 
         for tx in simulation_result {
             let (_tx, rw_set) = Transaction::from(tx);
             let (read_set, write_set) = rw_set;
             let tx = Arc::new(_tx);
 
-            let mut write_units =
-                Self::_convert_to_units(&tx, UnitType::Write, write_set, Some(&read_set));
+            let write_units = Self::_convert_to_write_units(&tx, write_set, &read_set);
 
-            if acg._check_updater_already_exist_in_same_address(&write_units) {
+            if kdg._check_updater_already_exist_in_same_address(&write_units) {
                 tx.abort();
-                acg.aborted_txs.push(tx);
+                kdg.aborted_txs.push(tx);
                 continue;
             }
 
-            let mut read_units = Self::_convert_to_units(&tx, UnitType::Read, read_set, None);
+            let mut read_units = Self::_convert_to_read_units(&tx, read_set);
 
             // before inserting the units, wr-dependencies must be created b/w RW units.
-            Self::_set_wr_dependencies(&mut read_units, &mut write_units);
+            Self::_set_wr_dependencies(&mut read_units, &write_units);
             tx.set_write_units(write_units.clone());
 
-            acg.tx_list.insert(tx.id(), tx);
-            acg._add_units_to_address([read_units, write_units].concat());
+            kdg.tx_list.insert(tx.id(), tx);
+            kdg._add_read_units_to_address(read_units);
+            kdg._add_write_units_to_address(write_units);
         }
 
-        acg
+        kdg
     }
 
     async fn _par_construct<F, B>(simulation_result: Vec<B>, constructor: F) -> Self
@@ -191,7 +191,7 @@ impl KeyBasedConflictGraph {
                     match b.out_degree().cmp(a.out_degree()) {
                         std::cmp::Ordering::Equal => {
                             // 3rd priority
-                            a.address().cmp(b.address())
+                            a.key().cmp(b.key())
                         }
                         other => other,
                     }
@@ -202,11 +202,11 @@ impl KeyBasedConflictGraph {
 
         addresses
             .into_iter()
-            .map(|address| address.address().to_owned())
+            .map(|address| address.key().to_owned())
             .collect_vec()
     }
 
-    fn _add_units_to_address(&mut self, units: Vec<Arc<Unit>>) {
+    fn _add_read_units_to_address(&mut self, units: Vec<ReadUnit>) {
         units.into_iter().for_each(|unit| {
             let raw_address = unit.key();
             let address = match self.key_nodes.get_mut(raw_address) {
@@ -218,34 +218,44 @@ impl KeyBasedConflictGraph {
                 }
             };
 
-            address.add_unit(unit);
+            address.add_read_unit(unit);
         });
     }
 
-    fn _convert_to_units(
+    fn _add_write_units_to_address(&mut self, units: Vec<Arc<WriteUnit>>) {
+        units.into_iter().for_each(|unit| {
+            let raw_address = unit.key();
+            let address = match self.key_nodes.get_mut(raw_address) {
+                Some(address) => address,
+                None => {
+                    self.key_nodes
+                        .insert(*raw_address, KeyNode::new(*raw_address));
+                    self.key_nodes.get_mut(raw_address).unwrap()
+                }
+            };
+
+            address.add_write_unit(unit);
+        });
+    }
+
+    fn _convert_to_write_units(
         tx: &Arc<Transaction>,
-        unit_type: UnitType,
-        read_or_write_set: HashMap<Address, HashSet<Key>>,
-        read_set: Option<&HashMap<Address, HashSet<Key>>>,
-    ) -> Vec<Arc<Unit>> {
-        read_or_write_set
+        write_set: HashMap<Address, HashSet<Key>>,
+        read_set: &HashMap<Address, HashSet<Key>>,
+    ) -> Vec<Arc<WriteUnit>> {
+        write_set
             .into_iter()
             .map(|(contract_addr, state_keys)| {
                 state_keys
                     .into_iter()
                     .map(|key| {
-                        let co_locate = if let Some(read_set) = read_set {
-                            match read_set.get(&contract_addr) {
-                                Some(states) => states.get(&key).is_some(),
-                                None => false,
-                            }
-                        } else {
-                            false
+                        let co_locate = match read_set.get(&contract_addr) {
+                            Some(states) => states.get(&key).is_some(),
+                            None => false,
                         };
 
-                        Arc::new(Unit::new(
+                        Arc::new(WriteUnit::new(
                             Arc::clone(tx),
-                            unit_type.clone(),
                             KdgKey {
                                 address: (*contract_addr).into(),
                                 state_key: key,
@@ -259,12 +269,36 @@ impl KeyBasedConflictGraph {
             .collect_vec()
     }
 
-    fn _set_wr_dependencies(read_units: &mut Vec<Arc<Unit>>, write_units: &mut Vec<Arc<Unit>>) {
+    fn _convert_to_read_units(
+        tx: &Arc<Transaction>,
+        read_set: HashMap<Address, HashSet<Key>>,
+    ) -> Vec<ReadUnit> {
+        read_set
+            .into_iter()
+            .map(|(contract_addr, state_keys)| {
+                state_keys
+                    .into_iter()
+                    .map(|key| {
+                        ReadUnit::new(
+                            Arc::clone(tx),
+                            KdgKey {
+                                address: (*contract_addr).into(),
+                                state_key: key,
+                            },
+                        )
+                    })
+                    .collect_vec()
+            })
+            .flatten()
+            .collect_vec()
+    }
+
+    fn _set_wr_dependencies(read_units: &mut Vec<ReadUnit>, write_units: &Vec<Arc<WriteUnit>>) {
         // 동일한 tx의 read/write set 을 넘겨받기 때문에, 모든 write->read dependency 추가해야함. (단 같은 address 내에서는 제외)
         write_units.into_iter().for_each(|write_unit| {
             let address = write_unit.key();
 
-            read_units.iter().for_each(|read_unit| {
+            read_units.iter_mut().for_each(|read_unit| {
                 if read_unit.key() != address {
                     read_unit.add_dependency();
                     write_unit.add_dependency();
@@ -275,7 +309,7 @@ impl KeyBasedConflictGraph {
 
     fn _check_updater_already_exist_in_same_address(
         &mut self,
-        write_units: &Vec<Arc<Unit>>,
+        write_units: &Vec<Arc<WriteUnit>>,
     ) -> bool {
         write_units.iter().filter(|unit| unit.co_located).any(
             |possible_ww_conflict_unit| match self.key_nodes.get(possible_ww_conflict_unit.key()) {
@@ -305,12 +339,12 @@ impl KeyBasedConflictGraph {
         other
             .key_nodes
             .iter()
-            .for_each(|(addr, address)| match self.key_nodes.get_mut(addr) {
-                Some(my_address) => {
-                    my_address.merge(address.to_owned());
+            .for_each(|(key, vertex)| match self.key_nodes.get_mut(key) {
+                Some(my_vertex) => {
+                    my_vertex.merge(vertex.to_owned());
                 }
                 None => {
-                    self.key_nodes.insert(*addr, address.to_owned());
+                    self.key_nodes.insert(*key, vertex.to_owned());
                 }
             });
         self.tx_list.extend(other.tx_list);
@@ -379,8 +413,8 @@ impl AbortInfo {
 pub struct Transaction {
     tx_id: u64,
     sequence: RwLock<u64>, // 0 represents that this transaction havn't been ordered yet.
-    pub abort_info: RwLock<AbortInfo>,
-    write_units: RwLock<Vec<Arc<Unit>>>,
+    abort_info: RwLock<AbortInfo>,
+    write_units: RwLock<Vec<Arc<WriteUnit>>>,
     effects: State,
 
     raw_tx: IndexedEthereumTransaction,
@@ -416,7 +450,7 @@ impl Transaction {
         self.sequence.read().to_owned()
     }
 
-    fn set_write_units(&self, write_units: Vec<Arc<Unit>>) {
+    fn set_write_units(&self, write_units: Vec<Arc<WriteUnit>>) {
         let mut my_units = self.write_units.write();
         write_units.into_iter().for_each(|u| my_units.push(u));
     }
@@ -455,15 +489,15 @@ impl Transaction {
             .all(|unit| unit.degree() == 0 && !unit.co_located())
     }
 
-    fn write_units(&self) -> RwLockReadGuard<Vec<Arc<Unit>>> {
+    fn write_units(&self) -> RwLockReadGuard<Vec<Arc<WriteUnit>>> {
         self.write_units.read()
     }
 
-    pub fn raw_tx(&self) -> &IndexedEthereumTransaction {
-        &self.raw_tx
+    pub fn raw_tx(self) -> IndexedEthereumTransaction {
+        self.raw_tx
     }
 
-    pub fn rw_set(&self) -> (HashSet<KdgKey>, HashSet<KdgKey>) {
+    pub fn prev_rw_set(&self) -> (HashSet<KdgKey>, HashSet<KdgKey>) {
         (
             self.abort_info.read().read_keys(),
             self.abort_info.read().write_keys(),
@@ -475,34 +509,63 @@ impl Transaction {
     }
 }
 
-#[derive(Clone, Debug, Copy, PartialEq, Eq)]
-enum UnitType {
-    Read,
-    Write,
+#[derive(Clone, Debug)]
+struct ReadUnit {
+    tx: Arc<Transaction>,
+    key: KdgKey,
+    wr_dependencies: u32, // Vec<Unit> is not necessary, but the degree is only used for sorting.
+}
+
+impl ReadUnit {
+    fn new(tx: Arc<Transaction>, key: KdgKey) -> Self {
+        Self {
+            tx,
+            key,
+            wr_dependencies: 0,
+        }
+    }
+
+    fn key(&self) -> &KdgKey {
+        &self.key
+    }
+
+    fn degree(&self) -> u32 {
+        self.wr_dependencies
+    }
+
+    fn add_dependency(&mut self) {
+        self.wr_dependencies += 1;
+    }
+
+    fn is_sorted(&self) -> bool {
+        self.tx.is_sorted()
+    }
+
+    fn sequence(&self) -> u64 {
+        self.tx.sequence()
+    }
+
+    fn set_sequence(&self, sequence: u64) {
+        self.tx.set_sequence(sequence);
+    }
 }
 
 #[derive(Debug)]
-struct Unit {
+struct WriteUnit {
     tx: Arc<Transaction>,
-    unit_type: UnitType,
     key: KdgKey,
-    wr_dependencies: RwLock<u32>, // Vec<Arc<Unit>> is not necessary, but the degree is only used for sorting.
+    wr_dependencies: RwLock<u32>, // Vec<Unit> is not necessary, but the degree is only used for sorting.
     co_located: bool,             // True if the read unit and write unit are in the same address.
 }
 
-impl Unit {
-    fn new(tx: Arc<Transaction>, unit_type: UnitType, key: KdgKey, co_located: bool) -> Self {
+impl WriteUnit {
+    fn new(tx: Arc<Transaction>, key: KdgKey, co_located: bool) -> Self {
         Self {
             tx,
-            unit_type,
             key,
             wr_dependencies: RwLock::new(0),
             co_located,
         }
-    }
-
-    fn unit_type(&self) -> &UnitType {
-        &self.unit_type
     }
 
     fn key(&self) -> &KdgKey {
@@ -514,8 +577,7 @@ impl Unit {
     }
 
     fn add_dependency(&self) {
-        let mut degree = self.wr_dependencies.write();
-        *degree += 1;
+        *self.wr_dependencies.write() += 1;
     }
 
     fn is_sorted(&self) -> bool {
@@ -542,7 +604,7 @@ impl Unit {
 
 #[derive(Clone, Debug)]
 struct ReadUnits {
-    units: Vec<Arc<Unit>>,
+    units: Vec<ReadUnit>,
     max_seq: u64,
 }
 
@@ -554,7 +616,7 @@ impl ReadUnits {
         }
     }
 
-    fn push(&mut self, unit: Arc<Unit>) {
+    fn push(&mut self, unit: ReadUnit) {
         self.units.push(unit);
     }
 
@@ -562,7 +624,7 @@ impl ReadUnits {
     fn sort(&mut self) {
         /* (Algorithm2) line 3*/
         let units = std::mem::take(&mut self.units);
-        let (sorted, remaining): (Vec<Arc<Unit>>, Vec<Arc<Unit>>) =
+        let (sorted, remaining): (Vec<ReadUnit>, Vec<ReadUnit>) =
             units.into_iter().partition(|unit| unit.is_sorted());
 
         let min_seq;
@@ -608,7 +670,7 @@ impl ReadUnits {
 
 #[derive(Clone, Debug)]
 struct WriteUnits {
-    units: Vec<Arc<Unit>>,
+    units: Vec<Arc<WriteUnit>>,
     max_seq: u64,
     first_updater_flag: bool,
 }
@@ -622,7 +684,7 @@ impl WriteUnits {
         }
     }
 
-    fn push(&mut self, unit: Arc<Unit>) {
+    fn push(&mut self, unit: Arc<WriteUnit>) {
         self.units.push(unit);
     }
 
@@ -630,7 +692,7 @@ impl WriteUnits {
     fn sort(&mut self, read_units: &mut ReadUnits) {
         /* (Algorithm2) line 16 */
         let units = std::mem::take(&mut self.units);
-        let (sorted, mut remaining): (Vec<Arc<Unit>>, Vec<Arc<Unit>>) =
+        let (sorted, mut remaining): (Vec<Arc<WriteUnit>>, Vec<Arc<WriteUnit>>) =
             units.into_iter().partition(|unit| unit.is_sorted());
 
         /* (Algorithm2) line 17 ~ 19 */
@@ -697,9 +759,9 @@ struct KeyNode {
 }
 
 impl KeyNode {
-    fn new(address: KdgKey) -> Self {
+    fn new(key: KdgKey) -> Self {
         Self {
-            key: address,
+            key,
             in_degree: 0,
             out_degree: 0,
             read_units: ReadUnits::new(),
@@ -716,24 +778,20 @@ impl KeyNode {
         &self.out_degree
     }
 
-    fn address(&self) -> &KdgKey {
+    fn key(&self) -> &KdgKey {
         &self.key
     }
 
-    fn add_unit(&mut self, unit: Arc<Unit>) {
-        match unit.unit_type() {
-            UnitType::Read => {
-                self.in_degree += unit.degree();
-                self.read_units.push(unit);
-            }
-            UnitType::Write => {
-                if unit.co_located() {
-                    self.first_updater_flag = true;
-                }
-                self.out_degree += unit.degree();
-                self.write_units.push(unit);
-            }
+    fn add_read_unit(&mut self, unit: ReadUnit) {
+        self.in_degree += unit.degree();
+        self.read_units.push(unit);
+    }
+    fn add_write_unit(&mut self, unit: Arc<WriteUnit>) {
+        if unit.co_located() {
+            self.first_updater_flag = true;
         }
+        self.out_degree += unit.degree();
+        self.write_units.push(unit);
     }
 
     fn sort_read_units(&mut self) {

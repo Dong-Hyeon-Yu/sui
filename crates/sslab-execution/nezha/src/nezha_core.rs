@@ -21,7 +21,7 @@ use std::sync::Arc;
 use crate::{
     address_based_conflict_graph::{FastHashMap, KdgKey},
     types::{ScheduledTransaction, SimulatedTransactionV2, SimulationResultV2},
-    KeyBasedConflictGraph,
+    KeyBasedDependencyGraph,
 };
 
 use super::address_based_conflict_graph::Transaction;
@@ -120,7 +120,7 @@ impl ConcurrencyLevelManager {
             return vec![];
         }
 
-        let scheduled_aborted_txs: Vec<Vec<Arc<Transaction>>>;
+        let scheduled_aborted_txs: Vec<Vec<IndexedEthereumTransaction>>;
 
         // 1st execution
         {
@@ -129,7 +129,7 @@ impl ConcurrencyLevelManager {
             let ScheduledInfo {
                 scheduled_txs,
                 aborted_txs,
-            } = KeyBasedConflictGraph::par_construct(rw_sets)
+            } = KeyBasedDependencyGraph::par_construct(rw_sets)
                 .await
                 .hierarchcial_sort()
                 .reorder()
@@ -152,8 +152,8 @@ impl ConcurrencyLevelManager {
             let rw_sets = self
                 ._simulate(
                     tx_list_to_re_execute
-                        .iter()
-                        .map(|tx| tx.raw_tx().clone())
+                        .into_iter()
+                        .map(|tx| tx.into())
                         .collect(),
                 )
                 .await;
@@ -372,7 +372,7 @@ impl LatencyBenchmark for ConcurrencyLevelManager {
             panic!("empty transaction list");
         }
 
-        let scheduled_aborted_txs: Vec<Vec<Arc<Transaction>>>;
+        let scheduled_aborted_txs: Vec<Vec<IndexedEthereumTransaction>>;
 
         let mut simulation_latency = 0;
         let mut scheduling_latency = 0;
@@ -391,7 +391,7 @@ impl LatencyBenchmark for ConcurrencyLevelManager {
             let ScheduledInfo {
                 scheduled_txs,
                 aborted_txs,
-            } = KeyBasedConflictGraph::par_construct(rw_sets)
+            } = KeyBasedDependencyGraph::par_construct(rw_sets)
                 .await
                 .hierarchcial_sort()
                 .reorder()
@@ -413,13 +413,9 @@ impl LatencyBenchmark for ConcurrencyLevelManager {
             //                                                no
             //                                                 |
             //                                          (2) commit
-            let txss = tx_list_to_re_execute
-                .into_par_iter()
-                .map(|tx| tx.raw_tx().clone())
-                .collect();
 
             let latency = Instant::now();
-            let rw_sets = self._simulate(txss).await;
+            let rw_sets = self._simulate(tx_list_to_re_execute).await;
             validation_execute_latency += latency.elapsed().as_micros();
 
             match self
@@ -520,7 +516,7 @@ impl LatencyBenchmark for ConcurrencyLevelManager {
 
 pub struct ScheduledInfo {
     pub scheduled_txs: Vec<Vec<ScheduledTransaction>>,
-    pub aborted_txs: Vec<Vec<Arc<Transaction>>>,
+    pub aborted_txs: Vec<Vec<IndexedEthereumTransaction>>,
 }
 
 impl ScheduledInfo {
@@ -550,20 +546,6 @@ impl ScheduledInfo {
         }
     }
 
-    fn _unwrap(tx: Arc<Transaction>) -> Transaction {
-        match Arc::try_unwrap(tx) {
-            Ok(tx) => tx,
-            Err(tx) => {
-                panic!(
-                    "fail to unwrap transaction. (strong:{}, weak:{}): {:?}",
-                    Arc::strong_count(&tx),
-                    Arc::weak_count(&tx),
-                    tx
-                );
-            }
-        }
-    }
-
     fn _schedule_sorted_txs(
         tx_list: FastHashMap<u64, Arc<Transaction>>,
         rayon: bool,
@@ -576,7 +558,7 @@ impl ScheduledInfo {
             tx_list
                 .into_par_iter()
                 .map(|(_, tx)| {
-                    // TODO: memory leak (let tx = Self::_unwrap(tx);)
+                    let tx = _unwrap(tx);
 
                     ScheduledTransaction::from(tx)
                 })
@@ -587,7 +569,7 @@ impl ScheduledInfo {
             tx_list
                 .into_iter()
                 .map(|(_, tx)| {
-                    // TODO: memory leak (let tx = Self::_unwrap(tx);)
+                    let tx = _unwrap(tx); // TODO: memory leak (let tx = Self::_unwrap(tx);)
 
                     ScheduledTransaction::from(tx)
                 })
@@ -607,7 +589,7 @@ impl ScheduledInfo {
     fn _schedule_aborted_txs(
         mut aborted_txs: Vec<Arc<Transaction>>,
         rayon: bool,
-    ) -> Vec<Vec<Arc<Transaction>>> {
+    ) -> Vec<Vec<IndexedEthereumTransaction>> {
         if rayon {
             aborted_txs.par_iter().for_each(|tx| {
                 tx.clear_write_units();
@@ -624,14 +606,12 @@ impl ScheduledInfo {
         let mut epoch_map: Vec<hashbrown::HashSet<KdgKey>> = vec![]; // (epoch, write set)
 
         // store final schedule information
-        let mut schedule: Vec<Vec<Arc<Transaction>>> = vec![];
+        let mut schedule: Vec<Vec<IndexedEthereumTransaction>> = vec![];
 
         aborted_txs.sort_unstable_by_key(|tx| tx.id());
 
-        for tx in aborted_txs.iter() {
-            let tx_info = tx.abort_info.read();
-            let read_keys = tx_info.read_keys();
-            let write_keys = tx_info.write_keys();
+        for tx in aborted_txs.into_iter().map(_unwrap) {
+            let (read_keys, write_keys) = tx.prev_rw_set();
 
             let epoch =
                 Self::_find_minimun_epoch_with_no_conflicts(&read_keys, &write_keys, &epoch_map);
@@ -640,11 +620,11 @@ impl ScheduledInfo {
             match epoch_map.get_mut(epoch) {
                 Some(w_map) => {
                     w_map.extend(write_keys);
-                    schedule[epoch].push(tx.clone());
+                    schedule[epoch].push(tx.raw_tx());
                 }
                 None => {
                     epoch_map.push(write_keys);
-                    schedule.push(vec![tx.clone()]);
+                    schedule.push(vec![tx.raw_tx()]);
                 }
             };
         }
@@ -705,5 +685,19 @@ impl ScheduledInfo {
             / depth as f64;
         let std_width = var_width.sqrt();
         (total_tx, average_width, std_width, max_width, depth)
+    }
+}
+
+fn _unwrap(tx: Arc<Transaction>) -> Transaction {
+    match Arc::try_unwrap(tx) {
+        Ok(tx) => tx,
+        Err(tx) => {
+            panic!(
+                "fail to unwrap transaction. (strong:{}, weak:{}): {:?}",
+                Arc::strong_count(&tx),
+                Arc::weak_count(&tx),
+                tx
+            );
+        }
     }
 }

@@ -145,6 +145,10 @@ impl IndexedEthereumTransaction {
     pub fn digest_u64(&self) -> u64 {
         self.id
     }
+
+    pub fn id(&self) -> u64 {
+        self.id
+    }
 }
 
 #[derive(Clone, Debug, Default)]

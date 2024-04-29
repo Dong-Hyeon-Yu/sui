@@ -1,5 +1,3 @@
-use core::panic;
-
 use crate::address_based_conflict_graph::{KdgKey, Transaction};
 use itertools::Itertools;
 use narwhal_types::BatchDigest;
@@ -68,17 +66,11 @@ impl SimulatedTransactionV2 {
     }
 }
 
-pub struct OptimisticInfo {
-    raw_tx: IndexedEthereumTransaction,
-    prev_write_keys: HashMap<Address, HashSet<Key>>,
-    prev_read_keys: HashMap<Address, HashSet<Key>>,
-}
-
+#[derive(Debug)]
 pub struct ScheduledTransaction {
     pub seq: u64,
     pub tx_id: u64,
     pub effects: State,
-    optimistic_info: Option<OptimisticInfo>,
 }
 
 impl ScheduledTransaction {
@@ -86,50 +78,24 @@ impl ScheduledTransaction {
         self.seq
     }
 
-    pub fn extract(&self) -> State {
-        self.effects.clone()
+    pub fn extract(self) -> State {
+        self.effects
     }
 
     #[allow(dead_code)] // this function is used in unit tests.
     pub(crate) fn id(&self) -> u64 {
         self.tx_id
     }
-
-    pub fn rw_set(
-        &self,
-    ) -> (
-        HashMap<Address, HashSet<Key>>,
-        HashMap<Address, HashSet<Key>>,
-    ) {
-        match &self.optimistic_info {
-            Some(info) => (info.prev_write_keys.clone(), info.prev_read_keys.clone()),
-            None => panic!("No rw_set for this transaction"),
-        }
-    }
-
-    pub fn raw_tx(&self) -> &IndexedEthereumTransaction {
-        match &self.optimistic_info {
-            Some(info) => &info.raw_tx,
-            None => panic!("No raw_tx for this transaction"),
-        }
-    }
 }
 
 impl From<SimulatedTransactionV2> for ScheduledTransaction {
     fn from(tx: SimulatedTransactionV2) -> Self {
-        let (tx_id, rw_set, effects, raw_tx) = tx.deconstruct();
-
-        let optimistic_info = Some(OptimisticInfo {
-            raw_tx,
-            prev_write_keys: rw_set.1.clone(),
-            prev_read_keys: rw_set.0.clone(),
-        });
+        let (tx_id, _rw_set, effects, _raw_tx) = tx.deconstruct();
 
         Self {
             seq: 0,
             tx_id,
             effects,
-            optimistic_info,
         }
     }
 }
@@ -138,19 +104,11 @@ impl From<std::sync::Arc<Transaction>> for ScheduledTransaction {
     fn from(tx: std::sync::Arc<Transaction>) -> Self {
         let tx_id = tx.id();
         let seq = tx.sequence().to_owned();
-        let raw_tx = tx.raw_tx().to_owned();
-
-        let optimistic_info = Some(OptimisticInfo {
-            raw_tx,
-            prev_write_keys: tx.abort_info.read().prev_write_map().to_owned(),
-            prev_read_keys: tx.abort_info.read().prev_read_map().to_owned(),
-        });
 
         Self {
             seq,
             tx_id,
             effects: tx.simulation_result(),
-            optimistic_info,
         }
     }
 }
@@ -159,19 +117,11 @@ impl From<Transaction> for ScheduledTransaction {
     fn from(tx: Transaction) -> Self {
         let tx_id = tx.id();
         let seq = tx.sequence().to_owned();
-        let raw_tx = tx.raw_tx().to_owned();
-
-        let optimistic_info = Some(OptimisticInfo {
-            raw_tx,
-            prev_write_keys: tx.abort_info.read().prev_write_map().to_owned(),
-            prev_read_keys: tx.abort_info.read().prev_read_map().to_owned(),
-        });
 
         Self {
             seq,
             tx_id,
             effects: tx.simulation_result(),
-            optimistic_info,
         }
     }
 }

@@ -9,7 +9,7 @@ use sslab_execution::{
 };
 use tokio::time::Instant;
 
-use crate::{nezha_core::ConcurrencyLevelManager, KeyBasedConflictGraph, SimulationResultV2};
+use crate::{nezha_core::ConcurrencyLevelManager, KeyBasedDependencyGraph, SimulationResultV2};
 
 fn _get_smallbank_handler() -> SmallBankTransactionHandler {
     let provider = Provider::<MockProvider>::new(MockProvider::default());
@@ -54,7 +54,7 @@ async fn test_smallbank() {
     );
 
     now = Instant::now();
-    let scheduled_info = KeyBasedConflictGraph::construct(rw_sets)
+    let scheduled_info = KeyBasedDependencyGraph::construct(rw_sets)
         .hierarchcial_sort()
         .reorder()
         .extract_schedule();
@@ -105,7 +105,7 @@ async fn test_par_smallbank() {
     );
 
     now = Instant::now();
-    let scheduled_info = KeyBasedConflictGraph::par_construct(rw_sets)
+    let scheduled_info = KeyBasedDependencyGraph::par_construct(rw_sets)
         .await
         .hierarchcial_sort()
         .reorder()

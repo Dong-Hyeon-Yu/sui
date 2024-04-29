@@ -5,7 +5,7 @@ use reth::{primitives::TransactionSignedEcRecovered, revm::primitives::ResultAnd
 use sslab_execution::types::IndexedEthereumTransaction;
 
 use crate::{
-    address_based_conflict_graph::KeyBasedConflictGraph,
+    address_based_conflict_graph::KeyBasedDependencyGraph,
     nezha_core::ScheduledInfo,
     types::{Address, Key, SimulatedTransactionV2},
 };
@@ -102,7 +102,7 @@ fn nezha_test(
     let ScheduledInfo {
         scheduled_txs,
         aborted_txs,
-    } = KeyBasedConflictGraph::construct(input_txs.clone())
+    } = KeyBasedDependencyGraph::construct(input_txs.clone())
         .hierarchcial_sort()
         .reorder()
         .extract_schedule();
@@ -142,9 +142,9 @@ fn nezha_test(
         assert!(txs.iter().all(|tx| answer_set.contains(&tx.id())))
     });
 
-    aborted_txs.into_iter().flatten().for_each(|tx| {
-        std::sync::Arc::try_unwrap(tx).unwrap();
-    })
+    // aborted_txs.into_iter().flatten().for_each(|tx| {
+    //     std::sync::Arc::try_unwrap(tx).unwrap();
+    // })
 }
 
 async fn nezha_par_test(
@@ -155,7 +155,7 @@ async fn nezha_par_test(
     let ScheduledInfo {
         scheduled_txs,
         aborted_txs,
-    } = KeyBasedConflictGraph::par_construct(input_txs.clone())
+    } = KeyBasedDependencyGraph::par_construct(input_txs.clone())
         .await
         .hierarchcial_sort()
         .reorder()
@@ -196,9 +196,9 @@ async fn nezha_par_test(
         assert!(txs.iter().all(|tx| answer_set.contains(&tx.id())))
     });
 
-    aborted_txs.into_iter().flatten().for_each(|tx| {
-        std::sync::Arc::try_unwrap(tx).unwrap();
-    })
+    // aborted_txs.into_iter().flatten().for_each(|tx| {
+    //     std::sync::Arc::try_unwrap(tx).unwrap();
+    // })
 }
 
 #[tokio::test]

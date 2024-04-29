@@ -184,7 +184,7 @@ impl KeyBasedDependencyGraph {
     /* (Algorithm1) */
     fn _key_node_rank(&self) -> Vec<KdgKey> {
         let mut addresses = self.key_nodes.values().collect_vec();
-        addresses.sort_by(|a, b| {
+        addresses.sort_unstable_by(|a, b| {
             // 1st priority
             match a.in_degree().cmp(b.in_degree()) {
                 std::cmp::Ordering::Equal => {
@@ -203,7 +203,7 @@ impl KeyBasedDependencyGraph {
 
         addresses
             .into_iter()
-            .map(|address| address.key().to_owned())
+            .map(|address| *address.key())
             .collect_vec()
     }
 
@@ -625,7 +625,7 @@ impl ReadUnits {
     fn sort(&mut self) {
         /* (Algorithm2) line 3*/
         let units = std::mem::take(&mut self.units);
-        let (sorted, remaining): (Vec<ReadUnit>, Vec<ReadUnit>) =
+        let (mut sorted, remaining): (Vec<ReadUnit>, Vec<ReadUnit>) =
             units.into_iter().partition(|unit| unit.is_sorted());
 
         let min_seq;
@@ -656,7 +656,8 @@ impl ReadUnits {
         /* (Algorithm2) line 4~8, 12~14 */
         remaining.iter().for_each(|unit| unit.set_sequence(min_seq));
 
-        self.units = [sorted, remaining].concat();
+        sorted.extend(remaining);
+        self.units = sorted;
     }
 
     fn increment_and_get_max_seq(&mut self) -> u64 {
@@ -693,7 +694,7 @@ impl WriteUnits {
     fn sort(&mut self, read_units: &mut ReadUnits) {
         /* (Algorithm2) line 16 */
         let units = std::mem::take(&mut self.units);
-        let (sorted, mut remaining): (Vec<Arc<WriteUnit>>, Vec<Arc<WriteUnit>>) =
+        let (mut sorted, mut remaining): (Vec<Arc<WriteUnit>>, Vec<Arc<WriteUnit>>) =
             units.into_iter().partition(|unit| unit.is_sorted());
 
         /* (Algorithm2) line 17 ~ 19 */
@@ -741,7 +742,8 @@ impl WriteUnits {
 
         self.max_seq = write_seq; // for reordering.
 
-        self.units = [sorted, remaining].concat();
+        sorted.extend(remaining);
+        self.units = sorted;
     }
 
     fn max_seq(&self) -> u64 {

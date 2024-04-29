@@ -1,16 +1,15 @@
-use ethers_providers::{Provider, MockProvider};
+use ethers_providers::{MockProvider, Provider};
 use narwhal_types::BatchDigest;
 use sslab_execution::{
+    types::ExecutableEthereumBatch,
     utils::{
-        smallbank_contract_benchmark::concurrent_evm_storage, 
+        smallbank_contract_benchmark::concurrent_evm_storage,
         test_utils::{SmallBankTransactionHandler, DEFAULT_CHAIN_ID},
-    }, 
-    types::ExecutableEthereumBatch};
+    },
+};
 use tokio::time::Instant;
 
-
-
-use crate::{SimulationResult, AddressBasedConflictGraph, nezha_core::ConcurrencyLevelManager};
+use crate::{nezha_core::ConcurrencyLevelManager, KeyBasedDependencyGraph, SimulationResult};
 
 fn get_smallbank_handler() -> SmallBankTransactionHandler {
     let provider = Provider::<MockProvider>::new(MockProvider::default());
@@ -45,11 +44,14 @@ async fn test_smallbank() {
     let mut now = Instant::now();
     let SimulationResult { rw_sets, .. } = nezha.simulate(consensus_output).await;
     let mut time = now.elapsed().as_millis();
-    println!("Simulation took {} ms for {} transactions.", time, rw_sets.len());
-
+    println!(
+        "Simulation took {} ms for {} transactions.",
+        time,
+        rw_sets.len()
+    );
 
     now = Instant::now();
-    let scheduled_info = AddressBasedConflictGraph::construct(rw_sets)
+    let scheduled_info = KeyBasedDependencyGraph::construct(rw_sets)
         .hierarchcial_sort()
         .reorder()
         .extract_schedule();
@@ -57,17 +59,24 @@ async fn test_smallbank() {
     println!("Scheduling took {} ms.", time);
 
     let scheduled_tx_len = scheduled_info.scheduled_txs_len();
-    let aborted_tx_len =  scheduled_info.aborted_txs_len();
+    let aborted_tx_len = scheduled_info.aborted_txs_len();
 
     now = Instant::now();
     nezha._concurrent_commit(scheduled_info.scheduled_txs).await;
     time = now.elapsed().as_millis();
 
-    println!("Concurrent commit took {} ms for {} transactions.", time, scheduled_tx_len);
-    println!("Abort rate: {:.2} ({}/{} aborted)", (aborted_tx_len as f64) * 100.0 / (scheduled_tx_len+aborted_tx_len) as f64, aborted_tx_len, scheduled_tx_len+aborted_tx_len);
+    println!(
+        "Concurrent commit took {} ms for {} transactions.",
+        time, scheduled_tx_len
+    );
+    println!(
+        "Abort rate: {:.2} ({}/{} aborted)",
+        (aborted_tx_len as f64) * 100.0 / (scheduled_tx_len + aborted_tx_len) as f64,
+        aborted_tx_len,
+        scheduled_tx_len + aborted_tx_len
+    );
     println!("Total time: {} ms", total.elapsed().as_millis());
 }
-
 
 /* this test is for debuging nezha algorithm under a smallbank workload */
 #[tokio::test]
@@ -93,26 +102,39 @@ async fn test_par_smallbank() {
     let mut now = Instant::now();
     let SimulationResult { rw_sets, .. } = nezha.simulate(consensus_output).await;
     let mut time = now.elapsed().as_millis();
-    println!("Simulation took {} ms for {} transactions.", time, rw_sets.len());
-
+    println!(
+        "Simulation took {} ms for {} transactions.",
+        time,
+        rw_sets.len()
+    );
 
     now = Instant::now();
-    let scheduled_info = AddressBasedConflictGraph::par_construct(rw_sets).await
-            .hierarchcial_sort()
-            .reorder()
-            .par_extract_schedule().await;
+    let scheduled_info = KeyBasedDependencyGraph::par_construct(rw_sets)
+        .await
+        .hierarchcial_sort()
+        .reorder()
+        .par_extract_schedule()
+        .await;
     time = now.elapsed().as_millis();
     println!("Scheduling took {} ms.", time);
 
     let scheduled_tx_len = scheduled_info.scheduled_txs_len();
-    let aborted_tx_len =  scheduled_info.aborted_txs_len();
+    let aborted_tx_len = scheduled_info.aborted_txs_len();
 
     now = Instant::now();
     nezha._concurrent_commit(scheduled_info.scheduled_txs).await;
     time = now.elapsed().as_millis();
 
-    println!("Concurrent commit took {} ms for {} transactions.", time, scheduled_tx_len);
-    println!("Abort rate: {:.2} ({}/{} aborted)", (aborted_tx_len as f64) * 100.0 / (scheduled_tx_len+aborted_tx_len) as f64, aborted_tx_len, scheduled_tx_len+aborted_tx_len);
+    println!(
+        "Concurrent commit took {} ms for {} transactions.",
+        time, scheduled_tx_len
+    );
+    println!(
+        "Abort rate: {:.2} ({}/{} aborted)",
+        (aborted_tx_len as f64) * 100.0 / (scheduled_tx_len + aborted_tx_len) as f64,
+        aborted_tx_len,
+        scheduled_tx_len + aborted_tx_len
+    );
     println!("Total time: {} ms", total.elapsed().as_millis());
 }
 

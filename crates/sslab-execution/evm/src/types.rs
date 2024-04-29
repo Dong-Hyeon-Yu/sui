@@ -120,6 +120,10 @@ impl IndexedEthereumTransaction {
     pub fn digest_u64(&self) -> u64 {
         self.tx.digest_u64()
     }
+
+    pub fn id(&self) -> u64 {
+        self.id
+    }
 }
 
 

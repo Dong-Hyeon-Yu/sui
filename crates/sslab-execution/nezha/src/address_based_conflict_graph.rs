@@ -1,25 +1,27 @@
-use ethers_core::types::{H160, H256};
-use evm::{
-    backend::{Apply, Log},
-    executor::stack::RwSet,
-};
+use evm::backend::{Apply, Log};
 use itertools::Itertools;
-use std::{
-    collections::{BTreeMap, HashMap},
-    sync::Arc,
-};
+use std::sync::Arc;
 
 use parking_lot::{RwLock, RwLockReadGuard};
 use rayon::prelude::*;
 use sslab_execution::types::IndexedEthereumTransaction;
+
+use crate::types::{Address, Key, RwSet};
 
 use super::{nezha_core::ScheduledInfo, types::SimulatedTransaction};
 
 pub(crate) type FastHashMap<K, V> = hashbrown::HashMap<K, V, nohash_hasher::BuildNoHashHasher<K>>;
 pub(crate) type FastHashSet<K> = hashbrown::HashSet<K, nohash_hasher::BuildNoHashHasher<K>>;
 
+// TODO: change Key, Value
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct KdgKey {
+    pub address: Address,
+    pub state_key: Key,
+}
+
 pub struct AddressBasedConflictGraph {
-    addresses: hashbrown::HashMap<H256, Address>,
+    addresses: hashbrown::HashMap<KdgKey, KeyNode>,
     tx_list: FastHashMap<u64, Arc<Transaction>>, // tx_id -> transaction
     aborted_txs: Vec<Arc<Transaction>>, // transactions that are aborted due to read-write conflict (used for reordering).
 }
@@ -38,9 +40,9 @@ impl AddressBasedConflictGraph {
 
         for tx in simulation_result {
             let (_tx, rw_set) = Transaction::from(tx);
+            let (read_set, write_set) = rw_set;
             let tx = Arc::new(_tx);
 
-            let (read_set, write_set) = rw_set.destruct();
             let mut write_units =
                 Self::_convert_to_units(&tx, UnitType::Write, write_set, Some(&read_set));
 
@@ -178,7 +180,7 @@ impl AddressBasedConflictGraph {
     }
 
     /* (Algorithm1) */
-    fn _address_rank(&self) -> Vec<H256> {
+    fn _address_rank(&self) -> Vec<KdgKey> {
         let mut addresses = self.addresses.values().collect_vec();
         addresses.sort_by(|a, b| {
             // 1st priority
@@ -188,7 +190,7 @@ impl AddressBasedConflictGraph {
                     match b.out_degree().cmp(a.out_degree()) {
                         std::cmp::Ordering::Equal => {
                             // 3rd priority
-                            a.address().cmp(b.address())
+                            a.key().cmp(b.key())
                         }
                         other => other,
                     }
@@ -199,7 +201,7 @@ impl AddressBasedConflictGraph {
 
         addresses
             .into_iter()
-            .map(|address| address.address().to_owned())
+            .map(|address| address.key().to_owned())
             .collect_vec()
     }
 
@@ -210,7 +212,7 @@ impl AddressBasedConflictGraph {
                 Some(address) => address,
                 None => {
                     self.addresses
-                        .insert(*raw_address, Address::new(*raw_address));
+                        .insert(*raw_address, KeyNode::new(*raw_address));
                     self.addresses.get_mut(raw_address).unwrap()
                 }
             };
@@ -222,21 +224,15 @@ impl AddressBasedConflictGraph {
     fn _convert_to_units(
         tx: &Arc<Transaction>,
         unit_type: UnitType,
-        read_or_write_set: BTreeMap<H160, HashMap<H256, H256>>,
-        read_set: Option<&BTreeMap<H160, HashMap<H256, H256>>>,
+        read_or_write_set: hashbrown::HashMap<Address, hashbrown::HashSet<Key>>,
+        read_set: Option<&hashbrown::HashMap<Address, hashbrown::HashSet<Key>>>,
     ) -> Vec<Arc<Unit>> {
         read_or_write_set
             .into_iter()
             .map(|(contract_addr, state_items)| {
                 state_items
                     .into_iter()
-                    .map(|(key, _)| {
-                        /* mitigation for the across-contract calls: hash(contract addr + key) */
-                        // let mut hasher = Sha256::new();
-                        // hasher.update(address.as_bytes());
-                        // hasher.update(key.as_bytes());
-                        // let key = H256::from_slice(hasher.finalize().as_ref())
-
+                    .map(|key| {
                         let co_locate = if let Some(read_set) = read_set {
                             match read_set.get(&contract_addr) {
                                 Some(states) => states.get(&key).is_some(),
@@ -246,7 +242,15 @@ impl AddressBasedConflictGraph {
                             false
                         };
 
-                        Arc::new(Unit::new(Arc::clone(tx), unit_type.clone(), key, co_locate))
+                        Arc::new(Unit::new(
+                            Arc::clone(tx),
+                            unit_type.clone(),
+                            KdgKey {
+                                address: contract_addr,
+                                state_key: key,
+                            },
+                            co_locate,
+                        ))
                     })
                     .collect_vec()
             })
@@ -375,40 +379,53 @@ impl Benchmark for AddressBasedConflictGraph {
 #[derive(Debug)]
 pub struct AbortInfo {
     aborted: bool,
-    prev_write_keys: BTreeMap<H160, HashMap<H256, H256>>,
-    prev_read_keys: BTreeMap<H160, HashMap<H256, H256>>,
+    prev_write_keys: hashbrown::HashMap<Address, hashbrown::HashSet<Key>>,
+    prev_read_keys: hashbrown::HashMap<Address, hashbrown::HashSet<Key>>,
 }
 
 impl AbortInfo {
     fn new(rw_set: RwSet) -> Self {
+        let (reads, writes) = rw_set;
         Self {
             aborted: false,
-            prev_write_keys: rw_set.writes().to_owned(),
-            prev_read_keys: rw_set.reads().to_owned(),
+            prev_write_keys: writes,
+            prev_read_keys: reads,
         }
     }
 
-    pub fn write_keys(&self) -> hashbrown::HashSet<H256> {
+    pub fn write_keys(&self) -> hashbrown::HashSet<KdgKey> {
         self.prev_write_keys
-            .values()
-            .flat_map(|state| state.keys())
-            .cloned()
+            .iter()
+            .flat_map(|(addr, keys)| {
+                keys.into_iter()
+                    .map(|state_key| KdgKey {
+                        address: *addr,
+                        state_key: *state_key,
+                    })
+                    .collect_vec()
+            })
             .collect()
     }
 
-    pub fn read_keys(&self) -> hashbrown::HashSet<H256> {
+    pub fn read_keys(&self) -> hashbrown::HashSet<KdgKey> {
         self.prev_read_keys
-            .values()
-            .flat_map(|state| state.keys())
-            .cloned()
+            .iter()
+            .flat_map(|(addr, keys)| {
+                keys.into_iter()
+                    .map(|state_key| KdgKey {
+                        address: *addr,
+                        state_key: *state_key,
+                    })
+                    .collect_vec()
+            })
             .collect()
     }
 
-    pub fn prev_write_map(&self) -> &BTreeMap<H160, HashMap<H256, H256>> {
+    pub fn prev_write_map(&self) -> &hashbrown::HashMap<Address, hashbrown::HashSet<Key>> {
         &self.prev_write_keys
     }
 
-    pub fn prev_read_map(&self) -> &BTreeMap<H160, HashMap<H256, H256>> {
+    pub fn prev_read_map(&self) -> &hashbrown::HashMap<Address, hashbrown::HashSet<Key>> {
         &self.prev_read_keys
     }
 
@@ -516,7 +533,7 @@ impl Transaction {
         &self.raw_tx
     }
 
-    pub fn rw_set(&self) -> (hashbrown::HashSet<H256>, hashbrown::HashSet<H256>) {
+    pub fn rw_set(&self) -> (hashbrown::HashSet<KdgKey>, hashbrown::HashSet<KdgKey>) {
         (
             self.abort_info.read().read_keys(),
             self.abort_info.read().write_keys(),
@@ -534,17 +551,17 @@ enum UnitType {
 struct Unit {
     tx: Arc<Transaction>,
     unit_type: UnitType,
-    address: H256,
+    key: KdgKey,
     wr_dependencies: RwLock<u32>, // Vec<Arc<Unit>> is not necessary, but the degree is only used for sorting.
     co_located: bool,             // True if the read unit and write unit are in the same address.
 }
 
 impl Unit {
-    fn new(tx: Arc<Transaction>, unit_type: UnitType, address: H256, co_located: bool) -> Self {
+    fn new(tx: Arc<Transaction>, unit_type: UnitType, key: KdgKey, co_located: bool) -> Self {
         Self {
             tx,
             unit_type,
-            address,
+            key,
             wr_dependencies: RwLock::new(0),
             co_located,
         }
@@ -554,8 +571,8 @@ impl Unit {
         &self.unit_type
     }
 
-    fn address(&self) -> &H256 {
-        &self.address
+    fn address(&self) -> &KdgKey {
+        &self.key
     }
 
     fn degree(&self) -> u32 {
@@ -736,8 +753,8 @@ impl WriteUnits {
 }
 
 #[derive(Clone, Debug)]
-struct Address {
-    address: H256,
+struct KeyNode {
+    key: KdgKey,
     in_degree: u32,
     out_degree: u32,
     read_units: ReadUnits,
@@ -745,10 +762,10 @@ struct Address {
     first_updater_flag: bool,
 }
 
-impl Address {
-    fn new(address: H256) -> Self {
+impl KeyNode {
+    fn new(key: KdgKey) -> Self {
         Self {
-            address,
+            key,
             in_degree: 0,
             out_degree: 0,
             read_units: ReadUnits::new(),
@@ -765,8 +782,8 @@ impl Address {
         &self.out_degree
     }
 
-    fn address(&self) -> &H256 {
-        &self.address
+    fn key(&self) -> &KdgKey {
+        &self.key
     }
 
     fn add_unit(&mut self, unit: Arc<Unit>) {

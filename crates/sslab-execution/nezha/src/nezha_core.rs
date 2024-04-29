@@ -1,4 +1,3 @@
-use ethers_core::types::H256;
 use itertools::Itertools;
 use narwhal_types::BatchDigest;
 use rayon::prelude::*;
@@ -11,7 +10,8 @@ use std::sync::Arc;
 use tracing::warn;
 
 use crate::{
-    address_based_conflict_graph::FastHashMap, types::ScheduledTransaction,
+    address_based_conflict_graph::{FastHashMap, KdgKey},
+    types::ScheduledTransaction,
     AddressBasedConflictGraph, SimulationResult,
 };
 
@@ -200,7 +200,7 @@ impl ConcurrencyLevelManager {
                 .filter_map(|tx| {
                     match crate::evm_utils::simulate_tx(tx.data(), snapshot.as_ref()) {
                         Ok(Some((effect, log, rw_set))) => {
-                            Some(SimulatedTransaction::new(Some(rw_set), effect, log, tx))
+                            Some(SimulatedTransaction::new(rw_set, effect, log, tx))
                         }
                         _ => {
                             warn!("fail to execute a transaction {}", tx.digest_u64());
@@ -261,7 +261,7 @@ impl ConcurrencyLevelManager {
             let mut valid_txs = vec![];
             let mut invalid_txs = vec![];
 
-            let mut write_set = hashbrown::HashSet::<H256>::new();
+            let mut write_set = hashbrown::HashSet::<KdgKey>::new();
             for tx in rw_set.into_iter() {
                 match tx.write_set() {
                     Some(ref set) => {
@@ -315,7 +315,7 @@ use tokio::time::Instant;
 pub trait LatencyBenchmark {
     async fn _execute_and_return_latency(
         &self,
-        consensus_output: Vec<ExecutableEthereumBatch<TransactionSignedEcRecovered>>,
+        consensus_output: Vec<ExecutableEthereumBatch>,
     ) -> (u128, u128, u128, (u128, u128), u128);
 
     async fn _validate_optimistic_assumption_and_return_latency(
@@ -329,7 +329,7 @@ pub trait LatencyBenchmark {
 impl LatencyBenchmark for ConcurrencyLevelManager {
     async fn _execute_and_return_latency(
         &self,
-        consensus_output: Vec<ExecutableEthereumBatch<TransactionSignedEcRecovered>>,
+        consensus_output: Vec<ExecutableEthereumBatch>,
     ) -> (u128, u128, u128, (u128, u128), u128) {
         let (_, tx_list) = Self::_unpack_batches(consensus_output).await;
 
@@ -434,7 +434,7 @@ impl LatencyBenchmark for ConcurrencyLevelManager {
             let mut valid_txs = vec![];
             let mut invalid_txs = vec![];
 
-            let mut write_set = hashbrown::HashSet::<H256>::new();
+            let mut write_set = hashbrown::HashSet::<KdgKey>::new();
             for tx in rw_set.into_iter() {
                 match tx.write_set() {
                     Some(ref set) => {
@@ -676,7 +676,7 @@ impl ScheduledInfo {
         };
 
         // determine minimum #epoch in which tx have no conflicts with others --> by binary-search over a map (#epoch, writeset)
-        let mut epoch_map: Vec<hashbrown::HashSet<H256>> = vec![]; // (epoch, write set)
+        let mut epoch_map: Vec<hashbrown::HashSet<KdgKey>> = vec![]; // (epoch, write set)
 
         // store final schedule information
         let mut schedule: Vec<Vec<Arc<Transaction>>> = vec![];
@@ -708,9 +708,9 @@ impl ScheduledInfo {
     }
 
     fn _find_minimun_epoch_with_no_conflicts(
-        read_keys_of_tx: &hashbrown::HashSet<H256>,
-        write_keys_of_tx: &hashbrown::HashSet<H256>,
-        epoch_map: &Vec<hashbrown::HashSet<H256>>,
+        read_keys_of_tx: &hashbrown::HashSet<KdgKey>,
+        write_keys_of_tx: &hashbrown::HashSet<KdgKey>,
+        epoch_map: &Vec<hashbrown::HashSet<KdgKey>>,
     ) -> usize {
         // 1) ww dependencies are occured when the keys which are both read and written by latter tx are overlapped with the rw keys of the previous txs in the same epoch.
         //   for simplicity, only single write is allowed for each key in the same epoch.

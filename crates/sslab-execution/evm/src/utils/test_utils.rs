@@ -7,6 +7,7 @@ use ethers_core::{
 };
 use ethers_providers::{MockProvider, Provider};
 use ethers_signers::{LocalWallet, Signer};
+use hashbrown::HashSet;
 use narwhal_types::BatchDigest;
 use rand::Rng as _;
 use rand_distr::{Distribution, Uniform, Zipf};
@@ -20,6 +21,51 @@ pub const ADMIN_SECRET_KEY: &[u8] = &[
 // pub const ADMIN_ADDRESS: &str = "0xe14de1592b52481b94b99df4e9653654e14fffb6";
 pub const DEFAULT_CONTRACT_ADDRESS: &str = "0x1000000000000000000000000000000000000000";
 pub const DEFAULT_CHAIN_ID: u64 = 9; // ISTANBUL
+
+#[inline]
+fn get_two_addresses(account_num: u64, accounts: &Vec<H160>, zipfian_coef: f32) -> (H160, String) {
+    let acc_gen = Zipf::new(account_num, zipfian_coef).unwrap();
+    let sender_idx = std::cmp::min(
+        account_num as usize - 1,
+        rand::thread_rng().sample(acc_gen) as usize - 1,
+    );
+    let mut reciever_idx = std::cmp::min(
+        account_num as usize - 1,
+        rand::thread_rng().sample(acc_gen) as usize - 1,
+    );
+    while sender_idx == reciever_idx {
+        reciever_idx = std::cmp::min(
+            account_num as usize - 1,
+            rand::thread_rng().sample(acc_gen) as usize - 1,
+        );
+    }
+    (accounts[sender_idx], accounts[reciever_idx].to_string())
+}
+
+pub trait WorkloadGenerater {
+    type Transaction;
+    type Batch;
+
+    fn create_batches(
+        &self,
+        batch_size: usize,
+        batch_num: usize,
+        zipfian_coef: f32,
+        account_num: u64,
+    ) -> Vec<Self::Batch>;
+
+    fn create_raw_batches(
+        &self,
+        batch_size: usize,
+        batch_num: usize,
+        zipfian_coef: f32,
+        account_num: u64,
+    ) -> Vec<Vec<bytes::Bytes>>;
+
+    fn random_operation(&self, zipfian_coef: f32, account_num: u64) -> Self::Transaction;
+
+    fn random_operation_raw(&self, zipfian_coef: f32, account_num: u64) -> bytes::Bytes;
+}
 
 pub struct SmallBankTransactionHandler {
     admin_wallet: LocalWallet,
@@ -46,6 +92,38 @@ impl SmallBankTransactionHandler {
         }
     }
 
+    fn create_accounts(&self, account_num: u64) -> Vec<H160> {
+        let random_byte_gen = Uniform::new(0u8, 255u8);
+        let mut secret_keys = (0..account_num)
+            .into_par_iter()
+            .map(|_| {
+                (0..32)
+                    .into_iter()
+                    .map(|_| rand::thread_rng().sample(random_byte_gen))
+                    .collect::<Bytes>()
+            })
+            .collect::<HashSet<Bytes>>();
+        while secret_keys.len() < account_num as usize {
+            secret_keys.insert(
+                (0..32)
+                    .into_iter()
+                    .map(|_| rand::thread_rng().sample(random_byte_gen))
+                    .collect::<Bytes>(),
+            );
+        }
+        secret_keys
+            .into_iter()
+            .map(|key| key)
+            .collect::<Vec<_>>()
+            .into_par_iter()
+            .map(|key| {
+                LocalWallet::from_bytes(key.to_vec().as_slice())
+                    .unwrap()
+                    .address()
+            })
+            .collect()
+    }
+
     pub fn create_batches(
         &self,
         batch_size: usize,
@@ -54,14 +132,15 @@ impl SmallBankTransactionHandler {
         account_num: u64,
     ) -> Vec<ExecutableEthereumBatch> {
         let target_tnx_num = batch_size * batch_num;
+        let accounts = self.create_accounts(account_num);
 
         let mut buffer = (0..target_tnx_num)
             .into_par_iter()
-            .map(|_| self.random_operation(zipfian_coef, account_num))
+            .map(|_| self.random_operation(&accounts, zipfian_coef, account_num))
             .collect::<hashbrown::HashSet<_>>();
 
         while buffer.len() < target_tnx_num {
-            buffer.insert(self.random_operation(zipfian_coef, account_num));
+            buffer.insert(self.random_operation(&accounts, zipfian_coef, account_num));
         }
 
         buffer
@@ -80,14 +159,15 @@ impl SmallBankTransactionHandler {
         account_num: u64,
     ) -> Vec<Vec<bytes::Bytes>> {
         let target_tnx_num = batch_size * batch_num;
+        let accounts = self.create_accounts(account_num);
 
         let mut buffer = (0..target_tnx_num)
             .into_par_iter()
-            .map(|_| self.random_operation_raw(zipfian_coef, account_num))
+            .map(|_| self.random_operation_raw(&accounts, zipfian_coef, account_num))
             .collect::<hashbrown::HashSet<_>>();
 
         while buffer.len() < target_tnx_num {
-            buffer.insert(self.random_operation_raw(zipfian_coef, account_num));
+            buffer.insert(self.random_operation_raw(&accounts, zipfian_coef, account_num));
         }
 
         buffer
@@ -98,42 +178,50 @@ impl SmallBankTransactionHandler {
             .collect::<Vec<_>>()
     }
 
-    pub fn random_operation(&self, zipfian_coef: f32, account_num: u64) -> EthereumTransaction {
-        let acc_gen = Zipf::new(account_num, zipfian_coef).unwrap();
-        let acc1 = rand::thread_rng().sample(acc_gen).to_string();
-        let acc2 = rand::thread_rng().sample(acc_gen).to_string();
+    #[inline]
+    fn random_operation(
+        &self,
+        accounts: &Vec<H160>,
+        zipfian_coef: f32,
+        account_num: u64,
+    ) -> EthereumTransaction {
+        let (sender, reciever) = get_two_addresses(account_num, accounts, zipfian_coef);
 
         let rng = &mut rand::thread_rng();
         let op = self.random_op_gen.sample(rng);
         let mut tx = match op {
-            0 => self.create_account(acc1, U256::from(1_000_000), U256::from(1_000_000)),
-            1 => self.amalgamate(acc1, acc2),
-            2 => self.get_balance(acc1),
-            3 => self.send_payment(acc1, acc2, self.random_value(rng)),
-            4 => self.update_balance(acc1, self.random_value(rng)),
-            5 => self.update_saving(acc1, self.random_value(rng)),
-            6 => self.write_check(acc1, self.random_value(rng)),
+            0 => self.create_account(sender, U256::from(1_000_000), U256::from(1_000_000)),
+            1 => self.amalgamate(sender, reciever),
+            2 => self.get_balance(sender),
+            3 => self.send_payment(sender, reciever, self.random_value(rng)),
+            4 => self.update_balance(sender, self.random_value(rng)),
+            5 => self.update_saving(sender, self.random_value(rng)),
+            6 => self.write_check(sender, self.random_value(rng)),
             _ => panic!("invalid operation"),
         };
 
         self.get_signed(&mut tx)
     }
 
-    pub fn random_operation_raw(&self, zipfian_coef: f32, account_num: u64) -> bytes::Bytes {
-        let acc_gen = Zipf::new(account_num, zipfian_coef).unwrap();
-        let acc1 = rand::thread_rng().sample(acc_gen).to_string();
-        let acc2 = rand::thread_rng().sample(acc_gen).to_string();
+    #[inline]
+    fn random_operation_raw(
+        &self,
+        accounts: &Vec<H160>,
+        zipfian_coef: f32,
+        account_num: u64,
+    ) -> bytes::Bytes {
+        let (sender, reciever) = get_two_addresses(account_num, accounts, zipfian_coef);
 
         let rng = &mut rand::thread_rng();
         let op = self.random_op_gen.sample(rng);
-        let tx = match op {
-            0 => self.create_account(acc1, U256::from(1_000_000), U256::from(1_000_000)),
-            1 => self.amalgamate(acc1, acc2),
-            2 => self.get_balance(acc1),
-            3 => self.send_payment(acc1, acc2, self.random_value(rng)),
-            4 => self.update_balance(acc1, self.random_value(rng)),
-            5 => self.update_saving(acc1, self.random_value(rng)),
-            6 => self.write_check(acc1, self.random_value(rng)),
+        let mut tx = match op {
+            0 => self.create_account(sender, U256::from(1_000_000), U256::from(1_000_000)),
+            1 => self.amalgamate(sender, reciever),
+            2 => self.get_balance(sender),
+            3 => self.send_payment(sender, reciever, self.random_value(rng)),
+            4 => self.update_balance(sender, self.random_value(rng)),
+            5 => self.update_saving(sender, self.random_value(rng)),
+            6 => self.write_check(sender, self.random_value(rng)),
             _ => panic!("invalid operation"),
         };
 
@@ -145,70 +233,93 @@ impl SmallBankTransactionHandler {
         U256::from(self.val_gen.sample(rng))
     }
 
-    fn create_account(&self, acc: String, init_check: U256, init_save: U256) -> TypedTransaction {
+    #[inline]
+    fn create_account(&self, sender: H160, init_check: U256, init_save: U256) -> TypedTransaction {
         let mut tx = self
             .contract
             .as_ref()
             .unwrap()
-            .create_account(acc, init_check, init_save)
+            .create_account(sender.to_string(), init_check, init_save)
             .tx;
-        self.set_default_params(&mut tx);
+        self.set_default_params(&mut tx, sender);
         tx
     }
 
-    fn amalgamate(&self, from: String, to: String) -> TypedTransaction {
-        let mut tx = self.contract.as_ref().unwrap().amalgamate(from, to).tx;
-        self.set_default_params(&mut tx);
-        tx
-    }
-
-    fn get_balance(&self, addr: String) -> TypedTransaction {
-        let mut tx = self.contract.as_ref().unwrap().get_balance(addr).tx;
-        self.set_default_params(&mut tx);
-        tx
-    }
-
-    fn send_payment(&self, from: String, to: String, amount: U256) -> TypedTransaction {
+    #[inline]
+    fn amalgamate(&self, sender: H160, to: String) -> TypedTransaction {
         let mut tx = self
             .contract
             .as_ref()
             .unwrap()
-            .send_payment(from, to, amount)
+            .amalgamate(sender.to_string(), to)
             .tx;
-        self.set_default_params(&mut tx);
+        self.set_default_params(&mut tx, sender);
         tx
     }
 
-    fn update_balance(&self, addr: String, amount: U256) -> TypedTransaction {
+    #[inline]
+    fn get_balance(&self, sender: H160) -> TypedTransaction {
         let mut tx = self
             .contract
             .as_ref()
             .unwrap()
-            .deposit_checking(addr, amount)
+            .get_balance(sender.to_string())
             .tx;
-        self.set_default_params(&mut tx);
+        self.set_default_params(&mut tx, sender);
         tx
     }
 
-    fn update_saving(&self, addr: String, amount: U256) -> TypedTransaction {
+    #[inline]
+    fn send_payment(&self, sender: H160, to: String, amount: U256) -> TypedTransaction {
         let mut tx = self
             .contract
             .as_ref()
             .unwrap()
-            .update_saving(addr, amount)
+            .send_payment(sender.to_string(), to, amount)
             .tx;
-        self.set_default_params(&mut tx);
+        self.set_default_params(&mut tx, sender);
         tx
     }
 
-    fn write_check(&self, addr: String, amount: U256) -> TypedTransaction {
-        let mut tx = self.contract.as_ref().unwrap().write_check(addr, amount).tx;
-        self.set_default_params(&mut tx);
+    #[inline]
+    fn update_balance(&self, sender: H160, amount: U256) -> TypedTransaction {
+        let mut tx = self
+            .contract
+            .as_ref()
+            .unwrap()
+            .deposit_checking(sender.to_string(), amount)
+            .tx;
+        self.set_default_params(&mut tx, sender);
         tx
     }
 
-    fn set_default_params(&self, tx: &mut TypedTransaction) {
-        tx.set_from(self.admin_wallet.address())
+    #[inline]
+    fn update_saving(&self, sender: H160, amount: U256) -> TypedTransaction {
+        let mut tx = self
+            .contract
+            .as_ref()
+            .unwrap()
+            .update_saving(sender.to_string(), amount)
+            .tx;
+        self.set_default_params(&mut tx, sender);
+        tx
+    }
+
+    #[inline]
+    fn write_check(&self, sender: H160, amount: U256) -> TypedTransaction {
+        let mut tx = self
+            .contract
+            .as_ref()
+            .unwrap()
+            .write_check(sender.to_string(), amount)
+            .tx;
+        self.set_default_params(&mut tx, sender);
+        tx
+    }
+
+    #[inline]
+    fn set_default_params(&self, tx: &mut TypedTransaction, sender: H160) {
+        tx.set_from(sender)
             .set_to(H160::from_str(DEFAULT_CONTRACT_ADDRESS).unwrap())
             .set_chain_id(self.chain_id)
             .set_nonce(U256::from(
@@ -221,6 +332,7 @@ impl SmallBankTransactionHandler {
             .set_gas_price(U256::zero());
     }
 
+    #[inline]
     fn get_signed(&self, tx: &mut TypedTransaction) -> EthereumTransaction {
         let signature: Signature = self
             .admin_wallet
@@ -231,6 +343,7 @@ impl SmallBankTransactionHandler {
         EthereumTransaction::from_rlp(rlp_signed).unwrap()
     }
 
+    #[inline]
     fn get_raw_signed(&self, tx: TypedTransaction) -> Bytes {
         let signature: Signature = self
             .admin_wallet

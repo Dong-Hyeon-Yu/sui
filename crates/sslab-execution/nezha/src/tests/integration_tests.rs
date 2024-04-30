@@ -1,5 +1,4 @@
 use ethers_providers::{MockProvider, Provider};
-use narwhal_types::BatchDigest;
 use sslab_execution::{
     types::ExecutableEthereumBatch,
     utils::{
@@ -20,24 +19,27 @@ fn get_nezha_executor() -> ConcurrencyLevelManager {
     ConcurrencyLevelManager::new(concurrent_evm_storage(), 10)
 }
 
+fn _create_random_smallbank_workload(
+    skewness: f32,
+    batch_size: usize,
+    block_concurrency: usize,
+) -> Vec<ExecutableEthereumBatch> {
+    let handler = get_smallbank_handler();
+
+    handler.create_batches(batch_size, block_concurrency, skewness, 100_000)
+}
+
 /* this test is for debuging nezha algorithm under a smallbank workload */
 #[tokio::test]
 async fn test_smallbank() {
     let nezha = Box::pin(get_nezha_executor());
-    let handler = get_smallbank_handler();
 
     //given
     let skewness = 0.6;
     let batch_size = 200;
     let block_concurrency = 30;
-    let mut consensus_output = Vec::new();
-    for _ in 0..block_concurrency {
-        let mut tmp = Vec::new();
-        for _ in 0..batch_size {
-            tmp.push(handler.random_operation(skewness, 10_000))
-        }
-        consensus_output.push(ExecutableEthereumBatch::new(tmp, BatchDigest::default()));
-    }
+    let consensus_output =
+        _create_random_smallbank_workload(skewness, batch_size, block_concurrency);
 
     //when
     let total = Instant::now();
@@ -82,20 +84,13 @@ async fn test_smallbank() {
 #[tokio::test]
 async fn test_par_smallbank() {
     let nezha = Box::pin(get_nezha_executor());
-    let handler = get_smallbank_handler();
 
     //given
     let skewness = 0.6;
     let batch_size = 200;
     let block_concurrency = 30;
-    let mut consensus_output = Vec::new();
-    for _ in 0..block_concurrency {
-        let mut tmp = Vec::new();
-        for _ in 0..batch_size {
-            tmp.push(handler.random_operation(skewness, 10_000))
-        }
-        consensus_output.push(ExecutableEthereumBatch::new(tmp, BatchDigest::default()));
-    }
+    let consensus_output =
+        _create_random_smallbank_workload(skewness, batch_size, block_concurrency);
 
     //when
     let total = Instant::now();
@@ -142,20 +137,13 @@ async fn test_par_smallbank() {
 #[tokio::test]
 async fn test_par_smallbank_for_advanced_nezha() {
     let nezha = Box::pin(get_nezha_executor());
-    let handler = get_smallbank_handler();
 
     //given
     let skewness = 0.6;
     let batch_size = 200;
     let block_concurrency = 30;
-    let mut consensus_output = Vec::new();
-    for _ in 0..block_concurrency {
-        let mut tmp = Vec::new();
-        for _ in 0..batch_size {
-            tmp.push(handler.random_operation(skewness, 100_000))
-        }
-        consensus_output.push(ExecutableEthereumBatch::new(tmp, BatchDigest::default()));
-    }
+    let consensus_output =
+        _create_random_smallbank_workload(skewness, batch_size, block_concurrency);
 
     //when
     let now = Instant::now();

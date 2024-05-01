@@ -21,7 +21,7 @@ fn _get_smallbank_handler() -> SmallBankTransactionHandler {
     SmallBankTransactionHandler::new(provider, DEFAULT_CHAIN_ID)
 }
 
-fn _get_nezha_executor(clevel: usize) -> ConcurrencyLevelManager {
+fn _get_nezha_executor(clevel: usize) -> ConcurrencyLevelManager<InMemoryConcurrentDB> {
     ConcurrencyLevelManager::new(concurrent_memory_database(), clevel)
 }
 

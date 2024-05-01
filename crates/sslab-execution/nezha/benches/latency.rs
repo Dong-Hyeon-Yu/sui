@@ -3,9 +3,12 @@ use ethers_providers::{MockProvider, Provider};
 use parking_lot::RwLock;
 use reth::primitives::TransactionSignedEcRecovered;
 use sslab_execution::{
+    evm_storage::backend::InMemoryConcurrentDB,
     types::ExecutableEthereumBatch,
-    utils::smallbank_contract_benchmark::concurrent_memory_database,
-    utils::test_utils::{SmallBankTransactionHandler, DEFAULT_CHAIN_ID},
+    utils::{
+        smallbank_contract_benchmark::concurrent_memory_database,
+        test_utils::{SmallBankTransactionHandler, DEFAULT_CHAIN_ID},
+    },
 };
 
 use sslab_execution_nezha::{nezha_core::LatencyBenchmark as _, ConcurrencyLevelManager};
@@ -16,7 +19,7 @@ fn _get_smallbank_handler() -> SmallBankTransactionHandler {
     SmallBankTransactionHandler::new(provider, DEFAULT_CHAIN_ID)
 }
 
-fn _get_nezha_executor(clevel: usize) -> ConcurrencyLevelManager {
+fn _get_nezha_executor(clevel: usize) -> ConcurrencyLevelManager<InMemoryConcurrentDB> {
     ConcurrencyLevelManager::new(concurrent_memory_database(), clevel)
 }
 

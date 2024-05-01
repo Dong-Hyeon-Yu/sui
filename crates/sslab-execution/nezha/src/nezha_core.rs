@@ -6,11 +6,10 @@ use reth::{
     primitives::TransactionSignedEcRecovered,
     revm::{
         primitives::{CfgEnv, CfgEnvWithHandlerCfg, SpecId},
-        DatabaseCommit, EvmBuilder,
+        Database, DatabaseCommit, EvmBuilder,
     },
 };
 use sslab_execution::{
-    evm_storage::backend::InMemoryConcurrentDB,
     executor::Executable,
     types::{ExecutableEthereumBatch, ExecutionResult, IndexedEthereumTransaction},
     EthEvmConfig,
@@ -26,7 +25,11 @@ use crate::{
 use super::address_based_conflict_graph::Transaction;
 
 #[async_trait::async_trait(?Send)]
-impl Executable<TransactionSignedEcRecovered> for Nezha {
+impl<ThreadSafeDB> Executable<TransactionSignedEcRecovered> for Nezha<ThreadSafeDB>
+where
+    ThreadSafeDB: Database + DatabaseCommit + Clone + Sync + Send + 'static,
+    <ThreadSafeDB as reth::revm::Database>::Error: std::fmt::Debug,
+{
     async fn execute(
         &self,
         consensus_output: Vec<ExecutableEthereumBatch<TransactionSignedEcRecovered>>,
@@ -35,26 +38,34 @@ impl Executable<TransactionSignedEcRecovered> for Nezha {
     }
 }
 
-pub struct Nezha {
-    inner: ConcurrencyLevelManager,
+pub struct Nezha<ThreadSafeDB> {
+    inner: ConcurrencyLevelManager<ThreadSafeDB>,
 }
 
-impl Nezha {
-    pub fn new(global_state: InMemoryConcurrentDB, concurrency_level: usize) -> Self {
+impl<ThreadSafeDB> Nezha<ThreadSafeDB>
+where
+    ThreadSafeDB: Database + DatabaseCommit + Clone + Sync + Send + 'static,
+    <ThreadSafeDB as reth::revm::Database>::Error: std::fmt::Debug,
+{
+    pub fn new(global_state: ThreadSafeDB, concurrency_level: usize) -> Self {
         Self {
             inner: ConcurrencyLevelManager::new(global_state, concurrency_level),
         }
     }
 }
 
-pub struct ConcurrencyLevelManager {
+pub struct ConcurrencyLevelManager<ThreadSafeDB> {
     concurrency_level: usize,
-    global_state: InMemoryConcurrentDB,
+    global_state: ThreadSafeDB,
     cfg_env: CfgEnvWithHandlerCfg,
 }
 
-impl ConcurrencyLevelManager {
-    pub fn new(global_state: InMemoryConcurrentDB, concurrency_level: usize) -> Self {
+impl<ThreadSafeDB> ConcurrencyLevelManager<ThreadSafeDB>
+where
+    ThreadSafeDB: Database + DatabaseCommit + Clone + Sync + Send + 'static,
+    <ThreadSafeDB as reth::revm::Database>::Error: std::fmt::Debug,
+{
+    pub fn new(global_state: ThreadSafeDB, concurrency_level: usize) -> Self {
         let mut cfg_env = CfgEnv::default();
         cfg_env.chain_id = 9;
 
@@ -370,7 +381,11 @@ pub trait LatencyBenchmark {
 
 #[cfg(feature = "latency")]
 #[async_trait::async_trait]
-impl LatencyBenchmark for ConcurrencyLevelManager {
+impl<ThreadSafeDB> LatencyBenchmark for ConcurrencyLevelManager<ThreadSafeDB>
+where
+    ThreadSafeDB: Database + DatabaseCommit + Clone + Sync + Send + 'static,
+    <ThreadSafeDB as reth::revm::Database>::Error: std::fmt::Debug,
+{
     async fn _execute_and_return_latency(
         &self,
         consensus_output: Vec<ExecutableEthereumBatch<TransactionSignedEcRecovered>>,

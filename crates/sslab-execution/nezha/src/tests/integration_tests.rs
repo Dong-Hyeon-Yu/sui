@@ -1,6 +1,7 @@
 use ethers_providers::{MockProvider, Provider};
 use reth::primitives::TransactionSignedEcRecovered;
 use sslab_execution::{
+    evm_storage::backend::InMemoryConcurrentDB,
     types::ExecutableEthereumBatch,
     utils::{
         smallbank_contract_benchmark::concurrent_memory_database,
@@ -16,7 +17,7 @@ fn _get_smallbank_handler() -> SmallBankTransactionHandler {
     SmallBankTransactionHandler::new(provider, DEFAULT_CHAIN_ID)
 }
 
-fn get_nezha_executor() -> ConcurrencyLevelManager {
+fn get_nezha_executor() -> ConcurrencyLevelManager<InMemoryConcurrentDB> {
     ConcurrencyLevelManager::new(concurrent_memory_database(), 10)
 }
 

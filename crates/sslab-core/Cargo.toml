@@ -52,7 +52,10 @@ narwhal-config.workspace = true
 narwhal-crypto.workspace = true
 narwhal-executor.workspace = true
 narwhal-network.workspace = true
-narwhal-node = { workspace = true, features = ["trace_transaction", "benchmark"] }
+narwhal-node = { workspace = true, features = [
+    "trace_transaction",
+    "benchmark",
+] }
 narwhal-types.workspace = true
 narwhal-worker.workspace = true
 shared-crypto.workspace = true
@@ -74,10 +77,9 @@ workspace-hack = { version = "0.1", path = "../workspace-hack" }
 sui-core.workspace = true
 
 
-sslab-execution = {workspace = true, features = ["benchmark"]}
-sslab-execution-serial = {workspace = true}
-sslab-execution-nezha = {workspace = true, optional = true}
-sslab-execution-blockstm = {workspace = true, optional = true}
+sslab-execution = { workspace = true, features = ["benchmark"] }
+sslab-execution-serial = { workspace = true }
+sslab-execution-nezha = { workspace = true, optional = true }
 
 [dev-dependencies]
 criterion.workspace = true
@@ -91,7 +93,6 @@ benchmark = ["narwhal-node/benchmark", "sslab-execution/benchmark"]
 # execution model
 nezha = ["sslab-execution-nezha"]
 serial = []
-blockstm = ["sslab-execution-blockstm"]
 
 [[bin]]
 name = "sslab-narwhal-node"

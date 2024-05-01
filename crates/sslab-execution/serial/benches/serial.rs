@@ -29,7 +29,7 @@ fn _create_random_smallbank_workload(
 ) -> Vec<ExecutableEthereumBatch<TransactionSignedEcRecovered>> {
     let handler = _get_smallbank_handler();
 
-    handler.create_batches_v2(batch_size, block_concurrency, skewness, 100_000)
+    handler.create_batches(batch_size, block_concurrency, skewness, 100_000)
 }
 
 fn serial(c: &mut Criterion) {

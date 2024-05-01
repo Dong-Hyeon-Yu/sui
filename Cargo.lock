@@ -2992,32 +2992,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "criterion"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f2b12d017a929603d80db1831cd3a24082f8137ce19c69e6447f54f5fc8d692f"
-dependencies = [
- "anes",
- "cast",
- "ciborium",
- "clap 4.4.10",
- "criterion-plot",
- "is-terminal",
- "itertools 0.10.5",
- "num-traits 0.2.18",
- "once_cell",
- "oorandom",
- "plotters",
- "rayon",
- "regex",
- "serde 1.0.193",
- "serde_derive",
- "serde_json",
- "tinytemplate",
- "walkdir",
-]
-
-[[package]]
 name = "criterion-plot"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3032,20 +3006,6 @@ name = "critical-section"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7059fff8937831a9ae6f0fe4d658ffabf58f2ca96aa9dec1c889f936f705f216"
-
-[[package]]
-name = "crossbeam"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2801af0d36612ae591caa9568261fddce32ce6e08a7275ea334a06a4ad021a2c"
-dependencies = [
- "cfg-if",
- "crossbeam-channel",
- "crossbeam-deque",
- "crossbeam-epoch",
- "crossbeam-queue",
- "crossbeam-utils",
-]
 
 [[package]]
 name = "crossbeam-channel"
@@ -3079,16 +3039,6 @@ dependencies = [
  "crossbeam-utils",
  "memoffset 0.7.1",
  "scopeguard",
-]
-
-[[package]]
-name = "crossbeam-queue"
-version = "0.3.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d1cfb3ea8a53f37c40dea2c7bedcbd88bdfae54f5e2175d6ecaff1c988353add"
-dependencies = [
- "cfg-if",
- "crossbeam-utils",
 ]
 
 [[package]]
@@ -4361,12 +4311,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "environmental"
-version = "1.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e48c92028aaa870e83d51c64e5d4e0b6981b360c522198c23959f219a4e1b15b"
-
-[[package]]
 name = "equivalent"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4475,24 +4419,6 @@ dependencies = [
  "impl-serde 0.4.0",
  "scale-info",
  "tiny-keccak",
-]
-
-[[package]]
-name = "ethereum"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2e04d24d20b8ff2235cffbf242d5092de3aa45f77c5270ddbfadd2778ca13fea"
-dependencies = [
- "bytes",
- "ethereum-types",
- "hash-db",
- "hash256-std-hasher",
- "parity-scale-codec 3.5.0",
- "rlp",
- "scale-info",
- "serde 1.0.193",
- "sha3 0.10.8",
- "trie-root",
 ]
 
 [[package]]
@@ -4808,64 +4734,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "evm"
-version = "0.39.1"
-source = "git+https://github.com/Dong-Hyeon-Yu/evm.git?rev=d81889d9303491a61f91560399ed292e09b91739#d81889d9303491a61f91560399ed292e09b91739"
-dependencies = [
- "anyhow",
- "auto_impl",
- "cfg-if",
- "environmental",
- "ethereum",
- "evm-core",
- "evm-gasometer",
- "evm-runtime",
- "log",
- "parity-scale-codec 3.5.0",
- "primitive-types 0.12.1",
- "rlp",
- "scale-info",
- "serde 1.0.193",
- "sha3 0.10.8",
-]
-
-[[package]]
-name = "evm-core"
-version = "0.39.0"
-source = "git+https://github.com/Dong-Hyeon-Yu/evm.git?rev=d81889d9303491a61f91560399ed292e09b91739#d81889d9303491a61f91560399ed292e09b91739"
-dependencies = [
- "parity-scale-codec 3.5.0",
- "primitive-types 0.12.1",
- "scale-info",
- "serde 1.0.193",
-]
-
-[[package]]
-name = "evm-gasometer"
-version = "0.39.0"
-source = "git+https://github.com/Dong-Hyeon-Yu/evm.git?rev=d81889d9303491a61f91560399ed292e09b91739#d81889d9303491a61f91560399ed292e09b91739"
-dependencies = [
- "cfg-if",
- "environmental",
- "evm-core",
- "evm-runtime",
- "primitive-types 0.12.1",
-]
-
-[[package]]
-name = "evm-runtime"
-version = "0.39.0"
-source = "git+https://github.com/Dong-Hyeon-Yu/evm.git?rev=d81889d9303491a61f91560399ed292e09b91739#d81889d9303491a61f91560399ed292e09b91739"
-dependencies = [
- "auto_impl",
- "cfg-if",
- "environmental",
- "evm-core",
- "primitive-types 0.12.1",
- "sha3 0.10.8",
-]
-
-[[package]]
 name = "expect-test"
 version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5148,18 +5016,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "98de4bbd547a563b716d8dfa9aad1cb19bfab00f4fa09a6a4ed21dbcf44ce9c4"
 dependencies = [
  "num-traits 0.2.18",
-]
-
-[[package]]
-name = "flurry"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e0afc943ef18eebf6bc3335daeb8d338202093d18444a1784ea7f57fe7680f8"
-dependencies = [
- "ahash 0.7.6",
- "num_cpus",
- "parking_lot 0.12.1",
- "seize",
 ]
 
 [[package]]
@@ -5721,21 +5577,6 @@ name = "half"
 version = "1.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eabb4a44450da02c90444cf74558da904edde8fb4e9035a9a6a4e15445af0bd7"
-
-[[package]]
-name = "hash-db"
-version = "0.16.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e7d7786361d7425ae2fe4f9e407eb0efaa0840f5212d109cc018c40c35c6ab4"
-
-[[package]]
-name = "hash256-std-hasher"
-version = "0.15.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92c171d55b98633f4ed3860808f004099b36c1cc29c42cfc53aa8591b21efcf2"
-dependencies = [
- "crunchy",
-]
 
 [[package]]
 name = "hashbrown"
@@ -8823,7 +8664,7 @@ dependencies = [
  "bcs",
  "bincode",
  "cfg-if",
- "criterion 0.4.0",
+ "criterion",
  "fastcrypto",
  "futures",
  "indexmap 1.9.3",
@@ -8855,7 +8696,7 @@ version = "0.1.0"
 dependencies = [
  "bcs",
  "bincode",
- "criterion 0.4.0",
+ "criterion",
  "fastcrypto",
  "hex-literal 0.3.4",
  "proptest",
@@ -9137,7 +8978,7 @@ dependencies = [
  "base64 0.13.1",
  "bcs",
  "bytes",
- "criterion 0.4.0",
+ "criterion",
  "derive_builder 0.12.0",
  "enum_dispatch",
  "fastcrypto",
@@ -10401,7 +10242,7 @@ checksum = "e20150f965e0e4c925982b9356da71c84bcd56cb66ef4e894825837cbcf6613e"
 dependencies = [
  "backtrace",
  "cfg-if",
- "criterion 0.4.0",
+ "criterion",
  "findshlibs",
  "inferno",
  "libc",
@@ -13330,7 +13171,6 @@ version = "2.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "35c0a159d0c45c12b20c5a844feb1fe4bea86e28f17b92a5f0c42193634d3782"
 dependencies = [
- "bitvec 1.0.1",
  "cfg-if",
  "derive_more",
  "parity-scale-codec 3.5.0",
@@ -13524,16 +13364,6 @@ checksum = "0160a13a177a45bfb43ce71c01580998474f556ad854dcbca936dd2841a5c556"
 dependencies = [
  "core-foundation-sys",
  "libc",
-]
-
-[[package]]
-name = "seize"
-version = "0.2.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e5739de653b129b0a59da381599cf17caf24bc586f6a797c52d3d6147c5b85a"
-dependencies = [
- "num_cpus",
- "once_cell",
 ]
 
 [[package]]
@@ -14271,7 +14101,7 @@ dependencies = [
  "cfg-if",
  "chrono",
  "clap 2.34.0",
- "criterion 0.4.0",
+ "criterion",
  "dashmap",
  "either",
  "enum_dispatch",
@@ -14305,7 +14135,6 @@ dependencies = [
  "shared-crypto",
  "signature 1.6.4",
  "sslab-execution",
- "sslab-execution-blockstm",
  "sslab-execution-nezha",
  "sslab-execution-serial",
  "sui-archival",
@@ -14341,16 +14170,15 @@ dependencies = [
  "async-trait",
  "bytes",
  "cfg-if",
- "criterion 0.4.0",
+ "criterion",
  "dashmap",
  "enumn",
  "ethers",
  "ethers-core",
  "ethers-providers",
  "ethers-signers",
- "evm",
+ "eyre",
  "fastcrypto",
- "flurry",
  "futures",
  "hashbrown 0.14.2",
  "mysten-metrics",
@@ -14373,39 +14201,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "sslab-execution-blockstm"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "arc-swap",
- "async-trait",
- "criterion 0.4.0",
- "criterion 0.5.1",
- "crossbeam",
- "crossbeam-queue",
- "dashmap",
- "ethers",
- "ethers-providers",
- "evm",
- "num_cpus",
- "once_cell",
- "parking_lot 0.12.1",
- "proptest",
- "proptest-derive 0.4.0",
- "rand 0.8.5",
- "rayon",
- "sslab-execution",
- "sui-types",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "sslab-execution-nezha"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "criterion 0.4.0",
+ "criterion",
  "ethers",
  "ethers-providers",
  "ethers-signers",
@@ -14430,7 +14230,7 @@ version = "0.1.0"
 dependencies = [
  "anstyle",
  "async-trait",
- "criterion 0.4.0",
+ "criterion",
  "ethers",
  "ethers-providers",
  "ethers-signers",
@@ -14973,7 +14773,7 @@ dependencies = [
  "bytes",
  "chrono",
  "clap 3.2.23",
- "criterion 0.4.0",
+ "criterion",
  "dashmap",
  "either",
  "enum_dispatch",
@@ -15309,7 +15109,7 @@ dependencies = [
  "cached",
  "chrono",
  "clap 3.2.23",
- "criterion 0.4.0",
+ "criterion",
  "diesel",
  "diesel-derive-enum",
  "diesel_migrations",
@@ -16142,7 +15942,7 @@ dependencies = [
  "byteorder",
  "bytes",
  "clap 4.4.10",
- "criterion 0.4.0",
+ "criterion",
  "eyre",
  "fastcrypto",
  "futures",
@@ -16449,7 +16249,7 @@ dependencies = [
  "bcs",
  "bincode",
  "byteorder",
- "criterion 0.4.0",
+ "criterion",
  "derivative",
  "derive_more",
  "enum_dispatch",
@@ -17645,15 +17445,6 @@ dependencies = [
  "tokio",
  "tracing",
  "workspace-hack",
-]
-
-[[package]]
-name = "trie-root"
-version = "0.18.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d4ed310ef5ab98f5fa467900ed906cb9232dd5376597e00fd4cba2a449d06c0b"
-dependencies = [
- "hash-db",
 ]
 
 [[package]]
@@ -18895,7 +18686,7 @@ dependencies = [
  "cpp_demangle",
  "cpufeatures",
  "crc32fast",
- "criterion 0.4.0",
+ "criterion",
  "criterion-plot",
  "crossbeam-channel",
  "crossbeam-deque",

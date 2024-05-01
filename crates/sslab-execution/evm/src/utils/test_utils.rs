@@ -1,5 +1,5 @@
 use self::small_bank::SmallBank;
-use crate::types::{EthereumTransactable as _, EthereumTransaction, ExecutableEthereumBatch};
+use crate::types::ExecutableEthereumBatch;
 use bytes::Bytes;
 use ethers_core::{
     rand,
@@ -93,65 +93,17 @@ impl SmallBankTransactionHandler {
     }
 
     fn create_accounts(&self, account_num: u64) -> Vec<H160> {
-        let random_byte_gen = Uniform::new(0u8, 255u8);
-        let mut secret_keys = (0..account_num)
+        let mut accounts = (0..account_num)
             .into_par_iter()
-            .map(|_| {
-                (0..32)
-                    .into_iter()
-                    .map(|_| rand::thread_rng().sample(random_byte_gen))
-                    .collect::<Bytes>()
-            })
-            .collect::<HashSet<Bytes>>();
-        while secret_keys.len() < account_num as usize {
-            secret_keys.insert(
-                (0..32)
-                    .into_iter()
-                    .map(|_| rand::thread_rng().sample(random_byte_gen))
-                    .collect::<Bytes>(),
-            );
+            .map(|_| H160::random())
+            .collect::<HashSet<H160>>();
+        while accounts.len() < account_num as usize {
+            accounts.insert(H160::random());
         }
-        secret_keys
-            .into_iter()
-            .map(|key| key)
-            .collect::<Vec<_>>()
-            .into_par_iter()
-            .map(|key| {
-                LocalWallet::from_bytes(key.to_vec().as_slice())
-                    .unwrap()
-                    .address()
-            })
-            .collect()
+        accounts.into_iter().collect()
     }
 
     pub fn create_batches(
-        &self,
-        batch_size: usize,
-        batch_num: usize,
-        zipfian_coef: f32,
-        account_num: u64,
-    ) -> Vec<ExecutableEthereumBatch<EthereumTransaction>> {
-        let target_tnx_num = batch_size * batch_num;
-        let accounts = self.create_accounts(account_num);
-
-        let mut buffer = (0..target_tnx_num)
-            .into_par_iter()
-            .map(|_| self.random_operation(&accounts, zipfian_coef, account_num))
-            .collect::<hashbrown::HashSet<_>>();
-
-        while buffer.len() < target_tnx_num {
-            buffer.insert(self.random_operation(&accounts, zipfian_coef, account_num));
-        }
-
-        buffer
-            .into_par_iter()
-            .collect::<Vec<_>>()
-            .par_chunks_exact(batch_size)
-            .map(|chunk| ExecutableEthereumBatch::new(chunk.to_vec(), BatchDigest::default()))
-            .collect()
-    }
-
-    pub fn create_batches_v2(
         &self,
         batch_size: usize,
         batch_num: usize,
@@ -223,31 +175,6 @@ impl SmallBankTransactionHandler {
             .par_chunks_exact(batch_size)
             .map(|chunk| chunk.to_vec())
             .collect::<Vec<_>>()
-    }
-
-    #[inline]
-    fn random_operation(
-        &self,
-        accounts: &Vec<H160>,
-        zipfian_coef: f32,
-        account_num: u64,
-    ) -> EthereumTransaction {
-        let (sender, reciever) = get_two_addresses(account_num, accounts, zipfian_coef);
-
-        let rng = &mut rand::thread_rng();
-        let op = self.random_op_gen.sample(rng);
-        let mut tx = match op {
-            0 => self.create_account(sender, U256::from(1_000_000), U256::from(1_000_000)),
-            1 => self.amalgamate(sender, reciever),
-            2 => self.get_balance(sender),
-            3 => self.send_payment(sender, reciever, self.random_value(rng)),
-            4 => self.update_balance(sender, self.random_value(rng)),
-            5 => self.update_saving(sender, self.random_value(rng)),
-            6 => self.write_check(sender, self.random_value(rng)),
-            _ => panic!("invalid operation"),
-        };
-
-        self.get_signed(&mut tx)
     }
 
     #[inline]
@@ -379,17 +306,6 @@ impl SmallBankTransactionHandler {
             ))
             .set_gas(u64::MAX)
             .set_gas_price(U256::zero());
-    }
-
-    #[inline]
-    fn get_signed(&self, tx: &mut TypedTransaction) -> EthereumTransaction {
-        let signature: Signature = self
-            .admin_wallet
-            .sign_transaction_sync(tx)
-            .expect("signature failed");
-        let tx_bytes = tx.rlp_signed(&signature).0.to_vec();
-        let rlp_signed = tx_bytes.as_slice();
-        EthereumTransaction::from_rlp(rlp_signed).unwrap()
     }
 
     #[inline]

@@ -1,7 +1,5 @@
-use evm::ExitReason;
-use sui_types::error::SuiError;
 use tokio::sync::mpsc::Receiver;
-use tracing::{debug, warn};
+use tracing::debug;
 
 use crate::types::{ExecutableConsensusOutput, ExecutableEthereumBatch};
 
@@ -68,54 +66,6 @@ impl<T: Clone, ExecutionModel: Executable<T> + Send + Sync> ParallelExecutor<T, 
             rx_consensus_certificate,
             // rx_shutdown,
             execution_model,
-        }
-    }
-}
-
-pub struct EvmExecutionUtils;
-
-impl EvmExecutionUtils {
-    pub fn process_transact_call_result(reason: &ExitReason) -> Result<bool, SuiError> {
-        match reason {
-            ExitReason::Succeed(_) => Ok(false),
-            ExitReason::Revert(e) => {
-                // do nothing: explicit revert is not an error
-                debug!("tx execution revert: {:?}", e);
-                Ok(true)
-            }
-            ExitReason::Error(e) => {
-                // do nothing: normal EVM error
-                warn!("tx execution error: {:?}", e);
-                Ok(true)
-            }
-            ExitReason::Fatal(e) => {
-                warn!("tx execution fatal error: {:?}", e);
-                Err(SuiError::ExecutionError(String::from(
-                    "Fatal error occurred on EVM!",
-                )))
-            }
-        }
-    }
-
-    pub fn process_transact_create_result(reason: &ExitReason) -> Result<bool, SuiError> {
-        match reason {
-            ExitReason::Succeed(_) => Ok(false),
-            ExitReason::Revert(e) => {
-                // do nothing: explicit revert is not an error
-                debug!("fail to deploy contract: {:?}", e);
-                Ok(true)
-            }
-            ExitReason::Error(e) => {
-                // do nothing: normal EVM error
-                warn!("fail to deploy contract: {:?}", e);
-                Ok(true)
-            }
-            ExitReason::Fatal(e) => {
-                warn!("fatal error occurred when deploying contract: {:?}", e);
-                Err(SuiError::ExecutionError(String::from(
-                    "Fatal error occurred on EVM!",
-                )))
-            }
         }
     }
 }

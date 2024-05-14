@@ -109,7 +109,7 @@ impl SmallBankTransactionHandler {
         batch_num: usize,
         zipfian_coef: f32,
         account_num: u64,
-    ) -> Vec<ExecutableEthereumBatch<reth::primitives::TransactionSignedEcRecovered>> {
+    ) -> Vec<ExecutableEthereumBatch> {
         let target_tnx_num = batch_size * batch_num;
         let accounts = self.create_accounts(account_num);
 
@@ -123,8 +123,6 @@ impl SmallBankTransactionHandler {
                         .as_slice(),
                 )
                 .unwrap()
-                .into_ecrecovered()
-                .unwrap()
             })
             .collect::<hashbrown::HashSet<_>>();
 
@@ -136,8 +134,6 @@ impl SmallBankTransactionHandler {
                         .to_vec()
                         .as_slice(),
                 )
-                .unwrap()
-                .into_ecrecovered()
                 .unwrap(),
             );
         }

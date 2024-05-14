@@ -1,3 +1,3 @@
 mod concurrent_memory_db;
 
-pub use concurrent_memory_db::InMemoryConcurrentDB;
+pub use concurrent_memory_db::{CacheDB, InMemoryConcurrentDB};

@@ -8,10 +8,10 @@ use reth::revm::{
 
 use std::sync::Arc;
 
+use crate::types::CHashMap;
+
 /// A [Database] implementation that stores all state changes in memory.
 pub type InMemoryConcurrentDB = CacheDB<EmptyDB>;
-
-type ChashMap<K, V> = dashmap::DashMap<K, V>;
 
 /// A [Database] implementation that stores all state changes in memory.
 ///
@@ -25,13 +25,13 @@ type ChashMap<K, V> = dashmap::DashMap<K, V>;
 pub struct CacheDB<ExtDB> {
     /// Account info where None means it is not existing. Not existing state is needed for Pre TANGERINE forks.
     /// `code` is always `None`, and bytecode can be found in `contracts`.
-    pub accounts: Arc<ChashMap<Address, DbAccount>>,
+    pub accounts: Arc<CHashMap<Address, DbAccount>>,
     /// Tracks all contracts by their code hash.
-    pub contracts: Arc<ChashMap<B256, Bytecode>>,
+    pub contracts: Arc<CHashMap<B256, Bytecode>>,
     /// All logs that were committed via [DatabaseCommit::commit].
     // pub logs: Vec<Log>,
     /// All cached block hashes from the [DatabaseRef].
-    pub block_hashes: Arc<ChashMap<U256, B256>>,
+    pub block_hashes: Arc<CHashMap<U256, B256>>,
     /// The underlying database ([DatabaseRef]) that is used to load data.
     ///
     /// Note: this is read-only, data is never written to this database.
@@ -44,16 +44,16 @@ impl<ExtDB: Default + Clone> Default for CacheDB<ExtDB> {
     }
 }
 
-impl<ExtDB: Clone> CacheDB<ExtDB> {
+impl<ExtDB> CacheDB<ExtDB> {
     pub fn new(db: ExtDB) -> Self {
-        let contracts = ChashMap::new();
+        let contracts = CHashMap::new();
         contracts.insert(KECCAK_EMPTY, Bytecode::new());
         contracts.insert(B256::ZERO, Bytecode::new());
         Self {
-            accounts: Arc::new(ChashMap::new()),
+            accounts: Arc::new(CHashMap::new()),
             contracts: Arc::new(contracts),
             // logs: Vec::default(),
-            block_hashes: Arc::new(ChashMap::new()),
+            block_hashes: Arc::new(CHashMap::new()),
             db,
         }
     }
@@ -235,7 +235,7 @@ impl<ExtDB: DatabaseRef> Database for CacheDB<ExtDB> {
     #[inline]
     fn code_by_hash(&self, code_hash: B256) -> Result<Bytecode, Self::Error> {
         match self.contracts.get(&code_hash) {
-            Some(bytecode) => Ok(bytecode.value().clone()),
+            Some(bytecode) => Ok(bytecode.clone()),
             None => {
                 let bytecode = self.db.code_by_hash_ref(code_hash)?;
                 self.contracts.insert(code_hash, bytecode.clone());
@@ -353,7 +353,7 @@ pub struct DbAccount {
     /// If account is selfdestructed or newly created, storage will be cleared.
     pub account_state: AccountState,
     /// storage slots
-    pub storage: ChashMap<U256, U256>,
+    pub storage: CHashMap<U256, U256>,
 }
 
 impl DbAccount {

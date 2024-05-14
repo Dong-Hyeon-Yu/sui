@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use narwhal_types::{Batch, BatchAPI};
 use narwhal_worker::TransactionValidator;
+use rayon::prelude::*;
 use reth::primitives::{alloy_primitives::private::alloy_rlp::Decodable, TransactionSigned};
 use sui_protocol_config::ProtocolConfig;
 
@@ -24,10 +25,24 @@ impl TransactionValidator for EthereumTxValidator {
         b: &Batch,
         _protocol_config: &ProtocolConfig,
     ) -> Result<(), Self::Error> {
-        for t in b.transactions() {
-            self.validate(t)?;
-        }
+        let mut errors = vec![];
 
+        rayon::scope(|s| {
+            s.spawn(|_| {
+                errors = b
+                    .transactions()
+                    .into_par_iter()
+                    .filter_map(|t| {
+                        let result = self.validate(t);
+                        if result.is_err() {
+                            Some(result.unwrap_err())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<Self::Error>>()
+            })
+        });
         Ok(())
     }
 }

@@ -31,7 +31,6 @@ sui-protocol-config.workspace = true
 sui-types.workspace = true
 eyre.workspace = true
 
-enumn = "0.1.11"
 hashbrown = { version = "0.14.2", features = [
     "rayon",
     "inline-more",
@@ -40,6 +39,9 @@ hashbrown = { version = "0.14.2", features = [
 rayon.workspace = true
 dashmap = { workspace = true, features = ['rayon', 'inline'] }
 reth.workspace = true
+reth-interfaces.workspace = true
+reth-trie.workspace = true
+reth-node-ethereum.workspace = true
 
 ethers = "^2.0.0"
 ethers-core = { version = "^2.0.0" }

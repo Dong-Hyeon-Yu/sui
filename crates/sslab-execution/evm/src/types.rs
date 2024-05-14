@@ -1,20 +1,136 @@
-use enumn;
+use dashmap::{
+    iter::Iter,
+    mapref::one::{Ref, RefMut},
+};
 use fastcrypto::hash::Hash;
 use narwhal_types::{BatchDigest, ConsensusOutput, ConsensusOutputDigest};
-use reth::primitives::{TransactionSignedEcRecovered, B256};
+use reth::primitives::{Address, TransactionSigned, B256, U256};
+
+pub(crate) const NOT_SUPPORT: U256 = U256::ZERO;
+
+#[derive(Clone, Debug, Default)]
+
+pub struct CHashMap<K: std::hash::Hash + Eq, V>(dashmap::DashMap<K, V>);
+
+impl<K, V> CHashMap<K, V>
+where
+    K: std::hash::Hash + Eq + Clone + Copy,
+{
+    pub fn new() -> Self {
+        Self(dashmap::DashMap::new())
+    }
+
+    #[inline]
+    pub fn extend<I>(&mut self, other: I)
+    where
+        I: IntoIterator<Item = (K, V)>,
+    {
+        self.0.extend(other);
+    }
+
+    #[inline]
+    pub fn get(&self, key: &K) -> Option<Ref<K, V>> {
+        self.0.get(key)
+    }
+
+    #[inline]
+    pub fn get_mut(&self, key: &K) -> Option<RefMut<K, V>> {
+        self.0.get_mut(key)
+    }
+
+    #[inline]
+    pub fn insert(&self, key: K, value: V) -> Option<V> {
+        self.0.insert(key, value)
+    }
+
+    #[inline]
+    pub fn entry(&self, key: K) -> dashmap::mapref::entry::Entry<'_, K, V> {
+        self.0.entry(key)
+    }
+
+    #[inline]
+    pub fn clear(&self) {
+        self.0.clear();
+    }
+
+    pub fn iter(&self) -> Iter<K, V> {
+        self.0.iter()
+    }
+}
+
+impl<K, V> FromIterator<(K, V)> for CHashMap<K, V>
+where
+    K: std::hash::Hash + Eq + Clone,
+{
+    #[inline]
+    fn from_iter<I: IntoIterator<Item = (K, V)>>(iter: I) -> Self {
+        Self(dashmap::DashMap::from_iter(iter))
+    }
+}
+
+impl<K, V> PartialEq for CHashMap<K, V>
+where
+    K: std::hash::Hash + Eq + Clone,
+    V: Eq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        if self.0.len() != other.0.len() {
+            return false;
+        }
+
+        self.0.iter().all(|item| {
+            other
+                .0
+                .get(item.key())
+                .map_or(false, |v| *item.value() == *v)
+        })
+    }
+}
+
+impl<K, V> Eq for CHashMap<K, V>
+where
+    K: std::hash::Hash + Eq + Clone,
+    V: Eq,
+{
+}
+
+impl<K, V> IntoIterator for CHashMap<K, V>
+where
+    K: std::hash::Hash + Eq + Clone,
+{
+    type Item = (K, V);
+    type IntoIter = dashmap::iter::OwningIter<K, V>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl<K, V> From<reth::revm::primitives::hash_map::HashMap<K, V>> for CHashMap<K, V>
+where
+    K: std::hash::Hash + Eq + Clone + Copy,
+{
+    fn from(map: reth::revm::primitives::hash_map::HashMap<K, V>) -> Self {
+        let mut new_map = CHashMap::new();
+        new_map.extend(map.into_iter());
+        new_map
+    }
+}
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct IndexedEthereumTransaction {
-    pub tx: TransactionSignedEcRecovered,
+    pub tx: TransactionSigned,
+    pub signer: Address,
     pub id: u64,
 }
 
 impl IndexedEthereumTransaction {
-    pub fn new(tx: TransactionSignedEcRecovered, id: u64) -> Self {
-        Self { tx, id }
+    pub fn new(tx: TransactionSigned, id: u64) -> Self {
+        let signer = tx.recover_signer().unwrap();
+        Self { tx, signer, id }
     }
 
-    pub fn data(&self) -> &TransactionSignedEcRecovered {
+    pub fn data(&self) -> &TransactionSigned {
         &self.tx
     }
 
@@ -29,16 +145,20 @@ impl IndexedEthereumTransaction {
     pub fn id(&self) -> u64 {
         self.id
     }
+
+    pub fn signer(&self) -> Address {
+        self.signer
+    }
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct ExecutableEthereumBatch<T> {
-    digest: BatchDigest,
-    data: Vec<T>,
+pub struct ExecutableEthereumBatch {
+    pub digest: BatchDigest,
+    pub data: Vec<TransactionSigned>,
 }
 
-impl<T> ExecutableEthereumBatch<T> {
-    pub fn new(batch: Vec<T>, digest: BatchDigest) -> Self {
+impl ExecutableEthereumBatch {
+    pub fn new(batch: Vec<TransactionSigned>, digest: BatchDigest) -> Self {
         Self {
             data: batch,
             digest,
@@ -49,26 +169,26 @@ impl<T> ExecutableEthereumBatch<T> {
         &self.digest
     }
 
-    pub fn data(&self) -> &Vec<T> {
+    pub fn data(&self) -> &Vec<TransactionSigned> {
         &self.data
     }
 
-    pub fn take_data(self) -> Vec<T> {
+    pub fn take_data(self) -> Vec<TransactionSigned> {
         self.data
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct ExecutableConsensusOutput<T: Clone> {
+pub struct ExecutableConsensusOutput {
     digest: ConsensusOutputDigest,
-    data: Vec<ExecutableEthereumBatch<T>>,
+    data: Vec<ExecutableEthereumBatch>,
     timestamp: u64,
     round: u64,
     sub_dag_index: u64,
 }
 
-impl<T: Clone> ExecutableConsensusOutput<T> {
-    pub fn new(data: Vec<ExecutableEthereumBatch<T>>, consensus_output: &ConsensusOutput) -> Self {
+impl ExecutableConsensusOutput {
+    pub fn new(data: Vec<ExecutableEthereumBatch>, consensus_output: &ConsensusOutput) -> Self {
         Self {
             digest: consensus_output.digest(),
             data,
@@ -82,11 +202,11 @@ impl<T: Clone> ExecutableConsensusOutput<T> {
         &self.digest
     }
 
-    pub fn take_data(self) -> Vec<ExecutableEthereumBatch<T>> {
+    pub fn take_data(self) -> Vec<ExecutableEthereumBatch> {
         self.data
     }
 
-    pub fn data(&self) -> &Vec<ExecutableEthereumBatch<T>> {
+    pub fn data(&self) -> &Vec<ExecutableEthereumBatch> {
         &self.data
     }
 
@@ -114,43 +234,5 @@ impl ExecutionResult {
 
     pub fn iter(&self) -> impl Iterator<Item = &BatchDigest> {
         self.digests.iter()
-    }
-}
-
-/// SpecId and their activation block
-/// Information was obtained from: https://github.com/ethereum/execution-specs
-#[repr(u8)]
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, enumn::N)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[allow(non_camel_case_types)]
-pub enum SpecId {
-    FRONTIER = 0,         // Frontier	            0
-    FRONTIER_THAWING = 1, // Frontier Thawing       200000
-    HOMESTEAD = 2,        // Homestead	            1150000
-    DAO_FORK = 3,         // DAO Fork	            1920000
-    TANGERINE = 4,        // Tangerine Whistle	    2463000
-    SPURIOUS_DRAGON = 5,  // Spurious Dragon        2675000
-    BYZANTIUM = 6,        // Byzantium	            4370000
-    CONSTANTINOPLE = 7,   // Constantinople         7280000 is overwritten with PETERSBURG
-    PETERSBURG = 8,       // Petersburg             7280000
-    ISTANBUL = 9,         // Istanbul	            9069000
-    MUIR_GLACIER = 10,    // Muir Glacier	        9200000
-    BERLIN = 11,          // Berlin	                12244000
-    LONDON = 12,          // London	                12965000
-    ARROW_GLACIER = 13,   // Arrow Glacier	        13773000
-    GRAY_GLACIER = 14,    // Gray Glacier	        15050000
-    MERGE = 15,           // Paris/Merge	        TBD (Depends on difficulty)
-    SHANGHAI = 16,
-    CANCUN = 17,
-    LATEST = 18,
-}
-
-impl SpecId {
-    pub fn try_from_u8(spec_id: u8) -> Option<Self> {
-        Self::n(spec_id)
-    }
-
-    pub fn try_from_u256(spec_id: ethers_core::types::U256) -> Option<Self> {
-        Self::n(spec_id.byte(0) as u8)
     }
 }

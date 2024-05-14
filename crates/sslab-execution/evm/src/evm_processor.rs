@@ -287,7 +287,7 @@ where
 {
     type Error = BlockExecutionError;
 
-    async fn execute(&mut self, block: &BlockWithSenders) -> Result<(), BlockExecutionError> {
+    async fn execute(&mut self, block: &BlockWithSenders) -> Result<(), Self::Error> {
         let (receipts, _) = self.execute_inner(block).await?;
         self.save_receipts(receipts)
     }
@@ -295,7 +295,7 @@ where
     async fn execute_and_verify_receipt(
         &mut self,
         block: &BlockWithSenders,
-    ) -> Result<(), BlockExecutionError> {
+    ) -> Result<(), Self::Error> {
         // execute block
         let (receipts, _) = self.execute_inner(block).await?;
 
@@ -326,7 +326,7 @@ where
     async fn execute_transactions(
         &mut self,
         block: &BlockWithSenders,
-    ) -> Result<(Vec<Receipt>, u64), BlockExecutionError> {
+    ) -> Result<(Vec<Receipt>, u64), Self::Error> {
         self.execute_inner(block).await
     }
 

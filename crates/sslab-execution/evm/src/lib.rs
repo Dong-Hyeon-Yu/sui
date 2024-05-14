@@ -1,13 +1,14 @@
 pub mod db;
 pub mod evm_processor;
-pub mod evm_storage;
 pub mod executor;
 pub mod traits;
 pub mod transaction_validator;
 pub mod types;
+
+#[cfg(any(feature = "benchmark", test))]
 pub mod utils;
 
-pub use reth_interfaces::executor::BlockExecutionError;
+pub use reth_interfaces::executor::{BlockExecutionError, BlockValidationError};
 pub use reth_node_ethereum::EthEvmConfig;
 
 pub mod revm_utiles {

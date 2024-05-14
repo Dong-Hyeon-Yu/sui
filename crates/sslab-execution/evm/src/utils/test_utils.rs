@@ -12,6 +12,10 @@ use narwhal_types::BatchDigest;
 use rand::Rng as _;
 use rand_distr::{Distribution, Uniform, Zipf};
 use rayon::prelude::*;
+use reth::primitives::{
+    constants::EMPTY_TRANSACTIONS, proofs, Block, BlockWithSenders, Chain, ChainSpec,
+    ChainSpecBuilder, Genesis, Header, TransactionSigned, EMPTY_OMMER_ROOT_HASH,
+};
 use std::{str::FromStr, sync::Arc};
 
 pub const ADMIN_SECRET_KEY: &[u8] = &[
@@ -21,6 +25,67 @@ pub const ADMIN_SECRET_KEY: &[u8] = &[
 // pub const ADMIN_ADDRESS: &str = "0xe14de1592b52481b94b99df4e9653654e14fffb6";
 pub const DEFAULT_CONTRACT_ADDRESS: &str = "0x1000000000000000000000000000000000000000";
 pub const DEFAULT_CHAIN_ID: u64 = 9; // ISTANBUL
+
+pub fn default_chain_spec() -> ChainSpec {
+    ChainSpecBuilder::default()
+        .istanbul_activated()
+        .chain(Chain::from(DEFAULT_CHAIN_ID))
+        .genesis(Genesis::default())
+        .build()
+}
+
+pub fn convert_into_block(batches: Vec<ExecutableEthereumBatch>) -> BlockWithSenders {
+    let transactions = batches
+        .into_iter()
+        .flat_map(|batch| {
+            let ExecutableEthereumBatch {
+                digest: _digest,
+                data,
+            } = batch;
+            data
+        })
+        .collect::<Vec<TransactionSigned>>();
+
+    let chain_spec = default_chain_spec();
+    let genesis = chain_spec.genesis_header();
+    let mut header = Header {
+        parent_hash: genesis.hash_slow(),
+        ommers_hash: EMPTY_OMMER_ROOT_HASH,
+        beneficiary: Default::default(),
+        state_root: Default::default(),
+        transactions_root: Default::default(),
+        receipts_root: Default::default(),
+        withdrawals_root: None,
+        logs_bloom: Default::default(),
+        difficulty: reth::primitives::U256::from(2),
+        number: genesis.number + 1,
+        gas_limit: u64::MAX,
+        gas_used: 0,
+        timestamp: 0,
+        mix_hash: Default::default(),
+        nonce: 0,
+        base_fee_per_gas: genesis.base_fee_per_gas,
+        blob_gas_used: None,
+        excess_blob_gas: None,
+        extra_data: Default::default(),
+        parent_beacon_block_root: None,
+    };
+
+    header.transactions_root = if transactions.is_empty() {
+        EMPTY_TRANSACTIONS
+    } else {
+        proofs::calculate_transaction_root(transactions.as_slice())
+    };
+
+    Block {
+        header,
+        body: transactions,
+        ommers: vec![],
+        withdrawals: None,
+    }
+    .with_recovered_senders()
+    .unwrap()
+}
 
 #[inline]
 fn get_two_addresses(account_num: u64, accounts: &Vec<H160>, zipfian_coef: f32) -> (H160, String) {
@@ -300,7 +365,7 @@ impl SmallBankTransactionHandler {
                     .unwrap()
                     .as_nanos(),
             ))
-            .set_gas(u64::MAX)
+            .set_gas(100_000u64)
             .set_gas_price(U256::zero());
     }
 

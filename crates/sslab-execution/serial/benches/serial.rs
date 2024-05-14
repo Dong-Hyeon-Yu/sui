@@ -1,35 +1,32 @@
+use std::sync::Arc;
+
 use criterion::Throughput;
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
-use ethers_providers::{MockProvider, Provider};
-use reth::primitives::TransactionSignedEcRecovered;
-use sslab_execution::executor::Executable;
-use sslab_execution::types::ExecutableEthereumBatch;
+use reth::primitives::BlockWithSenders;
+use sslab_execution::db::in_memory_db::InMemoryConcurrentDB;
+use sslab_execution::traits::Executable;
+use sslab_execution::utils::test_utils::default_chain_spec;
 use sslab_execution::utils::{
-    smallbank_contract_benchmark::concurrent_memory_database,
-    test_utils::{SmallBankTransactionHandler, DEFAULT_CHAIN_ID},
+    smallbank_contract_benchmark::{concurrent_memory_database, get_smallbank_handler},
+    test_utils::convert_into_block,
 };
 use sslab_execution_serial::SerialExecutor;
 
 const DEFAULT_BATCH_SIZE: usize = 200;
 
-fn _get_smallbank_handler() -> SmallBankTransactionHandler {
-    let provider = Provider::<MockProvider>::new(MockProvider::default());
-    SmallBankTransactionHandler::new(provider, DEFAULT_CHAIN_ID)
-}
-
-fn _get_serial_executor() -> SerialExecutor {
+fn _get_serial_executor() -> SerialExecutor<InMemoryConcurrentDB> {
     let memory_storage = concurrent_memory_database();
-    SerialExecutor::new(memory_storage)
+    let chain_spec = Arc::new(default_chain_spec());
+    SerialExecutor::new(memory_storage, chain_spec)
 }
 
 fn _create_random_smallbank_workload(
     skewness: f32,
     batch_size: usize,
     block_concurrency: usize,
-) -> Vec<ExecutableEthereumBatch<TransactionSignedEcRecovered>> {
-    let handler = _get_smallbank_handler();
-
-    handler.create_batches(batch_size, block_concurrency, skewness, 100_000)
+) -> BlockWithSenders {
+    let handler = get_smallbank_handler();
+    convert_into_block(handler.create_batches(batch_size, block_concurrency, skewness, 100_000))
 }
 
 fn serial(c: &mut Criterion) {
@@ -57,7 +54,7 @@ fn serial(c: &mut Criterion) {
                                 let serial = _get_serial_executor();
                                 (serial, consensus_output)
                             },
-                            |(serial, consensus_output)| async move {
+                            |(mut serial, consensus_output)| async move {
                                 let _ = serial.execute(consensus_output).await;
                             },
                             BatchSize::SmallInput,

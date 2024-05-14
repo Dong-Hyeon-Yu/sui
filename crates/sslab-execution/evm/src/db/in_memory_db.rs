@@ -1,8 +1,12 @@
 use dashmap::mapref::one::{Ref, RefMut};
-use reth::revm::{
-    db::{AccountState, DatabaseCommit, DatabaseRef, EmptyDB},
-    primitives::{
-        db::Database, Account, AccountInfo, Address, Bytecode, HashMap, B256, KECCAK_EMPTY, U256,
+use reth::{
+    providers::ProviderError,
+    revm::{
+        db::{AccountState, DatabaseCommit, DatabaseRef, EmptyDBTyped},
+        primitives::{
+            db::Database, Account, AccountInfo, Address, Bytecode, HashMap, B256, KECCAK_EMPTY,
+            U256,
+        },
     },
 };
 
@@ -11,7 +15,7 @@ use std::sync::Arc;
 use crate::types::CHashMap;
 
 /// A [Database] implementation that stores all state changes in memory.
-pub type InMemoryConcurrentDB = CacheDB<EmptyDB>;
+pub type InMemoryConcurrentDB = CacheDB<EmptyDBTyped<ProviderError>>;
 
 /// A [Database] implementation that stores all state changes in memory.
 ///

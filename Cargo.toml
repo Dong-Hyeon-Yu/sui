@@ -510,7 +510,10 @@ sslab-benchmark = { path = "crates/sslab-benchmark" }
 sslab-execution-serial = { path = "crates/sslab-execution/serial" }
 sslab-execution = { path = "crates/sslab-execution/evm" }
 sslab-execution-nezha = { path = "crates/sslab-execution/nezha" }
-reth = { git = "https://github.com/Dong-Hyeon-Yu/reth.git", rev = "65c22b8054825cbd0e21a7a0c128973c6b29af09" } #branch = "release/v0.1.0-alpha.22" }
+reth = { git = "https://github.com/Dong-Hyeon-Yu/reth.git", rev = "65c22b8054825cbd0e21a7a0c128973c6b29af09" }               #branch = "release/v0.1.0-alpha.22" }
+reth-interfaces = { git = "https://github.com/Dong-Hyeon-Yu/reth.git", rev = "65c22b8054825cbd0e21a7a0c128973c6b29af09" }
+reth-trie = { git = "https://github.com/Dong-Hyeon-Yu/reth.git", rev = "65c22b8054825cbd0e21a7a0c128973c6b29af09" }
+reth-node-ethereum = { git = "https://github.com/Dong-Hyeon-Yu/reth.git", rev = "65c22b8054825cbd0e21a7a0c128973c6b29af09" }
 
 anemo-benchmark = { path = "crates/anemo-benchmark" }
 mysten-common = { path = "crates/mysten-common" }

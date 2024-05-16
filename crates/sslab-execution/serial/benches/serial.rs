@@ -3,21 +3,31 @@ use std::sync::Arc;
 use criterion::Throughput;
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use reth::primitives::BlockWithSenders;
-use sslab_execution::db::in_memory_db::InMemoryConcurrentDB;
 use sslab_execution::traits::Executable;
+use sslab_execution::utils::smallbank_contract_benchmark::cache_state_with_smallbank_contract;
 use sslab_execution::utils::test_utils::default_chain_spec;
 use sslab_execution::utils::{
-    smallbank_contract_benchmark::{concurrent_memory_database, get_smallbank_handler},
-    test_utils::convert_into_block,
+    smallbank_contract_benchmark::get_smallbank_handler, test_utils::convert_into_block,
 };
+use sslab_execution::{get_provider_factory_rw, ProviderFactoryMDBX};
 use sslab_execution_serial::SerialExecutor;
 
 const DEFAULT_BATCH_SIZE: usize = 200;
 
-fn _get_serial_executor() -> SerialExecutor<InMemoryConcurrentDB> {
-    let memory_storage = concurrent_memory_database();
-    let chain_spec = Arc::new(default_chain_spec());
-    SerialExecutor::new(memory_storage, chain_spec)
+// fn _get_serial_executor() -> SerialExecutor<InMemoryConcurrentDB> {
+//     let memory_storage = concurrent_memory_database();
+//     let chain_spec = Arc::new(default_chain_spec());
+//     SerialExecutor::new(memory_storage, chain_spec)
+// }
+
+fn _get_serial_executor(provider_factory: ProviderFactoryMDBX) -> SerialExecutor {
+    use reth::providers::ChainSpecProvider;
+    let chain_spec = provider_factory.chain_spec();
+    SerialExecutor::new_with_db(
+        provider_factory,
+        Some(cache_state_with_smallbank_contract()),
+        chain_spec,
+    )
 }
 
 fn _create_random_smallbank_workload(
@@ -33,6 +43,10 @@ fn serial(c: &mut Criterion) {
     let s = [0.0, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
     let param = 1..81;
     let mut group = c.benchmark_group("Serial");
+
+    let chain_spec = Arc::new(default_chain_spec());
+    let provider_factory = get_provider_factory_rw(chain_spec.clone());
+
     for zipfian in s {
         for i in param.clone() {
             group.throughput(Throughput::Elements((DEFAULT_BATCH_SIZE * i) as u64));
@@ -51,7 +65,7 @@ fn serial(c: &mut Criterion) {
                                     DEFAULT_BATCH_SIZE,
                                     *i,
                                 );
-                                let serial = _get_serial_executor();
+                                let serial = _get_serial_executor(provider_factory.clone());
                                 (serial, consensus_output)
                             },
                             |(mut serial, consensus_output)| async move {

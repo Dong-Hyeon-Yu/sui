@@ -3,14 +3,14 @@ use criterion::Throughput;
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use reth::primitives::{BlockWithSenders, ChainSpec};
 use reth::providers::ChainSpecProvider;
-use sslab_execution::ProviderFactoryMDBX;
 use sslab_execution::{
-    get_provider_factory,
+    get_provider_factory_rw,
     traits::Executable,
     utils::smallbank_contract_benchmark::{
         cache_state_with_smallbank_contract, get_smallbank_handler,
     },
     utils::test_utils::{convert_into_block, default_chain_spec},
+    ProviderFactoryMDBX,
 };
 use std::sync::Arc;
 
@@ -45,7 +45,7 @@ fn optme(c: &mut Criterion) {
     let mut group = c.benchmark_group("OptME");
 
     let chain_spec = Arc::new(default_chain_spec());
-    let provider_factory = get_provider_factory(chain_spec.clone());
+    let provider_factory = get_provider_factory_rw(chain_spec.clone());
 
     for zipfian in s {
         for i in param.clone() {

@@ -6,29 +6,40 @@ use reth::{
         revm::env::fill_tx_env, Address, BlockWithSenders, ChainSpec, Header, Receipt,
         TransactionSigned, U256,
     },
-    providers::{ProviderError, StateProviderFactory},
+    providers::ProviderError,
     revm::{
         database::StateProviderDatabase,
-        db::EmptyDB,
         inspector_handle_register,
         interpreter::Host,
         primitives::{CfgEnvWithHandlerCfg, HandlerCfg, ResultAndState, SpecId},
         stack::{InspectorStack, InspectorStackConfig},
-        DBBox, Database, DatabaseCommit, Evm, EvmBuilder, Handler,
+        Database, DatabaseCommit, Evm, EvmBuilder, Handler,
     },
 };
 use sslab_execution::{
-    db::SharableStateBuilder, traits::Executable, BlockExecutionError, BlockValidationError,
-    EthEvmConfig,
+    db::{SharableState, ThreadSafeCacheState},
+    traits::Executable,
+    BlockExecutionError, BlockValidationError, EthEvmConfig, ProviderFactoryMDBX,
 };
 
 use tokio::sync::Mutex;
 use tracing::debug;
 
+pub struct SerialExecutor {
+    evm: Arc<
+        Mutex<
+            Evm<
+                'static,
+                InspectorStack,
+                SharableState<Box<dyn Database<Error = ProviderError> + Send>>,
+            >,
+        >,
+    >,
+    chain_spec: Arc<ChainSpec>,
+}
+
 #[async_trait::async_trait(?Send)]
-impl<DB: Database<Error = ProviderError> + DatabaseCommit + 'static> Executable
-    for SerialExecutor<DB>
-{
+impl Executable for SerialExecutor {
     async fn execute(
         &mut self,
         consensus_output: BlockWithSenders,
@@ -36,48 +47,20 @@ impl<DB: Database<Error = ProviderError> + DatabaseCommit + 'static> Executable
         self._execute(consensus_output).await
     }
 
-    fn new_with_state_provider_factory<Client: StateProviderFactory>(
-        state_builder: SharableStateBuilder<EmptyDB>,
-        chain_spec: &Arc<ChainSpec>,
-        evm_config: &EthEvmConfig,
-        db: &Client,
+    fn new_with_db(
+        db: ProviderFactoryMDBX,
+        cached_state: Option<ThreadSafeCacheState>,
+        chain_spec: Arc<ChainSpec>,
     ) -> Self {
-        Self::new_with_state_provider(
-            state_builder,
-            chain_spec,
-            evm_config,
-            Box::new(StateProviderDatabase::new(db.latest().unwrap())),
-        )
-    }
-
-    fn new_with_state_provider(
-        _state_builder: SharableStateBuilder<EmptyDB>,
-        _chain_spec: &Arc<ChainSpec>,
-        _evm_config: &EthEvmConfig,
-        _db: DBBox<'static, ProviderError>,
-    ) -> Self {
-        unimplemented!("TODO");
-        // let stack = InspectorStack::new(InspectorStackConfig::default());
-
-        // let state = state_builder.with_database_boxed(db).build();
-        // Self {
-        //     chain_spec: chain_spec.clone(),
-        //     evm: Arc::new(Mutex::new(evm_config.evm_with_inspector(state, stack))),
-        // }
-    }
-}
-
-pub struct SerialExecutor<DB: Database + 'static> {
-    evm: Arc<Mutex<Evm<'static, InspectorStack, DB>>>,
-    chain_spec: Arc<ChainSpec>,
-}
-
-impl<DB: Database<Error = ProviderError> + DatabaseCommit> SerialExecutor<DB> {
-    pub fn new(global_state: DB, chain_spec: Arc<ChainSpec>) -> Self {
+        let db = SharableState::builder()
+            .with_database_boxed(Box::new(StateProviderDatabase::new(db.latest().unwrap())))
+            .with_cached_prestate(cached_state.unwrap_or_default())
+            .with_bundle_update()
+            .build();
         Self {
             evm: Arc::new(Mutex::new(
                 EvmBuilder::default()
-                    .with_db(global_state)
+                    .with_db(db)
                     .with_external_context(InspectorStack::new(InspectorStackConfig::default()))
                     .with_handler_cfg(HandlerCfg::new(SpecId::ISTANBUL))
                     .build(),
@@ -85,6 +68,21 @@ impl<DB: Database<Error = ProviderError> + DatabaseCommit> SerialExecutor<DB> {
             chain_spec,
         }
     }
+}
+
+impl SerialExecutor {
+    // pub fn new(global_state: DBBox<'_, ProviderError>, chain_spec: Arc<ChainSpec>) -> Self {
+    //     Self {
+    //         evm: Arc::new(Mutex::new(
+    //             EvmBuilder::default()
+    //                 .with_db(global_state)
+    //                 .with_external_context(InspectorStack::new(InspectorStackConfig::default()))
+    //                 .with_handler_cfg(HandlerCfg::new(SpecId::ISTANBUL))
+    //                 .build(),
+    //         )),
+    //         chain_spec,
+    //     }
+    // }
 
     /// Runs a single transaction in the configured environment and proceeds
     /// to return the result and state diff (without applying it).

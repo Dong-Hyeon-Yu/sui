@@ -2,7 +2,7 @@ use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use parking_lot::RwLock;
 use reth::primitives::BlockWithSenders;
 use sslab_execution::{
-    get_provider_factory,
+    get_provider_factory_rw,
     traits::Executable,
     utils::{
         smallbank_contract_benchmark::{
@@ -45,7 +45,7 @@ fn optme_latency_inspection(c: &mut Criterion) {
     let mut group = c.benchmark_group("Latency");
 
     let chain_spec = Arc::new(default_chain_spec());
-    let provider_factory = get_provider_factory(chain_spec.clone());
+    let provider_factory = get_provider_factory_rw(chain_spec.clone());
 
     for account_num in account_nums {
         for i in param.clone() {

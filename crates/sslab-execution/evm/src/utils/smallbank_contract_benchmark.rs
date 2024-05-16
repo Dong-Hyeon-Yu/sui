@@ -1,7 +1,12 @@
-use ethers_providers::{MockProvider, Provider};
-use reth::revm::InMemoryDB;
+use std::str::FromStr;
 
-use crate::db::in_memory_db::InMemoryConcurrentDB;
+use ethers_providers::{MockProvider, Provider};
+use reth::{
+    primitives::{Address, Bytes},
+    revm::{interpreter::analysis::to_analysed, InMemoryDB},
+};
+
+use crate::db::{in_memory_db::InMemoryConcurrentDB, ThreadSafeCacheState};
 
 use super::{
     in_memory_db_utils,
@@ -27,4 +32,24 @@ pub fn concurrent_memory_database() -> InMemoryConcurrentDB {
 pub fn get_smallbank_handler() -> SmallBankTransactionHandler {
     let provider = Provider::<MockProvider>::new(MockProvider::default());
     SmallBankTransactionHandler::new(provider, DEFAULT_CHAIN_ID)
+}
+
+pub fn cache_state_with_smallbank_contract() -> ThreadSafeCacheState {
+    let state = ThreadSafeCacheState::default();
+
+    let reth_bytecode =
+        reth::revm::primitives::Bytecode::new_raw(Bytes::from_str(CONTRACT_BYTECODE).unwrap());
+    let code_hash = reth_bytecode.hash_slow();
+    let smallbank_contract = reth::revm::primitives::state::AccountInfo::new(
+        reth::primitives::U256::MAX,
+        0u64,
+        code_hash,
+        to_analysed(reth_bytecode),
+    );
+
+    state.insert_account(
+        Address::from_str(DEFAULT_CONTRACT_ADDRESS).unwrap(),
+        smallbank_contract,
+    );
+    state
 }

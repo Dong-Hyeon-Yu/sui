@@ -1,26 +1,30 @@
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
-use ethers_providers::{MockProvider, Provider};
 use parking_lot::RwLock;
-use reth::primitives::TransactionSignedEcRecovered;
+use reth::primitives::BlockWithSenders;
 use sslab_execution::{
-    evm_storage::backend::InMemoryConcurrentDB,
-    types::ExecutableEthereumBatch,
+    get_provider_factory,
+    traits::Executable,
     utils::{
-        smallbank_contract_benchmark::concurrent_memory_database,
-        test_utils::{SmallBankTransactionHandler, DEFAULT_CHAIN_ID},
+        smallbank_contract_benchmark::{
+            cache_state_with_smallbank_contract, get_smallbank_handler,
+        },
+        test_utils::{convert_into_block, default_chain_spec},
     },
+    ProviderFactoryMDBX,
 };
+use std::sync::Arc;
 
-use sslab_execution_nezha::{nezha_core::LatencyBenchmark as _, ConcurrencyLevelManager};
+use sslab_execution_nezha::{nezha_core::LatencyBenchmark as _, OptME};
 const DEFAULT_BATCH_SIZE: usize = 200;
 
-fn _get_smallbank_handler() -> SmallBankTransactionHandler {
-    let provider = Provider::<MockProvider>::new(MockProvider::default());
-    SmallBankTransactionHandler::new(provider, DEFAULT_CHAIN_ID)
-}
-
-fn _get_nezha_executor(clevel: usize) -> ConcurrencyLevelManager<InMemoryConcurrentDB> {
-    ConcurrencyLevelManager::new(concurrent_memory_database(), clevel)
+fn _get_executor(provider_factory: ProviderFactoryMDBX) -> OptME {
+    use reth::providers::ChainSpecProvider;
+    let chain_spec = provider_factory.chain_spec();
+    OptME::new_with_db(
+        provider_factory,
+        Some(cache_state_with_smallbank_contract()),
+        chain_spec,
+    )
 }
 
 fn _create_random_smallbank_workload(
@@ -28,10 +32,10 @@ fn _create_random_smallbank_workload(
     batch_size: usize,
     block_concurrency: usize,
     account_num: u64,
-) -> Vec<ExecutableEthereumBatch<TransactionSignedEcRecovered>> {
-    let handler = _get_smallbank_handler();
+) -> BlockWithSenders {
+    let handler = get_smallbank_handler();
 
-    handler.create_batches(batch_size, block_concurrency, skewness, account_num)
+    convert_into_block(handler.create_batches(batch_size, block_concurrency, skewness, account_num))
 }
 
 fn optme_latency_inspection(c: &mut Criterion) {
@@ -39,6 +43,9 @@ fn optme_latency_inspection(c: &mut Criterion) {
     let s = [0.0, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
     let param = 80..81;
     let mut group = c.benchmark_group("Latency");
+
+    let chain_spec = Arc::new(default_chain_spec());
+    let provider_factory = get_provider_factory(chain_spec.clone());
 
     for account_num in account_nums {
         for i in param.clone() {
@@ -63,12 +70,15 @@ fn optme_latency_inspection(c: &mut Criterion) {
                                         *i,
                                         account_num,
                                     );
-                                    let nezha = _get_nezha_executor(*i);
+                                    let nezha = _get_executor(provider_factory.clone());
                                     (nezha, consensus_output)
                                 },
-                                |(nezha, consensus_output)| async move {
+                                |(mut nezha, consensus_output)| async move {
                                     latency_metrics.write().push(
-                                        nezha._execute_and_return_latency(consensus_output).await,
+                                        nezha
+                                            ._execute_and_return_latency(consensus_output)
+                                            .await
+                                            .unwrap(),
                                     );
                                 },
                                 BatchSize::SmallInput,

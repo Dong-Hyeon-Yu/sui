@@ -4,7 +4,7 @@ pub mod in_memory_db;
 mod state;
 
 pub use {
-    builder::{init_builder, SharableStateBuilder},
+    builder::SharableStateBuilder,
     cache::state::ThreadSafeCacheState,
-    state::{SharableState, SharableStateDBBox},
+    state::{SharableState, SharableStateDB, SharableStateDBBox},
 };

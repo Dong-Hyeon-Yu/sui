@@ -23,15 +23,16 @@ hashbrown = { version = "0.14.2", features = ["inline-more", "default"] }
 reth.workspace = true
 
 [dev-dependencies]
-ethers = "^2.0.0"
-ethers-signers = { version = "^2.0.0" }
-ethers-providers = { version = "^2.0.0" }
-rand_distr = "0.4.3"
+# ethers = "^2.0.0"
+# ethers-signers = { version = "^2.0.0" }
+# ethers-providers = { version = "^2.0.0" }
+# rand_distr = "0.4.3"
 criterion = { workspace = true, features = ["async_tokio", "default"] }
+sslab-execution = { workspace = true, features = ["benchmark"] }
 
 [features]
-latency = []
-optme = []
+latency = ["sslab-execution/benchmark"] #["reth/revm/benchmark"]
+optme = ["sslab-execution/benchmark"]   #["reth/revm/benchmark"]
 
 [[bench]]
 name = "optme"

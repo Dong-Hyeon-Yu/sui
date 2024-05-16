@@ -1,15 +1,10 @@
+use async_trait::async_trait;
+use reth::primitives::{BlockWithSenders, ChainSpec, Receipt};
 use std::sync::Arc;
 
-use async_trait::async_trait;
-use reth::{
-    primitives::{BlockWithSenders, ChainSpec, Receipt},
-    providers::{ProviderError, StateProviderFactory},
-    revm::{db::EmptyDB, DBBox},
-};
 use reth_interfaces::executor::BlockExecutionError;
-use reth_node_ethereum::EthEvmConfig;
 
-use crate::db::SharableStateBuilder;
+use crate::{db::ThreadSafeCacheState, ProviderFactoryMDBX};
 
 #[async_trait(?Send)]
 pub trait Executable {
@@ -18,18 +13,10 @@ pub trait Executable {
         consensus_output: BlockWithSenders,
     ) -> Result<(Vec<Receipt>, u64), BlockExecutionError>;
 
-    fn new_with_state_provider_factory<Client: StateProviderFactory>(
-        state_builder: SharableStateBuilder<EmptyDB>,
-        chain_spec: &Arc<ChainSpec>,
-        evm_config: &EthEvmConfig,
-        db: &Client,
-    ) -> Self;
-
-    fn new_with_state_provider(
-        state_builder: SharableStateBuilder<EmptyDB>,
-        chain_spec: &Arc<ChainSpec>,
-        evm_config: &EthEvmConfig,
-        db: DBBox<'static, ProviderError>,
+    fn new_with_db(
+        db: ProviderFactoryMDBX,
+        cached_state: Option<ThreadSafeCacheState>,
+        chain_spec: Arc<ChainSpec>,
     ) -> Self;
 }
 

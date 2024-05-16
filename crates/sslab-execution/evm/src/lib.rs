@@ -8,21 +8,54 @@ pub mod types;
 #[cfg(any(feature = "benchmark", test))]
 pub mod utils;
 
+use std::{path::Path, sync::Arc};
+
+use reth::{
+    primitives::ChainSpec,
+    providers::{providers::BlockchainProvider, ProviderFactory},
+};
+use reth_db::DatabaseEnv;
+
+pub type ProviderFactoryMDBX = ProviderFactory<DatabaseEnv>;
+pub type BlockchainProviderMDBX<Tree> = BlockchainProvider<DatabaseEnv, Tree>;
+
+pub fn get_provider_factory(chain_spec: Arc<ChainSpec>) -> ProviderFactoryMDBX {
+    use reth_db::open_db_read_only;
+    let path = std::env::var("RETH_DB_PATH").unwrap_or_else(|_| "./.db/reth/test".to_string());
+
+    ProviderFactoryMDBX::new(
+        open_db_read_only(Path::new(path.as_str()), Default::default()).unwrap(),
+        chain_spec,
+    )
+}
+
+pub fn get_provider_factory_rw(chain_spec: Arc<ChainSpec>) -> ProviderFactoryMDBX {
+    let path = std::env::var("RETH_DB_PATH").unwrap_or_else(|_| "./.db/reth/test".to_string());
+
+    ProviderFactoryMDBX::new_with_database_path(
+        Path::new(path.as_str()),
+        chain_spec,
+        Default::default(),
+    )
+    .unwrap()
+}
+
 pub use reth_interfaces::executor::{BlockExecutionError, BlockValidationError};
 pub use reth_node_ethereum::EthEvmConfig;
 
 pub mod revm_utiles {
 
     use rayon::prelude::*;
+    use reth_node_ethereum::EthEvmConfig;
     use std::sync::Arc;
 
     use crate::{
-        db::SharableState,
+        db::{SharableState, SharableStateDBBox},
         types::{ExecutableEthereumBatch, NOT_SUPPORT},
     };
     use narwhal_types::BatchDigest;
     use reth::{
-        core::node_config::ConfigureEvm,
+        core::node_config::{ConfigureEvm, ConfigureEvmEnv as _},
         primitives::{
             revm::env::fill_tx_env, Address, BlockNumber, ChainSpec, Hardfork, Header, Receipts,
             TransactionSigned,
@@ -34,7 +67,7 @@ pub mod revm_utiles {
             interpreter::Host,
             primitives::{CfgEnvWithHandlerCfg, ResultAndState},
             stack::{InspectorStack, InspectorStackConfig},
-            Evm, Handler, StateDBBox,
+            Evm, Handler,
         },
     };
     use reth_interfaces::executor::{BlockExecutionError, BlockValidationError};
@@ -43,14 +76,14 @@ pub mod revm_utiles {
         Evm<'a, InspectorStack, SharableState<StateProviderDatabase<DB>>>;
 
     /// Initializes the config and block env.
-    pub fn init_evm<'a, EvmConfig: ConfigureEvm>(
+    pub fn init_evm<'a>(
         header: &Header,
         chain_spec: &Arc<ChainSpec>,
-        evm_config: &EvmConfig,
-        db: StateDBBox<'a, ProviderError>,
-    ) -> Result<Evm<'a, InspectorStack, StateDBBox<'a, ProviderError>>, BlockExecutionError> {
+        db: SharableStateDBBox<'a, ProviderError>,
+    ) -> Result<Evm<'a, InspectorStack, SharableStateDBBox<'a, ProviderError>>, BlockExecutionError>
+    {
         let stack = InspectorStack::new(InspectorStackConfig::default());
-        let mut evm = evm_config.evm_with_inspector(db, stack);
+        let mut evm = EthEvmConfig::default().evm_with_inspector(db, stack);
 
         // Set state clear flag.
         let state_clear_flag = chain_spec
@@ -60,7 +93,7 @@ pub mod revm_utiles {
 
         let mut cfg: CfgEnvWithHandlerCfg =
             CfgEnvWithHandlerCfg::new_with_spec_id(evm.cfg().clone(), evm.spec_id());
-        EvmConfig::fill_cfg_and_block_env(
+        EthEvmConfig::fill_cfg_and_block_env(
             &mut cfg,
             evm.block_mut(),
             chain_spec,
@@ -86,7 +119,7 @@ pub mod revm_utiles {
     }
 
     pub fn take_output_state(
-        evm: &mut Evm<'_, InspectorStack, StateDBBox<'_, ProviderError>>,
+        evm: &mut Evm<'_, InspectorStack, SharableStateDBBox<'_, ProviderError>>,
         first_block: Option<BlockNumber>,
         receipts: Receipts,
     ) -> BundleStateWithReceipts {
@@ -99,7 +132,7 @@ pub mod revm_utiles {
     }
 
     pub fn size_hint<'a>(
-        evm: &Evm<'a, InspectorStack, StateDBBox<'a, ProviderError>>,
+        evm: &Evm<'a, InspectorStack, SharableStateDBBox<'a, ProviderError>>,
     ) -> Option<usize> {
         Some(evm.context.evm.db.bundle_size_hint())
     }
@@ -109,7 +142,7 @@ pub mod revm_utiles {
     ///
     /// Assumes the rest of the block environment has been filled via `init_block_env`.
     pub fn transact(
-        evm: &mut Evm<'_, InspectorStack, StateDBBox<'_, ProviderError>>,
+        evm: &mut Evm<'_, InspectorStack, SharableStateDBBox<'_, ProviderError>>,
         transaction: &TransactionSigned,
         sender: Address,
     ) -> Result<ResultAndState, BlockExecutionError> {
@@ -147,7 +180,7 @@ pub mod revm_utiles {
     }
 
     #[inline]
-    pub async fn _unpack_batches(
+    pub async fn unpack_batches(
         consensus_output: Vec<ExecutableEthereumBatch>,
     ) -> (Vec<BatchDigest>, Vec<TransactionSigned>) {
         let (send, recv) = tokio::sync::oneshot::channel();

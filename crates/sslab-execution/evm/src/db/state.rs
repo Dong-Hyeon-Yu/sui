@@ -2,16 +2,20 @@ use std::sync::Arc;
 
 use dashmap::mapref::one::Ref;
 use parking_lot::RwLock;
-use reth::revm::{
-    db::{
-        states::{bundle_state::BundleRetention, plain_account::PlainStorage},
-        BundleState, EmptyDB,
+use reth::{
+    providers::StateProvider,
+    revm::{
+        database::StateProviderDatabase,
+        db::{
+            states::{bundle_state::BundleRetention, plain_account::PlainStorage},
+            BundleState, EmptyDB,
+        },
+        interpreter::primitives::{
+            db::{Database, DatabaseCommit},
+            Account, AccountInfo, Address, Bytecode, HashMap, B256, BLOCK_HASH_HISTORY, U256,
+        },
+        DBBox, TransitionAccount, TransitionState,
     },
-    interpreter::primitives::{
-        db::{Database, DatabaseCommit},
-        Account, AccountInfo, Address, Bytecode, HashMap, B256, BLOCK_HASH_HISTORY, U256,
-    },
-    DBBox, TransitionAccount, TransitionState,
 };
 use std::{collections::BTreeMap, vec::Vec};
 
@@ -21,6 +25,7 @@ use super::{
 };
 
 pub type SharableStateDBBox<'a, E> = SharableState<DBBox<'a, E>>;
+pub type SharableStateDB = SharableState<StateProviderDatabase<Box<dyn StateProvider>>>;
 
 /// State of blockchain.
 ///
@@ -351,8 +356,6 @@ impl<DB: Database> DatabaseCommit for SharableState<DB> {
 
 #[cfg(test)]
 mod tests {
-    use crate::db::init_builder;
-
     use super::*;
     use reth::revm::db::{
         states::reverts::AccountInfoRevert, AccountRevert, AccountStatus, BundleAccount,
@@ -362,7 +365,7 @@ mod tests {
 
     #[test]
     fn block_hash_cache() {
-        let state = init_builder().build();
+        let state = SharableState::builder().with_bundle_update().build();
         state.block_hash(U256::from(1)).unwrap();
         state.block_hash(U256::from(2)).unwrap();
 
@@ -393,7 +396,7 @@ mod tests {
     /// state of the account before the block.
     #[test]
     fn reverts_preserve_old_values() {
-        let mut state = init_builder().build();
+        let mut state = SharableState::builder().with_bundle_update().build();
 
         let (slot1, slot2, slot3) = (U256::from(1), U256::from(2), U256::from(3));
 
@@ -616,7 +619,7 @@ mod tests {
     /// block and reverted to their previous state do not appear in the reverts.
     #[test]
     fn bundle_scoped_reverts_collapse() {
-        let mut state = init_builder().build();
+        let mut state = SharableState::builder().with_bundle_update().build();
 
         // Non-existing account.
         let new_account_address = Address::from_slice(&[0x1; 20]);
@@ -740,7 +743,7 @@ mod tests {
     /// Checks that the behavior of selfdestruct within the block is correct.
     #[test]
     fn selfdestruct_state_and_reverts() {
-        let mut state = init_builder().build();
+        let mut state = SharableState::builder().with_bundle_update().build();
 
         // Existing account.
         let existing_account_address = Address::from_slice(&[0x1; 20]);

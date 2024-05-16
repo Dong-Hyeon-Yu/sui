@@ -5,40 +5,44 @@ use std::{
 
 use async_trait::async_trait;
 use reth::{
+    blockchain_tree::noop::NoopBlockchainTree,
     primitives::{
         constants::{EMPTY_TRANSACTIONS, ETHEREUM_BLOCK_GAS_LIMIT},
         proofs, Block, BlockBody, BlockWithSenders, ChainSpec, Header, SealedHeader,
         TransactionSigned, B256, EMPTY_OMMER_ROOT_HASH, U256,
     },
-    providers::{BlockReaderIdExt, BundleStateWithReceipts, StateProviderFactory},
+    providers::{
+        providers::BlockchainProvider, BlockReaderIdExt, BundleStateWithReceipts,
+        StateProviderFactory,
+    },
     revm::db::states::bundle_state::BundleRetention,
 };
+
 use reth_interfaces::executor::{BlockExecutionError, BlockValidationError};
-use reth_node_ethereum::EthEvmConfig;
+
 use tokio::sync::mpsc::Receiver;
 use tracing::{debug, trace};
 
 use crate::{
     evm_processor::EVMProcessor,
-    revm_utiles::_unpack_batches,
+    get_provider_factory,
+    revm_utiles::unpack_batches,
     traits::{Executable, ExecutionComponent, ParallelBlockExecutor as _},
     types::ExecutableConsensusOutput,
+    BlockchainProviderMDBX,
 };
 
 /// Client is [reth::provider::BlockchainProvider].
-pub struct ParallelExecutor<ParallelExecutionModel, Client> {
+pub struct ParallelExecutor<ParallelExecutionModel> {
     rx_consensus_certificate: Receiver<ExecutableConsensusOutput>,
 
     // rx_shutdown: ConditionalBroadcastReceiver,
-    inner: Inner<ParallelExecutionModel, Client>,
+    inner: Inner<ParallelExecutionModel>,
 }
 
 #[async_trait(?Send)]
-impl<ParallelExecutionModel, Client> ExecutionComponent
-    for ParallelExecutor<ParallelExecutionModel, Client>
-where
-    ParallelExecutionModel: Executable + Send + Sync + Default,
-    Client: BlockReaderIdExt + StateProviderFactory,
+impl<ParallelExecutionModel: Executable> ExecutionComponent
+    for ParallelExecutor<ParallelExecutionModel>
 {
     async fn run(&mut self) {
         while let Some(consensus_output) = self.rx_consensus_certificate.recv().await {
@@ -58,7 +62,7 @@ where
                 }
             }
 
-            let (_digests, transactions) = _unpack_batches(consensus_output.take_data()).await;
+            let (_digests, transactions) = unpack_batches(consensus_output.take_data()).await;
             let _ = self.inner.build_and_execute(transactions).await;
 
             cfg_if::cfg_if! {
@@ -73,43 +77,38 @@ where
     }
 }
 
-impl<ParallelExecutionModel, Client> ParallelExecutor<ParallelExecutionModel, Client>
-where
-    ParallelExecutionModel: Executable + Send + Sync + Default,
-    Client: BlockReaderIdExt + StateProviderFactory,
-{
+impl<ParallelExecutionModel: Executable> ParallelExecutor<ParallelExecutionModel> {
     pub fn new(
         rx_consensus_certificate: Receiver<ExecutableConsensusOutput>,
         // rx_shutdown: ConditionalBroadcastReceiver,
         chain_spec: Arc<ChainSpec>,
-        client: Client,
-        evm_config: EthEvmConfig,
     ) -> Self {
         Self {
             rx_consensus_certificate,
             // rx_shutdown,
-            inner: Inner::new(chain_spec, client, evm_config),
+            inner: Inner::new(chain_spec),
         }
     }
 }
 
-pub struct Inner<ParallelExecutionModel, Client> {
+pub struct Inner<ParallelExecutionModel> {
     pub(crate) latest: Header,
     pub(crate) latest_hash: B256,
 
     pub(crate) chain_spec: Arc<ChainSpec>,
 
-    pub(crate) client: Client,
+    pub(crate) client: BlockchainProviderMDBX<NoopBlockchainTree>,
 
+    // pub(crate) provider_factory: ProviderFactoryMDBX,
     pub(crate) executor: EVMProcessor<'static, ParallelExecutionModel>,
 }
 
-impl<ParallelExecutionModel, Client> Inner<ParallelExecutionModel, Client>
-where
-    ParallelExecutionModel: Executable + Send + Sync + Default,
-    Client: BlockReaderIdExt + StateProviderFactory,
-{
-    pub fn new(chain_spec: Arc<ChainSpec>, client: Client, evm_config: EthEvmConfig) -> Self {
+impl<ParallelExecutionModel: Executable> Inner<ParallelExecutionModel> {
+    pub fn new(chain_spec: Arc<ChainSpec>) -> Self {
+        let factory = get_provider_factory(chain_spec.clone());
+        let client =
+            BlockchainProvider::new(factory.clone(), NoopBlockchainTree::default()).unwrap();
+
         let best_header = client
             .latest_header()
             .ok()
@@ -117,18 +116,14 @@ where
             .unwrap_or_else(|| chain_spec.sealed_genesis_header());
 
         let (header, best_hash) = best_header.split();
-        let executor = EVMProcessor::<ParallelExecutionModel>::new_with_db(
-            chain_spec.clone(),
-            &client,
-            evm_config,
-        );
 
         Self {
             latest: header,
             latest_hash: best_hash,
-            chain_spec,
+            chain_spec: chain_spec.clone(),
             client,
-            executor,
+            // provider_factory: factory.clone(),
+            executor: EVMProcessor::<ParallelExecutionModel>::new(factory, chain_spec),
         }
     }
 

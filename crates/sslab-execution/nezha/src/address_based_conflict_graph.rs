@@ -1,12 +1,14 @@
 use itertools::Itertools;
-use reth::revm::primitives::{HashMap, HashSet, State};
+use reth::revm::{
+    db::BundleState,
+    primitives::{ExecutionResult, HashMap, HashSet, State},
+};
 use std::sync::Arc;
 
 use parking_lot::{RwLock, RwLockReadGuard};
 use rayon::prelude::*;
-use sslab_execution::types::IndexedEthereumTransaction;
 
-use crate::types::{Address, Key, RwSet, SimulatedTransactionV2};
+use crate::types::{Address, IndexedEthereumTransaction, Key, RwSet, SimulatedTransactionV2};
 
 use super::nezha_core::ScheduledInfo;
 
@@ -412,29 +414,42 @@ impl AbortInfo {
 
 #[derive(Debug)]
 pub struct Transaction {
-    tx_id: u64,
-    sequence: RwLock<u64>, // 0 represents that this transaction havn't been ordered yet.
+    pub(crate) tx_id: u64,
+    pub(crate) sequence: RwLock<u64>, // 0 represents that this transaction havn't been ordered yet.
     abort_info: RwLock<AbortInfo>,
     write_units: RwLock<Vec<Arc<WriteUnit>>>,
-    effects: State,
+    pub(crate) effects: State,
 
-    raw_tx: IndexedEthereumTransaction,
+    pub(crate) raw_tx: IndexedEthereumTransaction,
+
+    pub(crate) _execution_result: ExecutionResult,
+    pub(crate) _bundle: BundleState,
 }
 
 impl Transaction {
     pub fn from(tx: SimulatedTransactionV2) -> (Self, RwSet) {
-        let (tx_id, rw_set, state, raw_tx) = tx.deconstruct();
+        let SimulatedTransactionV2 {
+            tx_id,
+            effects,
+            rw_set,
+            raw_tx,
+            bundle,
+            result,
+            ..
+        } = tx;
 
         let tx = Self {
             tx_id,
             sequence: RwLock::new(0),
-            abort_info: RwLock::new(AbortInfo::new(rw_set.to_owned())),
+            abort_info: RwLock::new(AbortInfo::new(rw_set.clone().unwrap())),
             write_units: RwLock::new(Vec::new()),
-            effects: state,
+            effects,
             raw_tx,
+            _execution_result: result,
+            _bundle: bundle,
         };
 
-        (tx, rw_set)
+        (tx, rw_set.unwrap())
     }
 
     pub fn init(&self) {
@@ -503,10 +518,6 @@ impl Transaction {
             self.abort_info.read().read_keys(),
             self.abort_info.read().write_keys(),
         )
-    }
-
-    pub fn simulation_result(&self) -> State {
-        self.effects.to_owned()
     }
 }
 

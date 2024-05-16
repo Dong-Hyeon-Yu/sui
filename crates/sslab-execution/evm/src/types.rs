@@ -4,7 +4,7 @@ use dashmap::{
 };
 use fastcrypto::hash::Hash;
 use narwhal_types::{BatchDigest, ConsensusOutput, ConsensusOutputDigest};
-use reth::primitives::{Address, TransactionSigned, B256, U256};
+use reth::primitives::{TransactionSigned, U256};
 
 pub(crate) const NOT_SUPPORT: U256 = U256::ZERO;
 
@@ -116,41 +116,6 @@ where
         new_map
     }
 }
-
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct IndexedEthereumTransaction {
-    pub tx: TransactionSigned,
-    pub signer: Address,
-    pub id: u64,
-}
-
-impl IndexedEthereumTransaction {
-    pub fn new(tx: TransactionSigned, id: u64) -> Self {
-        let signer = tx.recover_signer().unwrap();
-        Self { tx, signer, id }
-    }
-
-    pub fn data(&self) -> &TransactionSigned {
-        &self.tx
-    }
-
-    pub fn digest(&self) -> B256 {
-        self.tx.hash()
-    }
-
-    pub fn digest_u64(&self) -> u64 {
-        self.id
-    }
-
-    pub fn id(&self) -> u64 {
-        self.id
-    }
-
-    pub fn signer(&self) -> Address {
-        self.signer
-    }
-}
-
 #[derive(Clone, Debug, Default)]
 pub struct ExecutableEthereumBatch {
     pub digest: BatchDigest,

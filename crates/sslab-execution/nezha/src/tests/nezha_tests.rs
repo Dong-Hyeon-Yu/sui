@@ -1,14 +1,11 @@
 use std::str::FromStr;
 
-use reth::revm::primitives::{ExecutionResult, HashMap, HashSet};
-use reth::{primitives::TransactionSignedEcRecovered, revm::primitives::ResultAndState};
-use sslab_execution::types::IndexedEthereumTransaction;
-
 use crate::{
     address_based_conflict_graph::KeyBasedDependencyGraph,
     nezha_core::ScheduledInfo,
-    types::{Address, Key, SimulatedTransactionV2},
+    types::{Address, IndexedEthereumTransaction, Key, SimulatedTransactionV2},
 };
+use reth::revm::primitives::{ExecutionResult, HashMap, HashSet, ResultAndState};
 
 const CONTRACT_ADDR: &str = "0x1000000000000000000000000000000000000000";
 
@@ -42,9 +39,15 @@ fn transaction_with_rw(tx_id: u64, read_key: u64, write_key: u64) -> SimulatedTr
 
     SimulatedTransactionV2::new(
         _default_result_and_state(),
-        _make_set(CONTRACT_ADDR, read_set),
-        _make_set(CONTRACT_ADDR, write_set),
-        IndexedEthereumTransaction::new(TransactionSignedEcRecovered::default(), tx_id),
+        (
+            _make_set(CONTRACT_ADDR, read_set),
+            _make_set(CONTRACT_ADDR, write_set),
+        ),
+        IndexedEthereumTransaction {
+            id: tx_id,
+            ..Default::default()
+        },
+        Default::default(),
     )
 }
 
@@ -65,9 +68,15 @@ fn transaction_with_multiple_rw(
 
     SimulatedTransactionV2::new(
         _default_result_and_state(),
-        _make_set(CONTRACT_ADDR, read_set),
-        _make_set(CONTRACT_ADDR, write_set),
-        IndexedEthereumTransaction::new(TransactionSignedEcRecovered::default(), tx_id),
+        (
+            _make_set(CONTRACT_ADDR, read_set),
+            _make_set(CONTRACT_ADDR, write_set),
+        ),
+        IndexedEthereumTransaction {
+            id: tx_id,
+            ..Default::default()
+        },
+        Default::default(),
     )
 }
 
@@ -88,9 +97,15 @@ fn transaction_with_multiple_rw_str(
 
     SimulatedTransactionV2::new(
         _default_result_and_state(),
-        _make_set(CONTRACT_ADDR, read_set),
-        _make_set(CONTRACT_ADDR, write_set),
-        IndexedEthereumTransaction::new(TransactionSignedEcRecovered::default(), tx_id),
+        (
+            _make_set(CONTRACT_ADDR, read_set),
+            _make_set(CONTRACT_ADDR, write_set),
+        ),
+        IndexedEthereumTransaction {
+            id: tx_id,
+            ..Default::default()
+        },
+        Default::default(),
     )
 }
 

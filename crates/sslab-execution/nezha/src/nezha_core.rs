@@ -1,151 +1,116 @@
 use itertools::Itertools;
-use narwhal_types::BatchDigest;
 use rayon::prelude::*;
 use reth::{
-    core::node_config::ConfigureEvmEnv,
-    primitives::TransactionSignedEcRecovered,
-    revm::{
-        primitives::{CfgEnv, CfgEnvWithHandlerCfg, SpecId},
-        Database, DatabaseCommit, EvmBuilder,
-    },
+    primitives::{Block, BlockWithSenders, ChainSpec, Header, Receipt},
+    revm::{database::StateProviderDatabase, DatabaseCommit},
 };
 use sslab_execution::{
-    executor::Executable,
-    types::{ExecutableEthereumBatch, ExecutionResult, IndexedEthereumTransaction},
-    EthEvmConfig,
+    db::{SharableState, SharableStateDB, ThreadSafeCacheState},
+    revm_utiles::{init_evm, transact},
+    traits::Executable,
+    BlockExecutionError, ProviderFactoryMDBX,
 };
 use std::sync::Arc;
 
 use crate::{
     address_based_conflict_graph::{FastHashMap, KdgKey},
-    types::{ScheduledTransaction, SimulatedTransactionV2, SimulationResultV2},
+    types::{IndexedEthereumTransaction, ScheduledTransaction, SimulatedTransactionV2},
     KeyBasedDependencyGraph,
 };
 
 use super::address_based_conflict_graph::Transaction;
 
+pub struct OptME {
+    state: SharableStateDB,
+    cached_state: ThreadSafeCacheState,
+    client: ProviderFactoryMDBX,
+    chain_spec: Arc<ChainSpec>,
+    cumulative_gas_used: u64,
+}
+
 #[async_trait::async_trait(?Send)]
-impl<ThreadSafeDB> Executable<TransactionSignedEcRecovered> for Nezha<ThreadSafeDB>
-where
-    ThreadSafeDB: Database + DatabaseCommit + Clone + Sync + Send + 'static,
-    <ThreadSafeDB as reth::revm::Database>::Error: std::fmt::Debug,
-{
+impl Executable for OptME {
     async fn execute(
-        &self,
-        consensus_output: Vec<ExecutableEthereumBatch<TransactionSignedEcRecovered>>,
-    ) {
-        let _ = self.inner.prepare_execution(consensus_output).await;
+        &mut self,
+        consensus_output: BlockWithSenders,
+    ) -> Result<(Vec<Receipt>, u64), BlockExecutionError> {
+        Ok((
+            self._execute_inner(consensus_output).await?,
+            self.cumulative_gas_used,
+        ))
     }
-}
 
-pub struct Nezha<ThreadSafeDB> {
-    inner: ConcurrencyLevelManager<ThreadSafeDB>,
-}
-
-impl<ThreadSafeDB> Nezha<ThreadSafeDB>
-where
-    ThreadSafeDB: Database + DatabaseCommit + Clone + Sync + Send + 'static,
-    <ThreadSafeDB as reth::revm::Database>::Error: std::fmt::Debug,
-{
-    pub fn new(global_state: ThreadSafeDB, concurrency_level: usize) -> Self {
-        Self {
-            inner: ConcurrencyLevelManager::new(global_state, concurrency_level),
-        }
-    }
-}
-
-pub struct ConcurrencyLevelManager<ThreadSafeDB> {
-    concurrency_level: usize,
-    global_state: ThreadSafeDB,
-    cfg_env: CfgEnvWithHandlerCfg,
-}
-
-impl<ThreadSafeDB> ConcurrencyLevelManager<ThreadSafeDB>
-where
-    ThreadSafeDB: Database + DatabaseCommit + Clone + Sync + Send + 'static,
-    <ThreadSafeDB as reth::revm::Database>::Error: std::fmt::Debug,
-{
-    pub fn new(global_state: ThreadSafeDB, concurrency_level: usize) -> Self {
-        let mut cfg_env = CfgEnv::default();
-        cfg_env.chain_id = 9;
+    fn new_with_db(
+        db: ProviderFactoryMDBX,
+        cached_state: Option<ThreadSafeCacheState>,
+        chain_spec: Arc<ChainSpec>,
+    ) -> Self {
+        let cached_state = cached_state.unwrap_or_default();
+        let state = SharableState::builder()
+            .with_database(StateProviderDatabase::new(db.latest().unwrap()))
+            .with_cached_prestate(cached_state.clone())
+            .with_bundle_update()
+            .build();
 
         Self {
-            global_state,
-            concurrency_level,
-            cfg_env: CfgEnvWithHandlerCfg::new_with_spec_id(cfg_env, SpecId::ISTANBUL),
+            state,
+            cached_state,
+            client: db,
+            chain_spec,
+            cumulative_gas_used: 0,
         }
     }
+}
 
-    async fn prepare_execution(
-        &self,
-        consensus_output: Vec<ExecutableEthereumBatch<TransactionSignedEcRecovered>>,
-    ) -> ExecutionResult {
-        let mut result = vec![];
-        let mut target = consensus_output;
+impl OptME {
+    pub async fn _execute_inner(
+        &mut self,
+        consensus_output: BlockWithSenders,
+    ) -> Result<Vec<Receipt>, BlockExecutionError> {
+        self.cumulative_gas_used = 0;
 
-        while !target.is_empty() {
-            let split_idx = std::cmp::min(self.concurrency_level, target.len());
-            let remains: Vec<ExecutableEthereumBatch<TransactionSignedEcRecovered>> =
-                target.split_off(split_idx);
-
-            result.extend(self._execute(target).await);
-
-            target = remains;
+        if consensus_output.block.body.is_empty() {
+            return Ok(vec![]);
         }
 
-        ExecutionResult::new(result)
-    }
+        let (block, senders) = consensus_output.into_components();
+        let Block { header, body, .. } = block;
 
-    async fn _unpack_batches(
-        consensus_output: Vec<ExecutableEthereumBatch<TransactionSignedEcRecovered>>,
-    ) -> (Vec<BatchDigest>, Vec<IndexedEthereumTransaction>) {
-        let (send, recv) = tokio::sync::oneshot::channel();
+        let tx_list = body
+            .into_iter()
+            .zip(senders)
+            .enumerate()
+            .map(|(id, (tx, signer))| IndexedEthereumTransaction {
+                tx,
+                signer,
+                id: id as u64,
+            })
+            .collect_vec();
 
-        rayon::spawn(move || {
-            let (digests, batches): (Vec<_>, Vec<_>) = consensus_output
-                .par_iter()
-                .map(|batch| (batch.digest().to_owned(), batch.data().to_owned()))
-                .unzip();
-
-            let tx_list = batches
-                .into_iter()
-                .flatten()
-                .enumerate()
-                .map(|(id, tx)| IndexedEthereumTransaction::new(tx, id as u64))
-                .collect::<Vec<_>>();
-
-            let _ = send.send((digests, tx_list)).unwrap();
-        });
-
-        recv.await.unwrap()
-    }
-
-    pub async fn _execute(
-        &self,
-        consensus_output: Vec<ExecutableEthereumBatch<TransactionSignedEcRecovered>>,
-    ) -> Vec<BatchDigest> {
-        let (digests, tx_list) = Self::_unpack_batches(consensus_output).await;
-
-        if tx_list.is_empty() {
-            return vec![];
-        }
-
+        let mut receipts = vec![];
         let scheduled_aborted_txs: Vec<Vec<IndexedEthereumTransaction>>;
 
         // 1st execution
         {
-            let rw_sets = self._simulate(tx_list).await;
+            let rw_set = self._simulate(&header, tx_list).await?;
 
             let ScheduledInfo {
                 scheduled_txs,
                 aborted_txs,
-            } = KeyBasedDependencyGraph::par_construct(rw_sets)
+            } = KeyBasedDependencyGraph::par_construct(rw_set)
                 .await
                 .hierarchcial_sort()
                 .reorder()
                 .par_extract_schedule()
                 .await;
 
+            // create Receipts of scheduled_txs
+            receipts.extend(_make_receipts(
+                scheduled_txs.iter().flatten().collect_vec(),
+                &mut self.cumulative_gas_used,
+            ));
+
+            // reflect state changes into cached state (not dist at this point)
             self._concurrent_commit(scheduled_txs).await;
 
             scheduled_aborted_txs = aborted_txs;
@@ -159,14 +124,7 @@ where
             //                                                 |
             //                                          (2) commit
 
-            let rw_sets = self
-                ._simulate(
-                    tx_list_to_re_execute
-                        .into_iter()
-                        .map(|tx| tx.into())
-                        .collect(),
-                )
-                .await;
+            let rw_sets = self._simulate(&header, tx_list_to_re_execute).await?;
 
             match self._validate_optimistic_assumption(rw_sets).await {
                 None => {}
@@ -202,54 +160,46 @@ where
             }
         }
 
-        digests
+        Ok(receipts)
     }
 
-    pub async fn simulate(
+    pub(crate) async fn _simulate(
         &self,
-        consensus_output: Vec<ExecutableEthereumBatch<TransactionSignedEcRecovered>>,
-    ) -> SimulationResultV2 {
-        let (digests, tx_list) = Self::_unpack_batches(consensus_output).await;
-        let rw_sets = self._simulate(tx_list).await;
-
-        SimulationResultV2 { digests, rw_sets }
-    }
-
-    async fn _simulate(
-        &self,
+        header: &Header,
         tx_list: Vec<IndexedEthereumTransaction>,
-    ) -> Vec<SimulatedTransactionV2> {
+    ) -> Result<Vec<SimulatedTransactionV2>, BlockExecutionError> {
         // Parallel simulation requires heavy cpu usages.
         // CPU-bound jobs would make the I/O-bound tokio threads starve.
         // To this end, a separated thread pool need to be used for cpu-bound jobs.
         // a new thread is created, and a new thread pool is created on the thread. (specifically, rayon's thread pool is created)
         let (send, recv) = tokio::sync::oneshot::channel();
-        let cfg_env = self.cfg_env.clone();
-        let state = self.global_state.clone();
+        let client = self.client.clone();
+        let chain_spec = self.chain_spec.clone();
+        let cache = self.cached_state.clone();
+        let header = header.clone();
+
         rayon::spawn(move || {
             let result = tx_list
                 .into_par_iter()
-                .filter_map(|tx| {
-                    let mut evm = EvmBuilder::default()
-                        .with_db(state.clone())
-                        .with_cfg_env_with_handler_cfg(cfg_env.clone())
+                .map(|tx| {
+                    let db = SharableState::builder()
+                        .with_database_boxed(Box::new(StateProviderDatabase::new(
+                            client.latest().unwrap(),
+                        )))
+                        .with_cached_prestate(cache.clone())
+                        .with_bundle_update()
                         .build();
 
-                    EthEvmConfig::fill_tx_env(
-                        evm.tx_mut(),
-                        tx.data().as_ref(),
-                        tx.data().signer(),
-                        (),
-                    );
+                    // configure evm with the given header and chain spec.
+                    let mut evm = init_evm(&header.clone(), &chain_spec.clone(), db)?;
 
-                    let execution_result = evm.transact().unwrap();
-                    let (read_set, write_set) = evm.extract_rw_set();
+                    let result = transact(&mut evm, tx.data(), tx.signer())?;
 
-                    Some(SimulatedTransactionV2::new(
-                        execution_result,
-                        read_set,
-                        write_set,
+                    Ok(SimulatedTransactionV2::new(
+                        result,
+                        evm.extract_rw_set(),
                         tx,
+                        evm.context.evm.db.take_bundle(),
                     ))
                 })
                 .collect();
@@ -268,9 +218,8 @@ where
         }
     }
 
-    //TODO: (optimization) commit the last write of each key
     pub async fn _concurrent_commit(&self, scheduled_txs: Vec<Vec<ScheduledTransaction>>) {
-        let storage = self.global_state.clone();
+        let storage = self.cached_state.clone();
 
         // Parallel simulation requires heavy cpu usages.
         // CPU-bound jobs would make the I/O-bound tokio threads starve.
@@ -282,7 +231,7 @@ where
             for txs_to_commit in scheduled_txs {
                 txs_to_commit.into_par_iter().for_each(|tx| {
                     let effect = tx.extract();
-                    _storage.commit(effect)
+                    _storage.apply_evm_state(effect);
                 })
             }
             let _ = send.send(());
@@ -296,9 +245,9 @@ where
         rw_set: Vec<SimulatedTransactionV2>,
     ) -> Option<Vec<SimulatedTransactionV2>> {
         if rw_set.len() == 1 {
-            let (_, _, state, _) = rw_set[0].clone().deconstruct();
+            let SimulatedTransactionV2 { effects, .. } = rw_set[0].clone();
 
-            self.global_state.commit(state);
+            self.state.commit(effects);
 
             return None;
         }
@@ -337,6 +286,7 @@ where
         let (valid_txs, invalid_txs) = recv.await.unwrap();
 
         self._concurrent_commit_2(valid_txs).await;
+        //TODO: create Receipts of valid_txs
 
         invalid_txs
     }
@@ -345,14 +295,14 @@ where
     pub async fn _concurrent_commit_2(&self, scheduled_txs: Vec<SimulatedTransactionV2>) {
         let scheduled_txs = vec![_convert(scheduled_txs).await];
 
-        let storage = self.global_state.clone();
+        let storage = self.cached_state.clone();
         let (send, recv) = tokio::sync::oneshot::channel();
         rayon::spawn(move || {
             let _storage = &storage;
             for txs_to_commit in scheduled_txs {
                 txs_to_commit.into_iter().for_each(|tx| {
                     let effect = tx.extract();
-                    _storage.commit(effect)
+                    _storage.apply_evm_state(effect);
                 })
             }
             let _ = send.send(());
@@ -362,16 +312,16 @@ where
     }
 }
 
-#[cfg(feature = "latency")]
+// #[cfg(feature = "latency")]
 use tokio::time::Instant;
 
-#[cfg(feature = "latency")]
+// #[cfg(feature = "latency")]
 #[async_trait::async_trait]
 pub trait LatencyBenchmark {
     async fn _execute_and_return_latency(
-        &self,
-        consensus_output: Vec<ExecutableEthereumBatch<TransactionSignedEcRecovered>>,
-    ) -> (u128, u128, u128, (u128, u128), u128);
+        &mut self,
+        consensus_output: BlockWithSenders,
+    ) -> Result<(u128, u128, u128, (u128, u128), u128), BlockExecutionError>;
 
     async fn _validate_optimistic_assumption_and_return_latency(
         &self,
@@ -379,23 +329,34 @@ pub trait LatencyBenchmark {
     ) -> (Option<Vec<SimulatedTransactionV2>>, u128, u128);
 }
 
-#[cfg(feature = "latency")]
+// #[cfg(feature = "latency")]
 #[async_trait::async_trait]
-impl<ThreadSafeDB> LatencyBenchmark for ConcurrencyLevelManager<ThreadSafeDB>
-where
-    ThreadSafeDB: Database + DatabaseCommit + Clone + Sync + Send + 'static,
-    <ThreadSafeDB as reth::revm::Database>::Error: std::fmt::Debug,
-{
+impl LatencyBenchmark for OptME {
     async fn _execute_and_return_latency(
-        &self,
-        consensus_output: Vec<ExecutableEthereumBatch<TransactionSignedEcRecovered>>,
-    ) -> (u128, u128, u128, (u128, u128), u128) {
-        let (_, tx_list) = Self::_unpack_batches(consensus_output).await;
+        &mut self,
+        consensus_output: BlockWithSenders,
+    ) -> Result<(u128, u128, u128, (u128, u128), u128), BlockExecutionError> {
+        self.cumulative_gas_used = 0;
 
-        if tx_list.is_empty() {
-            panic!("empty transaction list");
+        if consensus_output.block.body.is_empty() {
+            return Ok((0, 0, 0, (0, 0), 0));
         }
 
+        let (block, senders) = consensus_output.into_components();
+        let Block { header, body, .. } = block;
+
+        let tx_list = body
+            .into_iter()
+            .zip(senders)
+            .enumerate()
+            .map(|(id, (tx, signer))| IndexedEthereumTransaction {
+                tx,
+                signer,
+                id: id as u64,
+            })
+            .collect_vec();
+
+        // let mut receipts = vec![];
         let scheduled_aborted_txs: Vec<Vec<IndexedEthereumTransaction>>;
 
         let mut simulation_latency = 0;
@@ -408,7 +369,7 @@ where
         // 1st execution
         {
             let latency = Instant::now();
-            let rw_sets = self._simulate(tx_list).await;
+            let rw_sets = self._simulate(&header, tx_list).await?;
             simulation_latency += latency.elapsed().as_micros();
 
             let latency = Instant::now();
@@ -439,7 +400,7 @@ where
             //                                          (2) commit
 
             let latency = Instant::now();
-            let rw_sets = self._simulate(tx_list_to_re_execute).await;
+            let rw_sets = self._simulate(&header, tx_list_to_re_execute).await?;
             validation_execute_latency += latency.elapsed().as_micros();
 
             match self
@@ -460,13 +421,13 @@ where
             }
         }
 
-        (
+        Ok((
             total_latency.elapsed().as_micros(),
             simulation_latency,
             scheduling_latency,
             (validation_latency, validation_execute_latency),
             commit_latency,
-        )
+        ))
     }
 
     async fn _validate_optimistic_assumption_and_return_latency(
@@ -474,10 +435,10 @@ where
         rw_set: Vec<SimulatedTransactionV2>,
     ) -> (Option<Vec<SimulatedTransactionV2>>, u128, u128) {
         if rw_set.len() == 1 {
-            let (_, _, state, _) = rw_set[0].clone().deconstruct();
+            let SimulatedTransactionV2 { effects, .. } = rw_set[0].clone();
 
             let latency = Instant::now();
-            self.global_state.commit(state);
+            self.cached_state.apply_evm_state(effects);
             let c_latency = latency.elapsed().as_micros();
 
             return (None, 0, c_latency);
@@ -522,14 +483,14 @@ where
         let scheduled_txs = vec![_convert(valid_txs).await];
 
         let commit_latency = Instant::now();
-        let storage = self.global_state.clone();
+        let storage = self.cached_state.clone();
         let (send, recv) = tokio::sync::oneshot::channel();
         rayon::spawn(move || {
             let _storage = &storage;
             for txs_to_commit in scheduled_txs {
                 txs_to_commit.into_iter().for_each(|tx| {
                     let effect = tx.extract();
-                    _storage.commit(effect)
+                    _storage.apply_evm_state(effect);
                 })
             }
             let _ = send.send(());
@@ -584,22 +545,14 @@ impl ScheduledInfo {
 
             tx_list
                 .into_par_iter()
-                .map(|(_, tx)| {
-                    let tx = _unwrap(tx);
-
-                    ScheduledTransaction::from(tx)
-                })
+                .map(|(_, tx)| ScheduledTransaction::from(_unwrap(tx)))
                 .collect::<Vec<ScheduledTransaction>>()
         } else {
             tx_list.iter().for_each(|(_, tx)| tx.clear_write_units());
 
             tx_list
                 .into_iter()
-                .map(|(_, tx)| {
-                    let tx = _unwrap(tx); // TODO: memory leak (let tx = Self::_unwrap(tx);)
-
-                    ScheduledTransaction::from(tx)
-                })
+                .map(|(_, tx)| ScheduledTransaction::from(_unwrap(tx)))
                 .collect::<Vec<ScheduledTransaction>>()
         };
 
@@ -607,7 +560,7 @@ impl ScheduledInfo {
         list.sort_by_key(|tx| tx.seq());
         let mut scheduled_txs = Vec::<Vec<ScheduledTransaction>>::new();
         for (_key, txns) in &list.into_iter().group_by(|tx| tx.seq()) {
-            scheduled_txs.push(txns.collect_vec());
+            scheduled_txs.push(txns.sorted_unstable_by_key(|tx| tx.id()).collect_vec());
         }
 
         scheduled_txs
@@ -742,4 +695,25 @@ async fn _convert(txs: Vec<SimulatedTransactionV2>) -> Vec<ScheduledTransaction>
         let _ = send.send(result).unwrap();
     });
     recv.await.unwrap()
+}
+
+fn _make_receipts(txs: Vec<&ScheduledTransaction>, cumulative_gas_used: &mut u64) -> Vec<Receipt> {
+    let receipts = txs
+        .into_iter()
+        .map(|tx| {
+            *cumulative_gas_used += tx.result.gas_used();
+
+            Receipt {
+                tx_type: tx.tx_type,
+                // Success flag was added in `EIP-658: Embedding transaction status code in
+                // receipts`.
+                success: tx.result.is_success(),
+                cumulative_gas_used: *cumulative_gas_used,
+                // convert to reth log
+                logs: tx.result.logs().into_iter().map(Into::into).collect(),
+            }
+        })
+        .collect_vec();
+
+    receipts
 }

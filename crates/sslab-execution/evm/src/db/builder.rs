@@ -26,7 +26,7 @@ pub struct SharableStateBuilder<DB> {
     with_cache_prestate: Option<ThreadSafeCacheState>,
     /// Do we want to create reverts and update bundle state.
     /// Default is false.
-    with_bundle_update: Option<Arc<RwLock<TransitionState>>>,
+    with_bundle_update: bool,
     /// Do we want to merge transitions in background.
     /// This will allows evm to continue executing.
     /// Default is false.
@@ -59,7 +59,7 @@ impl<DB: Database> SharableStateBuilder<DB> {
             with_state_clear: true,
             with_cache_prestate: None,
             with_bundle_prestate: None,
-            with_bundle_update: None,
+            with_bundle_update: false,
             with_background_transition_merge: false,
             with_block_hashes: Default::default(),
         }
@@ -110,9 +110,9 @@ impl<DB: Database> SharableStateBuilder<DB> {
     /// and State after not finding data inside StateCache will try to find it inside BundleState.
     ///
     /// On update Bundle state will be changed and updated.
-    pub fn with_bundle_prestate(self, bundle: Arc<RwLock<BundleState>>) -> Self {
+    pub fn with_bundle_prestate(self, bundle: BundleState) -> Self {
         Self {
-            with_bundle_prestate: Some(bundle),
+            with_bundle_prestate: Some(Arc::new(RwLock::new(bundle))),
             ..self
         }
     }
@@ -121,9 +121,9 @@ impl<DB: Database> SharableStateBuilder<DB> {
     ///
     /// This is needed option if we want to create reverts
     /// and getting output of changed states.
-    pub fn with_bundle_update(self, transition_state: Arc<RwLock<TransitionState>>) -> Self {
+    pub fn with_bundle_update(self) -> Self {
         Self {
-            with_bundle_update: Some(transition_state),
+            with_bundle_update: true,
             ..self
         }
     }
@@ -155,9 +155,9 @@ impl<DB: Database> SharableStateBuilder<DB> {
         }
     }
 
-    pub fn build(self) -> SharableState<DB> {
+    pub fn build(mut self) -> SharableState<DB> {
         let use_preloaded_bundle = if self.with_cache_prestate.is_some() {
-            // self.with_bundle_prestate = None;
+            self.with_bundle_prestate = None;
             false
         } else {
             self.with_bundle_prestate.is_some()
@@ -165,30 +165,15 @@ impl<DB: Database> SharableStateBuilder<DB> {
         SharableState {
             cache: self
                 .with_cache_prestate
-                .unwrap_or_else(|| panic!("Cache prestate is not set")),
+                .unwrap_or_else(|| ThreadSafeCacheState::new(self.with_state_clear)),
 
             database: self.database,
-            transition_state: self.with_bundle_update,
-            bundle_state: self
-                .with_bundle_prestate
-                .unwrap_or_else(|| panic!("Bundle update is not set")),
+            transition_state: self
+                .with_bundle_update
+                .then(|| Arc::new(RwLock::new(TransitionState::default()))),
+            bundle_state: self.with_bundle_prestate.unwrap_or_default(),
             use_preloaded_bundle,
             block_hashes: self.with_block_hashes,
         }
     }
-}
-
-pub fn init_builder() -> SharableStateBuilder<EmptyDB> {
-    let cache_state = ThreadSafeCacheState::default();
-    let transition_state = Arc::new(RwLock::new(TransitionState::default()));
-    let bundle = Arc::new(RwLock::new(BundleState::default()));
-    let block_hashes = Arc::new(RwLock::new(BTreeMap::new()));
-
-    let builder = SharableStateBuilder::new()
-        .with_cached_prestate(cache_state)
-        .with_bundle_update(transition_state)
-        .with_bundle_prestate(bundle)
-        .with_block_hashes(block_hashes);
-
-    builder
 }

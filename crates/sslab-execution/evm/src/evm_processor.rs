@@ -4,7 +4,7 @@ use reth::{
         Block, BlockNumber, BlockWithSenders, Bloom, ChainSpec, GotExpected, Hardfork, Receipt,
         ReceiptWithBloom, Receipts, Withdrawals, B256,
     },
-    providers::{BlockExecutorStats, ProviderError},
+    providers::{BlockExecutorStats, BundleStateWithReceipts, ProviderError},
     revm::{
         database::StateProviderDatabase,
         eth_dao_fork::{DAO_HARDFORK_BENEFICIARY, DAO_HARDKFORK_ACCOUNTS},
@@ -166,9 +166,10 @@ where
     /// Execute the block, verify gas usage and apply post-block state changes.
     pub(crate) async fn execute_inner(
         &mut self,
-        block: &BlockWithSenders,
-    ) -> Result<(Vec<Receipt>, u64), BlockExecutionError> {
-        let (receipts, cumulative_gas_used) = self.execution_model.execute(block.clone()).await?;
+        block: BlockWithSenders,
+    ) -> Result<(BlockWithSenders, Vec<Receipt>, u64), BlockExecutionError> {
+        let (new_block, receipts, cumulative_gas_used) =
+            self.execution_model.execute(block).await?;
 
         //* no need to check header gas limit in OX architecture.
         // // Check if gas used matches the value set in header.
@@ -184,7 +185,7 @@ where
         //     .into());
         // }
         let time = Instant::now();
-        self.apply_post_execution_state_change(block)?;
+        self.apply_post_execution_state_change(&new_block.block)?;
         self.stats.apply_post_execution_state_changes_duration += time.elapsed();
 
         //* no need to prune in OX architecture.
@@ -207,10 +208,10 @@ where
         // self.stats.merge_transitions_duration += time.elapsed();
 
         if self.first_block.is_none() {
-            self.first_block = Some(block.number);
+            self.first_block = Some(new_block.block.number);
         }
 
-        Ok((receipts, cumulative_gas_used))
+        Ok((new_block, receipts, cumulative_gas_used))
     }
 
     /// Apply post execution state changes, including block rewards, withdrawals, and irregular DAO
@@ -260,15 +261,26 @@ where
 
     /// Save receipts to the executor.
     pub fn save_receipts(&mut self, receipts: Vec<Receipt>) -> Result<(), BlockExecutionError> {
-        // remove receipts of previous blocks
-        self.receipts = Receipts::default();
-
-        let receipts = receipts.into_iter().map(Option::Some).collect();
+        let receipts = Receipts {
+            receipt_vec: vec![receipts.into_iter().map(Option::Some).collect()],
+        };
         // // Prune receipts if necessary.
         // self.prune_receipts(&mut receipts)?;
         // Save receipts.
-        self.receipts.push(receipts);
+        let _ = std::mem::replace(&mut self.receipts, receipts);
+
         Ok(())
+    }
+
+    pub fn take_output_state(&mut self) -> BundleStateWithReceipts {
+        self.stats.log_debug();
+        let receipts = std::mem::take(&mut self.receipts);
+
+        BundleStateWithReceipts::new(
+            self.state.take_bundle(),
+            receipts,
+            self.first_block.unwrap_or_default(),
+        )
     }
 }
 
@@ -280,17 +292,17 @@ where
 {
     type Error = BlockExecutionError;
 
-    async fn execute(&mut self, block: &BlockWithSenders) -> Result<(), Self::Error> {
-        let (receipts, _) = self.execute_inner(block).await?;
+    async fn execute(&mut self, block: BlockWithSenders) -> Result<(), Self::Error> {
+        let (_, receipts, _) = self.execute_inner(block).await?;
         self.save_receipts(receipts)
     }
 
     async fn execute_and_verify_receipt(
         &mut self,
-        block: &BlockWithSenders,
+        block: BlockWithSenders,
     ) -> Result<(), Self::Error> {
         // execute block
-        let (receipts, _) = self.execute_inner(block).await?;
+        let (new_block, receipts, _) = self.execute_inner(block).await?;
 
         // TODO Before Byzantium, receipts contained state root that would mean that expensive
         // operation as hashing that is needed for state root got calculated in every
@@ -299,12 +311,12 @@ where
         if self
             .chain_spec
             .fork(Hardfork::Byzantium)
-            .active_at_block(block.header.number)
+            .active_at_block(new_block.header.number)
         {
             let time = Instant::now();
             if let Err(error) = verify_receipt(
-                block.header.receipts_root,
-                block.header.logs_bloom,
+                new_block.header.receipts_root,
+                new_block.header.logs_bloom,
                 receipts.iter(),
             ) {
                 debug!(target: "evm", %error, ?receipts, "receipts verification failed");
@@ -318,9 +330,9 @@ where
 
     async fn execute_transactions(
         &mut self,
-        block: &BlockWithSenders,
-    ) -> Result<(Vec<Receipt>, u64), Self::Error> {
-        self.execute_inner(block).await
+        block: BlockWithSenders,
+    ) -> Result<(BlockWithSenders, Vec<Receipt>, u64), BlockExecutionError> {
+        self.execution_model.execute(block).await
     }
 
     // async fn execute_transactions(

@@ -8,10 +8,11 @@ use crate::{db::ThreadSafeCacheState, ProviderFactoryMDBX};
 
 #[async_trait(?Send)]
 pub trait Executable {
+    /// This takes a block and returns new [BlockWithSenders] since some execution algorithm reorders transactions.
     async fn execute(
         &mut self,
         consensus_output: BlockWithSenders,
-    ) -> Result<(Vec<Receipt>, u64), BlockExecutionError>;
+    ) -> Result<(BlockWithSenders, Vec<Receipt>, u64), BlockExecutionError>;
 
     fn new_with_db(
         db: ProviderFactoryMDBX,
@@ -33,14 +34,14 @@ pub(crate) trait ParallelBlockExecutor {
     type Error;
 
     /// Execute a block.
-    async fn execute(&mut self, block: &BlockWithSenders) -> Result<(), Self::Error>;
+    async fn execute(&mut self, block: BlockWithSenders) -> Result<(), Self::Error>;
 
     /// Executes the block and checks receipts.
     ///
     /// See [execute](BlockExecutor::execute) for more details.
     async fn execute_and_verify_receipt(
         &mut self,
-        block: &BlockWithSenders,
+        block: BlockWithSenders,
     ) -> Result<(), Self::Error>;
 
     /// Runs the provided transactions and commits their state to the run-time database.
@@ -57,8 +58,8 @@ pub(crate) trait ParallelBlockExecutor {
     /// See [execute](BlockExecutor::execute) for more details.
     async fn execute_transactions(
         &mut self,
-        block: &BlockWithSenders,
-    ) -> Result<(Vec<Receipt>, u64), Self::Error>;
+        block: BlockWithSenders,
+    ) -> Result<(BlockWithSenders, Vec<Receipt>, u64), Self::Error>;
 
     // /// Return bundle state. This is output of executed blocks.
     // async fn take_output_state(&mut self) -> BundleStateWithReceipts;

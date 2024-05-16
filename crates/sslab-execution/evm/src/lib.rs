@@ -11,10 +11,11 @@ pub mod utils;
 use std::{path::Path, sync::Arc};
 
 use reth::{
+    core::init::init_genesis,
     primitives::ChainSpec,
     providers::{providers::BlockchainProvider, ProviderFactory},
 };
-use reth_db::DatabaseEnv;
+use reth_db::{init_db, DatabaseEnv};
 
 pub type ProviderFactoryMDBX = ProviderFactory<DatabaseEnv>;
 pub type BlockchainProviderMDBX<Tree> = BlockchainProvider<DatabaseEnv, Tree>;
@@ -31,13 +32,9 @@ pub fn get_provider_factory(chain_spec: Arc<ChainSpec>) -> ProviderFactoryMDBX {
 
 pub fn get_provider_factory_rw(chain_spec: Arc<ChainSpec>) -> ProviderFactoryMDBX {
     let path = std::env::var("RETH_DB_PATH").unwrap_or_else(|_| "./.db/reth/test".to_string());
-
-    ProviderFactoryMDBX::new_with_database_path(
-        Path::new(path.as_str()),
-        chain_spec,
-        Default::default(),
-    )
-    .unwrap()
+    let db = init_db(path, Default::default()).unwrap();
+    let _ = init_genesis(db.clone(), chain_spec.clone());
+    ProviderFactoryMDBX::new(db, chain_spec)
 }
 
 pub use reth_interfaces::executor::{BlockExecutionError, BlockValidationError};
@@ -57,10 +54,9 @@ pub mod revm_utiles {
     use reth::{
         core::node_config::{ConfigureEvm, ConfigureEvmEnv as _},
         primitives::{
-            revm::env::fill_tx_env, Address, BlockNumber, ChainSpec, Hardfork, Header, Receipts,
-            TransactionSigned,
+            revm::env::fill_tx_env, Address, ChainSpec, Hardfork, Header, TransactionSigned,
         },
-        providers::{BundleStateWithReceipts, ProviderError},
+        providers::ProviderError,
         revm::{
             database::StateProviderDatabase,
             inspector_handle_register,
@@ -116,19 +112,6 @@ pub mod revm_utiles {
         )?;
 
         Ok(evm)
-    }
-
-    pub fn take_output_state(
-        evm: &mut Evm<'_, InspectorStack, SharableStateDBBox<'_, ProviderError>>,
-        first_block: Option<BlockNumber>,
-        receipts: Receipts,
-    ) -> BundleStateWithReceipts {
-        // self.stats.log_debug(); //TODO: move this code outside of this function.
-        BundleStateWithReceipts::new(
-            evm.context.evm.db.take_bundle(),
-            receipts,
-            first_block.unwrap_or_default(),
-        )
     }
 
     pub fn size_hint<'a>(

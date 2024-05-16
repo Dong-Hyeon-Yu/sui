@@ -43,7 +43,7 @@ impl Executable for SerialExecutor {
     async fn execute(
         &mut self,
         consensus_output: BlockWithSenders,
-    ) -> Result<(Vec<Receipt>, u64), BlockExecutionError> {
+    ) -> Result<(BlockWithSenders, Vec<Receipt>, u64), BlockExecutionError> {
         self._execute(consensus_output).await
     }
 
@@ -163,7 +163,7 @@ impl SerialExecutor {
     async fn _execute(
         &mut self,
         block: BlockWithSenders,
-    ) -> Result<(Vec<Receipt>, u64), BlockExecutionError> {
+    ) -> Result<(BlockWithSenders, Vec<Receipt>, u64), BlockExecutionError> {
         self.init_env(&block.header).await?;
         let mut cumulative_gas_used = 0;
         let mut receipts = vec![];
@@ -206,6 +206,6 @@ impl SerialExecutor {
             receipts.push(receipt);
         }
 
-        Ok((receipts, cumulative_gas_used))
+        Ok((block, receipts, cumulative_gas_used))
     }
 }

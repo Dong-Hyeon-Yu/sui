@@ -2,7 +2,7 @@ use crate::address_based_conflict_graph::{KdgKey, Transaction};
 use itertools::Itertools;
 use narwhal_types::BatchDigest;
 use reth::{
-    primitives::{TransactionSigned, TxType, B256},
+    primitives::{Log, TransactionSigned, TxType, B256},
     revm::{
         db::BundleState,
         primitives::{ExecutionResult, HashMap, HashSet, ResultAndState, State},
@@ -15,6 +15,14 @@ pub type RwSet = (
     HashMap<Address, HashSet<Key>>,
     HashMap<Address, HashSet<Key>>,
 );
+
+pub(crate) trait TransactionSignedEmbeding {
+    fn restore_signed_tx(&mut self) -> (TransactionSigned, Address);
+    fn gas_used(&self) -> u64;
+    fn is_success(&self) -> bool;
+    fn tx_type(&self) -> TxType;
+    fn logs(&self) -> Vec<Log>;
+}
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct IndexedEthereumTransaction {
@@ -118,6 +126,31 @@ impl SimulatedTransactionV2 {
     }
 }
 
+impl TransactionSignedEmbeding for SimulatedTransactionV2 {
+    fn restore_signed_tx(&mut self) -> (TransactionSigned, Address) {
+        (
+            std::mem::take(&mut self.raw_tx.tx),
+            std::mem::take(&mut self.raw_tx.signer),
+        )
+    }
+
+    fn gas_used(&self) -> u64 {
+        self.result.gas_used()
+    }
+
+    fn is_success(&self) -> bool {
+        self.result.is_success()
+    }
+
+    fn tx_type(&self) -> TxType {
+        self.raw_tx.tx.tx_type()
+    }
+
+    fn logs(&self) -> Vec<Log> {
+        self.result.logs().into_iter().map(Into::into).collect()
+    }
+}
+
 #[derive(Debug)]
 pub struct ScheduledTransaction {
     pub seq: u64,
@@ -132,6 +165,8 @@ pub struct ScheduledTransaction {
     // bundle state is used to persist the state changes to the disk.
     pub bundle: BundleState,
     pub tx_type: TxType,
+
+    pub raw_tx: Option<IndexedEthereumTransaction>,
 }
 
 impl ScheduledTransaction {
@@ -146,6 +181,29 @@ impl ScheduledTransaction {
     #[allow(dead_code)] // this function is used in unit tests.
     pub(crate) fn id(&self) -> u64 {
         self.tx_id
+    }
+}
+
+impl TransactionSignedEmbeding for ScheduledTransaction {
+    fn restore_signed_tx(&mut self) -> (TransactionSigned, Address) {
+        let IndexedEthereumTransaction { tx, signer, .. } = self.raw_tx.take().unwrap();
+        (tx, signer)
+    }
+
+    fn gas_used(&self) -> u64 {
+        self.result.gas_used()
+    }
+
+    fn is_success(&self) -> bool {
+        self.result.is_success()
+    }
+
+    fn tx_type(&self) -> TxType {
+        self.raw_tx.as_ref().unwrap().tx.tx_type()
+    }
+
+    fn logs(&self) -> Vec<Log> {
+        self.result.logs().into_iter().map(Into::into).collect()
     }
 }
 
@@ -167,6 +225,7 @@ impl From<SimulatedTransactionV2> for ScheduledTransaction {
             result,
             bundle,
             tx_type: raw_tx.data().tx_type(),
+            raw_tx: Some(raw_tx),
         }
     }
 }
@@ -205,6 +264,7 @@ impl From<Transaction> for ScheduledTransaction {
             result: _execution_result,
             bundle: _bundle,
             tx_type: raw_tx.data().tx_type(),
+            raw_tx: Some(raw_tx),
         }
     }
 }

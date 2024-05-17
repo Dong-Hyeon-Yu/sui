@@ -14,7 +14,10 @@ use std::sync::Arc;
 
 use crate::{
     address_based_conflict_graph::{FastHashMap, KdgKey},
-    types::{IndexedEthereumTransaction, ScheduledTransaction, SimulatedTransactionV2},
+    types::{
+        IndexedEthereumTransaction, ScheduledTransaction, SimulatedTransactionV2,
+        TransactionSignedEmbeding,
+    },
     KeyBasedDependencyGraph,
 };
 
@@ -33,11 +36,10 @@ impl Executable for OptME {
     async fn execute(
         &mut self,
         consensus_output: BlockWithSenders,
-    ) -> Result<(Vec<Receipt>, u64), BlockExecutionError> {
-        Ok((
-            self._execute_inner(consensus_output).await?,
-            self.cumulative_gas_used,
-        ))
+    ) -> Result<(BlockWithSenders, Vec<Receipt>, u64), BlockExecutionError> {
+        let (block, receipts) = self._execute_inner(consensus_output).await?;
+        let cumulative_gas_used = std::mem::take(&mut self.cumulative_gas_used);
+        Ok((block, receipts, cumulative_gas_used))
     }
 
     fn new_with_db(
@@ -66,11 +68,11 @@ impl OptME {
     pub async fn _execute_inner(
         &mut self,
         consensus_output: BlockWithSenders,
-    ) -> Result<Vec<Receipt>, BlockExecutionError> {
+    ) -> Result<(BlockWithSenders, Vec<Receipt>), BlockExecutionError> {
         self.cumulative_gas_used = 0;
 
         if consensus_output.block.body.is_empty() {
-            return Ok(vec![]);
+            return Ok((consensus_output, vec![]));
         }
 
         let (block, senders) = consensus_output.into_components();
@@ -88,6 +90,7 @@ impl OptME {
             .collect_vec();
 
         let mut receipts = vec![];
+        let mut execution_order = vec![];
         let scheduled_aborted_txs: Vec<Vec<IndexedEthereumTransaction>>;
 
         // 1st execution
@@ -95,7 +98,7 @@ impl OptME {
             let rw_set = self._simulate(&header, tx_list).await?;
 
             let ScheduledInfo {
-                scheduled_txs,
+                mut scheduled_txs,
                 aborted_txs,
             } = KeyBasedDependencyGraph::par_construct(rw_set)
                 .await
@@ -105,16 +108,24 @@ impl OptME {
                 .await;
 
             // create Receipts of scheduled_txs
-            receipts.extend(_make_receipts(
-                scheduled_txs.iter().flatten().collect_vec(),
-                &mut self.cumulative_gas_used,
-            ));
+            scheduled_txs.iter().for_each(|txs| {
+                receipts.extend(self._make_receipts(txs));
+            });
+            // checkpoint execution history
+            execution_order.extend(
+                scheduled_txs
+                    .iter_mut()
+                    .flatten()
+                    .map(|tx| tx.restore_signed_tx()),
+            );
 
             // reflect state changes into cached state (not dist at this point)
             self._concurrent_commit(scheduled_txs).await;
 
             scheduled_aborted_txs = aborted_txs;
         }
+
+        let mut fallback_txs = vec![];
 
         for tx_list_to_re_execute in scheduled_aborted_txs.into_iter() {
             // 2nd execution
@@ -125,42 +136,50 @@ impl OptME {
             //                                          (2) commit
 
             let rw_sets = self._simulate(&header, tx_list_to_re_execute).await?;
+            let (mut valid_txs, invalid_txs) = self._validate_optimistic_assumption(rw_sets).await;
 
-            match self._validate_optimistic_assumption(rw_sets).await {
-                None => {}
-                Some(invalid_txs) => {
-                    //* invalidate */
-                    tracing::debug!("invalidated txs: {:?}", invalid_txs);
+            // process valid_txs
+            receipts.extend(self._make_receipts(&valid_txs));
+            execution_order.extend(valid_txs.iter_mut().map(|tx| tx.restore_signed_tx()));
+            self._concurrent_commit_2(valid_txs).await;
 
-                    //* fallback */
-                    // let ScheduledInfo {scheduled_txs, aborted_txs } = AddressBasedConflictGraph::par_construct(rw_sets).await
-                    //     .hierarchcial_sort()
-                    //     .reorder()
-                    //     .par_extract_schedule().await;
+            // process invalid_txs
+            if let Some(txs) = invalid_txs {
+                //* invalidate */
+                tracing::debug!("invalidated txs: {txs:?}");
 
-                    // self._concurrent_commit(scheduled_txs).await;
-
-                    //* 3rd execution (serial) for complex transactions */
-                    // let snapshot = self.global_state.clone();
-                    // tokio::task::spawn_blocking(move || {
-                    //     aborted_txs.into_iter()
-                    //         .flatten()
-                    //         .for_each(|tx| {
-                    //             match evm_utils::simulate_tx(tx.raw_tx(), snapshot.as_ref()) {
-                    //                 Ok(Some((effect, _, _))) => {
-                    //                     snapshot.apply_local_effect(effect);
-                    //                 },
-                    //                 _ => {
-                    //                     warn!("fail to execute a transaction {}", tx.id());
-                    //                 }
-                    //             }
-                    //         });
-                    // }).await.expect("fail to spawn a task for serial execution of aborted txs");
-                }
+                fallback_txs.extend(txs);
             }
         }
 
-        Ok(receipts)
+        // process fallback_txs
+        //* 3rd execution (serial) for complex transactions */
+        // let snapshot = self.global_state.clone();
+        // tokio::task::spawn_blocking(move || {
+        //     aborted_txs.into_iter()
+        //         .flatten()
+        //         .for_each(|tx| {
+        //             match evm_utils::simulate_tx(tx.raw_tx(), snapshot.as_ref()) {
+        //                 Ok(Some((effect, _, _))) => {
+        //                     snapshot.apply_local_effect(effect);
+        //                 },
+        //                 _ => {
+        //                     warn!("fail to execute a transaction {}", tx.id());
+        //                 }
+        //             }
+        //         });
+        // }).await.expect("fail to spawn a task for serial execution of aborted txs");
+
+        let (body, senders) = execution_order.into_iter().unzip();
+
+        let new_block = Block {
+            header,
+            body,
+            ..Default::default()
+        };
+        let new_block_with_senders = BlockWithSenders::new(new_block, senders).unwrap();
+
+        Ok((new_block_with_senders, receipts))
     }
 
     pub(crate) async fn _simulate(
@@ -243,13 +262,12 @@ impl OptME {
     async fn _validate_optimistic_assumption(
         &self,
         rw_set: Vec<SimulatedTransactionV2>,
-    ) -> Option<Vec<SimulatedTransactionV2>> {
+    ) -> (
+        Vec<SimulatedTransactionV2>,
+        Option<Vec<SimulatedTransactionV2>>,
+    ) {
         if rw_set.len() == 1 {
-            let SimulatedTransactionV2 { effects, .. } = rw_set[0].clone();
-
-            self.state.commit(effects);
-
-            return None;
+            return (rw_set, None);
         }
 
         let (send, recv) = tokio::sync::oneshot::channel();
@@ -285,10 +303,9 @@ impl OptME {
 
         let (valid_txs, invalid_txs) = recv.await.unwrap();
 
-        self._concurrent_commit_2(valid_txs).await;
+        (valid_txs, invalid_txs)
+        // self._concurrent_commit_2(valid_txs).await;
         //TODO: create Receipts of valid_txs
-
-        invalid_txs
     }
 
     #[inline]
@@ -309,6 +326,27 @@ impl OptME {
         });
 
         let _ = recv.await;
+    }
+
+    fn _make_receipts<T: TransactionSignedEmbeding>(&mut self, txs: &Vec<T>) -> Vec<Receipt> {
+        let receipts = txs
+            .into_iter()
+            .map(|tx| {
+                self.cumulative_gas_used += tx.gas_used();
+
+                Receipt {
+                    tx_type: tx.tx_type(),
+                    // Success flag was added in `EIP-658: Embedding transaction status code in
+                    // receipts`.
+                    success: tx.is_success(),
+                    cumulative_gas_used: self.cumulative_gas_used,
+                    // convert to reth log
+                    logs: tx.logs(),
+                }
+            })
+            .collect_vec();
+
+        receipts
     }
 }
 
@@ -695,25 +733,4 @@ async fn _convert(txs: Vec<SimulatedTransactionV2>) -> Vec<ScheduledTransaction>
         let _ = send.send(result).unwrap();
     });
     recv.await.unwrap()
-}
-
-fn _make_receipts(txs: Vec<&ScheduledTransaction>, cumulative_gas_used: &mut u64) -> Vec<Receipt> {
-    let receipts = txs
-        .into_iter()
-        .map(|tx| {
-            *cumulative_gas_used += tx.result.gas_used();
-
-            Receipt {
-                tx_type: tx.tx_type,
-                // Success flag was added in `EIP-658: Embedding transaction status code in
-                // receipts`.
-                success: tx.result.is_success(),
-                cumulative_gas_used: *cumulative_gas_used,
-                // convert to reth log
-                logs: tx.result.logs().into_iter().map(Into::into).collect(),
-            }
-        })
-        .collect_vec();
-
-    receipts
 }
